@@ -6,25 +6,12 @@
     <key>com.apple.security.app-sandbox</key>
     <true/>
 
-    <!-- Network Access -->
+    <!-- Network Access (required for Microsoft Graph API) -->
     <key>com.apple.security.network.client</key>
     <true/>
 
-    <!-- File Access -->
+    <!-- File Access (for potential export features) -->
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
-
-    <!-- Keychain Sharing -->
-    <key>keychain-access-groups</key>
-    <array>
-        <string>$(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-        <string>$(AppIdentifierPrefix)com.microsoft.adalcache</string>
-    </array>
-
-    <!-- App Groups (for sharing data between targets) -->
-    <key>com.apple.security.application-groups</key>
-    <array>
-        <string>group.$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-    </array>
 </dict>
 </plist>

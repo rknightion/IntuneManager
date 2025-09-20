@@ -259,6 +259,8 @@ struct HeaderView: View {
 }
 
 struct InstructionCard: View {
+    @State private var isPermissionsExpanded = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Setup Instructions", systemImage: "info.circle.fill")
@@ -267,14 +269,58 @@ struct InstructionCard: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 InstructionStep(number: 1, text: "Register an app in Azure AD")
-                InstructionStep(number: 2, text: "Configure API permissions for Microsoft Graph")
+                InstructionStep(number: 2, text: "Add required Microsoft Graph permissions")
                 InstructionStep(number: 3, text: "Copy the Client ID and Tenant ID")
-                #if os(macOS)
-                InstructionStep(number: 4, text: "Create a client secret (only for server apps)")
-                InstructionStep(number: 5, text: "Configure redirect URI in Azure AD")
-                #else
                 InstructionStep(number: 4, text: "Configure redirect URI in Azure AD")
-                #endif
+            }
+
+            // Required Permissions Section
+            VStack(alignment: .leading, spacing: 0) {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isPermissionsExpanded.toggle()
+                    }
+                }) {
+                    HStack {
+                        Text("Required Microsoft Graph Permissions")
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.accentColor)
+                            .rotationEffect(.degrees(isPermissionsExpanded ? 90 : 0))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PlainButtonStyle())
+
+                if isPermissionsExpanded {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Add these Delegated permissions in Azure AD:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.top, 8)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            PermissionRow(permission: "User.Read", description: "Sign in and read user profile")
+                            PermissionRow(permission: "DeviceManagementManagedDevices.Read.All", description: "Read Microsoft Intune devices")
+                            PermissionRow(permission: "DeviceManagementManagedDevices.ReadWrite.All", description: "Read and write Microsoft Intune devices")
+                            PermissionRow(permission: "DeviceManagementApps.Read.All", description: "Read Microsoft Intune apps")
+                            PermissionRow(permission: "DeviceManagementApps.ReadWrite.All", description: "Read and write Microsoft Intune apps")
+                            PermissionRow(permission: "DeviceManagementConfiguration.Read.All", description: "Read device configurations and policies")
+                            PermissionRow(permission: "Group.Read.All", description: "Read all groups")
+                            PermissionRow(permission: "GroupMember.Read.All", description: "Read group memberships")
+                        }
+
+                        Text("Note: Admin consent may be required for some permissions")
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                            .italic()
+                    }
+                    .padding(.vertical, 4)
+                }
             }
         }
         .padding()
@@ -299,6 +345,30 @@ struct InstructionStep: View {
             Text(text)
                 .font(.subheadline)
                 .foregroundColor(.primary)
+        }
+    }
+}
+
+struct PermissionRow: View {
+    let permission: String
+    let description: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundColor(.green)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(permission)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .fontDesign(.monospaced)
+
+                Text(description)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 }
