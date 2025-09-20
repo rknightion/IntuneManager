@@ -1,0 +1,24 @@
+{
+  "originHash" : "746ab7fd2090853bdcdb96d82f7af052c43626ccd893d8a8b468d0ac1dd09cf5",
+  "pins" : [
+    {
+      "identity" : "keychainaccess",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/kishikawakatsumi/KeychainAccess.git",
+      "state" : {
+        "branch" : "master",
+        "revision" : "e0c7eebc5a4465a3c4680764f26b7a61f567cdaf"
+      }
+    },
+    {
+      "identity" : "microsoft-authentication-library-for-objc",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git",
+      "state" : {
+        "revision" : "d1df33963365f42fa2c3d666afb9263a0ac73acf",
+        "version" : "2.4.0"
+      }
+    }
+  ],
+  "version" : 3
+}
