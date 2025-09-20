@@ -1,6 +1,13 @@
 import Foundation
 import Combine
 
+// MARK: - Helper Types for DeviceService
+
+fileprivate struct WipeBody: Encodable, Sendable {
+    let keepEnrollmentData: Bool
+    let keepUserData: Bool
+}
+
 @MainActor
 final class DeviceService: ObservableObject {
     static let shared = DeviceService()
@@ -101,7 +108,7 @@ final class DeviceService: ObservableObject {
     func syncDevice(_ device: Device) async throws {
         let endpoint = "/deviceManagement/managedDevices/\(device.id)/syncDevice"
 
-        let _: EmptyResponse = try await apiClient.post(endpoint, body: EmptyBody(), headers: nil)
+        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: EmptyBody(), headers: nil)
 
         Logger.shared.info("Sync initiated for device: \(device.deviceName)")
 
@@ -112,7 +119,7 @@ final class DeviceService: ObservableObject {
     func retireDevice(_ device: Device) async throws {
         let endpoint = "/deviceManagement/managedDevices/\(device.id)/retire"
 
-        let _: EmptyResponse = try await apiClient.post(endpoint, body: EmptyBody(), headers: nil)
+        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: EmptyBody(), headers: nil)
 
         Logger.shared.info("Retire initiated for device: \(device.deviceName)")
     }
@@ -120,14 +127,9 @@ final class DeviceService: ObservableObject {
     func wipeDevice(_ device: Device, keepEnrollmentData: Bool = false, keepUserData: Bool = false) async throws {
         let endpoint = "/deviceManagement/managedDevices/\(device.id)/wipe"
 
-        struct WipeBody: Encodable {
-            let keepEnrollmentData: Bool
-            let keepUserData: Bool
-        }
-
         let body = WipeBody(keepEnrollmentData: keepEnrollmentData, keepUserData: keepUserData)
 
-        let _: EmptyResponse = try await apiClient.post(endpoint, body: body, headers: nil)
+        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: body, headers: nil)
 
         Logger.shared.warning("Wipe initiated for device: \(device.deviceName)")
     }
@@ -135,7 +137,7 @@ final class DeviceService: ObservableObject {
     func shutdownDevice(_ device: Device) async throws {
         let endpoint = "/deviceManagement/managedDevices/\(device.id)/shutDown"
 
-        let _: EmptyResponse = try await apiClient.post(endpoint, body: EmptyBody(), headers: nil)
+        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: EmptyBody(), headers: nil)
 
         Logger.shared.info("Shutdown initiated for device: \(device.deviceName)")
     }
@@ -143,7 +145,7 @@ final class DeviceService: ObservableObject {
     func restartDevice(_ device: Device) async throws {
         let endpoint = "/deviceManagement/managedDevices/\(device.id)/rebootNow"
 
-        let _: EmptyResponse = try await apiClient.post(endpoint, body: EmptyBody(), headers: nil)
+        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: EmptyBody(), headers: nil)
 
         Logger.shared.info("Restart initiated for device: \(device.deviceName)")
     }
@@ -159,7 +161,7 @@ final class DeviceService: ObservableObject {
             )
         }
 
-        let _: [BatchResponse<EmptyResponse>] = try await apiClient.batch(requests)
+        let _: [BatchResponse<EmptyResponse>] = try await apiClient.batchModels(requests)
 
         Logger.shared.info("Batch sync initiated for \(devices.count) devices")
     }

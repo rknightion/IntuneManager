@@ -107,7 +107,7 @@ final class AssignmentService: ObservableObject {
         }
 
         // Execute batch request
-        let responses: [BatchResponse<AppAssignment>] = try await apiClient.batch(requests)
+        let responses: [BatchResponse<AppAssignment>] = try await apiClient.batchModels(requests)
 
         // Process responses
         for (index, response) in responses.enumerated() {

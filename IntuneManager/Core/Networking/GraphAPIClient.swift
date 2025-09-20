@@ -5,8 +5,8 @@ actor GraphAPIClient {
 
     private let baseURL = "https://graph.microsoft.com/beta"
     private let session: URLSession
-    private let decoder: JSONDecoder
-    private let encoder: JSONEncoder
+    private nonisolated let decoder: JSONDecoder
+    private nonisolated let encoder: JSONEncoder
 
     private init() {
         let config = URLSessionConfiguration.default
@@ -16,11 +16,13 @@ actor GraphAPIClient {
 
         self.session = URLSession(configuration: config)
 
-        self.decoder = JSONDecoder()
-        self.decoder.dateDecodingStrategy = .iso8601
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        self.decoder = decoder
 
-        self.encoder = JSONEncoder()
-        self.encoder.dateEncodingStrategy = .iso8601
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        self.encoder = encoder
     }
 
     // MARK: - Generic Request Methods
@@ -92,12 +94,27 @@ actor GraphAPIClient {
     func getAllPages<T: Decodable & Sendable>(_ endpoint: String,
                                    parameters: [String: String]? = nil,
                                    headers: [String: String]? = nil) async throws -> [T] {
-        var items: [T] = []
-        let sequence: GraphPageSequence<T> = pageSequence(endpoint, parameters: parameters, headers: headers)
-        for try await item in sequence {
-            items.append(item)
+        var results: [T] = []
+        var nextLink: String? = endpoint
+        var currentParams = parameters
+
+        while let link = nextLink {
+            let request = try await buildRequest(
+                endpoint: link,
+                method: "GET",
+                parameters: currentParams,
+                headers: headers
+            )
+
+            let response: GraphResponse<T> = try await performRequest(request)
+            if let value = response.value {
+                results.append(contentsOf: value)
+            }
+            nextLink = response.nextLink
+            currentParams = nil
         }
-        return items
+
+        return results
     }
 
     // MainActor-isolated version for SwiftData models (non-Sendable)
@@ -117,7 +134,7 @@ actor GraphAPIClient {
                 headers: headers
             )
 
-            let response: GraphResponse<T> = try await performModelRequest(request)
+            let response: GraphModelResponse<T> = try await performModelRequest(request)
             if let value = response.value {
                 results.append(contentsOf: value)
             }
@@ -128,7 +145,6 @@ actor GraphAPIClient {
         return results
     }
 
-    @MainActor
     func getModel<T: Decodable>(_ endpoint: String,
                                  parameters: [String: String]? = nil,
                                  headers: [String: String]? = nil) async throws -> T {
@@ -142,8 +158,7 @@ actor GraphAPIClient {
         return try await performModelRequest(request)
     }
 
-    @MainActor
-    func postModel<T: Encodable & Sendable, R: Decodable>(_ endpoint: String,
+    func postModel<T: Encodable, R: Decodable>(_ endpoint: String,
                                                 body: T,
                                                 headers: [String: String]? = nil) async throws -> R {
         let request = try await buildRequest(
@@ -156,8 +171,7 @@ actor GraphAPIClient {
         return try await performModelRequest(request)
     }
 
-    @MainActor
-    func patchModel<T: Encodable & Sendable, R: Decodable>(_ endpoint: String,
+    func patchModel<T: Encodable, R: Decodable>(_ endpoint: String,
                                                  body: T,
                                                  headers: [String: String]? = nil) async throws -> R {
         let request = try await buildRequest(
@@ -181,15 +195,6 @@ actor GraphAPIClient {
 
         let responseBody: BatchResponseBody<T> = try await performModelRequest(request)
         return responseBody.responses
-    }
-
-    func pageSequence<T: Decodable & Sendable>(_ endpoint: String,
-                                    parameters: [String: String]? = nil,
-                                    headers: [String: String]? = nil) -> GraphPageSequence<T> {
-        GraphPageSequence(client: self,
-                          endpoint: endpoint,
-                          initialParameters: parameters,
-                          headers: headers)
     }
 
     // MARK: - Private Methods
@@ -268,7 +273,7 @@ actor GraphAPIClient {
                 throw GraphAPIError.invalidResponse
             }
 
-            Logger.shared.debug("API Response: \(httpResponse.statusCode) for \(request.url?.absoluteString ?? "")")
+            await Logger.shared.debug("API Response: \(httpResponse.statusCode) for \(request.url?.absoluteString ?? "")")
 
             switch httpResponse.statusCode {
             case 200...299:
@@ -301,7 +306,7 @@ actor GraphAPIClient {
         }
     }
 
-    private func performRequest<T: Decodable & Sendable>(_ request: URLRequest) async throws -> T {
+    private func performRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
         let data = try await performDataRequest(request)
 
         if T.self == EmptyResponse.self {
@@ -325,53 +330,9 @@ actor GraphAPIClient {
     }
 }
 
-// MARK: - Async Sequence
-
-struct GraphPageSequence<Element: Decodable & Sendable>: AsyncSequence, Sendable {
-    typealias AsyncIterator = AsyncThrowingStream<Element, any Error>.Iterator
-
-    private let stream: AsyncThrowingStream<Element, any Error>
-
-    init(client: GraphAPIClient,
-         endpoint: String,
-         initialParameters: [String: String]?,
-         headers: [String: String]?) {
-        stream = AsyncThrowingStream { continuation in
-            Task {
-                var nextLink: String? = endpoint
-                var parameters = initialParameters
-
-                do {
-                    while let link = nextLink {
-                        let response: GraphResponse<Element> = try await client.get(link,
-                                                                                    parameters: parameters,
-                                                                                    headers: headers)
-                        if let value = response.value {
-                            for item in value {
-                                continuation.yield(item)
-                            }
-                        }
-                        nextLink = response.nextLink
-                        parameters = nil
-                    }
-                    continuation.finish()
-                } catch let error as GraphAPIError {
-                    continuation.finish(throwing: error)
-                } catch {
-                    continuation.finish(throwing: GraphAPIError.networkError(error))
-                }
-            }
-        }
-    }
-
-    func makeAsyncIterator() -> AsyncIterator {
-        stream.makeAsyncIterator()
-    }
-}
-
 // MARK: - Supporting Types
 
-struct GraphResponse<T: Decodable>: Decodable {
+struct GraphResponse<T: Decodable & Sendable>: Decodable, Sendable {
     let value: [T]?
     let nextLink: String?
 
@@ -381,31 +342,39 @@ struct GraphResponse<T: Decodable>: Decodable {
     }
 }
 
-extension GraphResponse: Sendable where T: Sendable {}
+struct GraphModelResponse<T: Decodable>: Decodable {
+    let value: [T]?
+    let nextLink: String?
 
-struct GraphErrorResponse: Decodable {
+    enum CodingKeys: String, CodingKey {
+        case value
+        case nextLink = "@odata.nextLink"
+    }
+}
+
+struct GraphErrorResponse: Decodable, Sendable {
     let error: GraphError
 
-    struct GraphError: Decodable {
+    struct GraphError: Decodable, Sendable {
         let code: String
         let message: String
         let innerError: InnerError?
 
-        struct InnerError: Decodable {
+        struct InnerError: Decodable, Sendable {
             let requestId: String?
             let date: String?
         }
     }
 }
 
-struct BatchRequest: Encodable {
+struct BatchRequest: Encodable, Sendable {
     let id: String
     let method: String
     let url: String
     let body: Data?
     let headers: [String: String]?
 
-    init(id: String = UUID().uuidString,
+    nonisolated init(id: String = UUID().uuidString,
          method: String,
          url: String,
          body: Encodable? = nil,
@@ -422,7 +391,7 @@ struct BatchRequest: Encodable {
     }
 }
 
-struct BatchRequestBody: Encodable {
+struct BatchRequestBody: Encodable, Sendable {
     let requests: [BatchRequest]
 }
 
@@ -438,6 +407,7 @@ struct BatchResponseBody<T: Decodable>: Decodable {
 }
 
 struct EmptyBody: Encodable, Sendable {}
+
 struct EmptyResponse: Decodable, Sendable {}
 
 extension BatchResponse: Sendable where T: Sendable {}

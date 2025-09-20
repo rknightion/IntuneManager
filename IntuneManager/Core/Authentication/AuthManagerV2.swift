@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import MSAL
 
 #if canImport(UIKit)
@@ -127,24 +128,29 @@ class AuthManagerV2: ObservableObject {
             "https://graph.microsoft.com/Group.Read.All"
         ]
 
-        // Setup webview parameters
+        // Setup webview parameters based on platform
         #if os(iOS)
         guard let presentingViewController = viewController as? UIViewController else {
             throw AuthError.invalidViewController
         }
         let webviewParameters = MSALWebviewParameters(authPresentationViewController: presentingViewController)
         #elseif os(macOS)
-        let webviewParameters = MSALWebviewParameters()
+        // For macOS, we need a view controller or we can't proceed
+        guard let presentingViewController = viewController as? NSViewController else {
+            // On macOS, if no view controller is provided, we cannot show the auth UI
+            throw AuthError.invalidViewController
+        }
+        let webviewParameters = MSALWebviewParameters(authPresentationViewController: presentingViewController)
         #endif
 
-        // Create interactive parameters
+        // Create interactive parameters with webview
         let interactiveParameters = MSALInteractiveTokenParameters(
             scopes: scopes,
             webviewParameters: webviewParameters
         )
 
         // Configure prompt type for account selection
-        interactiveParameters.promptType = .selectAccount
+        interactiveParameters.promptType = MSALPromptType.selectAccount
 
         // Set extra query parameters if needed
         interactiveParameters.extraQueryParameters = ["domain_hint": config.tenantId]
@@ -246,9 +252,6 @@ class AuthManagerV2: ObservableObject {
                 } else {
                     signoutParameters = MSALSignoutParameters()
                 }
-                #elseif os(macOS)
-                let webviewParameters = MSALWebviewParameters()
-                signoutParameters = MSALSignoutParameters(webviewParameters: webviewParameters)
                 #else
                 signoutParameters = MSALSignoutParameters()
                 #endif
@@ -397,9 +400,9 @@ class AuthManagerV2: ObservableObject {
                 Task {
                     do {
                         _ = try await self.acquireTokenSilently()
-                        Logger.shared.info("Token refreshed automatically")
+                        await Logger.shared.info("Token refreshed automatically")
                     } catch {
-                        Logger.shared.error("Automatic token refresh failed: \(error)")
+                        await Logger.shared.error("Automatic token refresh failed: \(error)")
                     }
                 }
             }

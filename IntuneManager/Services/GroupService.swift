@@ -1,7 +1,24 @@
 import Foundation
 import Combine
 
-@MainActor
+// MARK: - Helper Types for GroupService
+
+fileprivate struct MembersResponse: Decodable, Sendable {
+    let value: [GroupMember]
+}
+
+fileprivate struct AddMemberBody: Encodable, Sendable {
+    let odataId: String
+
+    enum CodingKeys: String, CodingKey {
+        case odataId = "@odata.id"
+    }
+}
+
+fileprivate struct CountResponse: Decodable, Sendable {
+    let value: Int
+}
+
 final class GroupService: ObservableObject {
     static let shared = GroupService()
 
@@ -123,28 +140,16 @@ final class GroupService: ObservableObject {
         ]
         let headers = ["ConsistencyLevel": "eventual"]
 
-        struct MembersResponse: Decodable, Sendable {
-            let value: [GroupMember]
-        }
-
-        let response: MembersResponse = try await apiClient.get(endpoint, parameters: parameters, headers: headers)
+        let response: MembersResponse = try await apiClient.getModel(endpoint, parameters: parameters, headers: headers)
         return response.value
     }
 
     func addMemberToGroup(groupId: String, memberId: String) async throws {
         let endpoint = "/groups/\(groupId)/members/$ref"
 
-        struct AddMemberBody: Encodable {
-            let odataId: String
-
-            enum CodingKeys: String, CodingKey {
-                case odataId = "@odata.id"
-            }
-        }
-
         let body = AddMemberBody(odataId: "https://graph.microsoft.com/v1.0/directoryObjects/\(memberId)")
 
-        let _: EmptyResponse = try await apiClient.post(endpoint, body: body, headers: nil)
+        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: body, headers: nil)
 
         Logger.shared.info("Added member \(memberId) to group \(groupId)")
     }
@@ -246,11 +251,7 @@ final class GroupService: ObservableObject {
         let endpoint = "/groups/\(groupId)/members/$count"
         let headers = ["ConsistencyLevel": "eventual"]
 
-        struct CountResponse: Decodable, Sendable {
-            let value: Int
-        }
-
-        let response: CountResponse = try await apiClient.get(endpoint, headers: headers)
+        let response: CountResponse = try await apiClient.getModel(endpoint, headers: headers)
         return response.value
     }
 

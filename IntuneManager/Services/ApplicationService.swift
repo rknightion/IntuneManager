@@ -1,6 +1,12 @@
 import Foundation
 import Combine
 
+// MARK: - Helper Types for ApplicationService
+
+fileprivate struct AssignmentsResponse: Decodable, Sendable {
+    let value: [AppAssignment]
+}
+
 @MainActor
 final class ApplicationService: ObservableObject {
     static let shared = ApplicationService()
@@ -114,18 +120,14 @@ final class ApplicationService: ObservableObject {
     func getApplicationAssignments(appId: String) async throws -> [AppAssignment] {
         let endpoint = "/deviceAppManagement/mobileApps/\(appId)/assignments"
 
-        struct AssignmentsResponse: Decodable, Sendable {
-            let value: [AppAssignment]
-        }
-
-        let response: AssignmentsResponse = try await apiClient.get(endpoint)
+        let response: AssignmentsResponse = try await apiClient.getModel(endpoint)
         return response.value
     }
 
     func createAssignment(appId: String, assignment: AppAssignment) async throws -> AppAssignment {
         let endpoint = "/deviceAppManagement/mobileApps/\(appId)/assignments"
 
-        let createdAssignment: AppAssignment = try await apiClient.post(endpoint, body: assignment)
+        let createdAssignment: AppAssignment = try await apiClient.postModel(endpoint, body: assignment)
 
         Logger.shared.info("Created assignment for app \(appId) to group \(assignment.target.groupId ?? "unknown")")
 
@@ -138,7 +140,7 @@ final class ApplicationService: ObservableObject {
     func updateAssignment(appId: String, assignmentId: String, assignment: AppAssignment) async throws -> AppAssignment {
         let endpoint = "/deviceAppManagement/mobileApps/\(appId)/assignments/\(assignmentId)"
 
-        let updatedAssignment: AppAssignment = try await apiClient.patch(endpoint, body: assignment)
+        let updatedAssignment: AppAssignment = try await apiClient.patchModel(endpoint, body: assignment)
 
         Logger.shared.info("Updated assignment \(assignmentId) for app \(appId)")
 
@@ -167,7 +169,7 @@ final class ApplicationService: ObservableObject {
             )
         }
 
-        let responses: [BatchResponse<AppAssignment>] = try await apiClient.batch(requests)
+        let responses: [BatchResponse<AppAssignment>] = try await apiClient.batchModels(requests)
 
         let successfulAssignments = responses.compactMap { response in
             response.status >= 200 && response.status < 300 ? response.body : nil
@@ -189,7 +191,7 @@ final class ApplicationService: ObservableObject {
             )
         }
 
-        let responses: [BatchResponse<EmptyResponse>] = try await apiClient.batch(requests)
+        let responses: [BatchResponse<EmptyResponse>] = try await apiClient.batchModels(requests)
 
         let successCount = responses.filter { $0.status >= 200 && $0.status < 300 }.count
 
@@ -204,7 +206,7 @@ final class ApplicationService: ObservableObject {
     func fetchInstallSummary(appId: String) async throws -> Application.InstallSummary {
         let endpoint = "/deviceAppManagement/mobileApps/\(appId)/installSummary"
 
-        let summary: Application.InstallSummary = try await apiClient.get(endpoint)
+        let summary: Application.InstallSummary = try await apiClient.getModel(endpoint)
         return summary
     }
 
