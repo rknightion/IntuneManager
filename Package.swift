@@ -1,12 +1,12 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 
 import PackageDescription
 
 let package = Package(
     name: "IntuneManager",
     platforms: [
-        .macOS(.v13),
-        .iOS(.v16),
+        .macOS(.v15),
+        .iOS(.v18),
     ],
     products: [
         .library(
@@ -27,6 +27,21 @@ let package = Package(
             dependencies: [
                 .product(name: "MSAL", package: "microsoft-authentication-library-for-objc"),
                 .product(name: "KeychainAccess", package: "KeychainAccess"),
+            ],
+            path: ".",
+            exclude: [
+                "App/IntuneManagerApp.swift",
+                "Documentation",
+                "README.md",
+                "README-V2.md",
+                "LICENSE",
+                "Info.plist",
+                "IntuneManager.entitlements",
+                "Tests"
+            ],
+            sources: ["App", "Core", "Features", "Services", "Utilities"],
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency")
             ]),
         .testTarget(
             name: "IntuneManagerTests",

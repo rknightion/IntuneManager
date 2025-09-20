@@ -1,5 +1,6 @@
 import XCTest
 import SwiftUI
+import SwiftData
 @testable import IntuneManager
 
 /// Cross-platform compatibility tests
@@ -182,23 +183,32 @@ class CrossPlatformTests: XCTestCase {
         try await credentialManager.clearConfiguration()
     }
 
-    // MARK: - Cache Manager Cross-Platform Tests
+    // MARK: - Local Data Store Tests
 
-    func testCacheManagerCrossPlatform() {
-        let cacheManager = CacheManager.shared
+    @MainActor
+    func testLocalDataStorePersistence() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: Device.self,
+                 Application.self,
+                 DeviceGroup.self,
+                 Assignment.self,
+            configurations: configuration
+        )
 
-        struct TestData: Codable {
-            let value: String
-        }
+        LocalDataStore.shared.configure(with: container.mainContext)
 
-        let testData = TestData(value: "Cross-platform test")
-        cacheManager.setObject(testData, forKey: "test-key", expiration: .hours(1))
+        let device = Device(id: "test-device",
+                            deviceName: "Demo Device",
+                            operatingSystem: "macOS")
 
-        let retrieved = cacheManager.getObject(forKey: "test-key", type: TestData.self)
-        XCTAssertNotNil(retrieved)
-        XCTAssertEqual(retrieved?.value, "Cross-platform test")
+        LocalDataStore.shared.replaceDevices(with: [device])
 
-        cacheManager.removeObject(forKey: "test-key")
+        let fetchedDevices = LocalDataStore.shared.fetchDevices()
+        XCTAssertEqual(fetchedDevices.count, 1)
+        XCTAssertEqual(fetchedDevices.first?.id, "test-device")
+
+        LocalDataStore.shared.reset()
     }
 
     // MARK: - Window Management Tests

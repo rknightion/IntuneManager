@@ -1,13 +1,13 @@
 import Foundation
 import MSAL
 
-struct MSALConfiguration {
-    static let current = MSALConfiguration()
+struct MSALConfiguration: Sendable {
+    nonisolated(unsafe) static let current = MSALConfiguration()
 
     let clientId: String
     let tenantId: String
     let redirectUri: String
-    let authority: MSALAuthority
+    nonisolated(unsafe) let authority: MSALAuthority
     let scopes: [String]
     let bundleId: String
 

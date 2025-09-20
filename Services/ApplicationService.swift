@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 @MainActor
-class ApplicationService: ObservableObject {
+final class ApplicationService: ObservableObject {
     static let shared = ApplicationService()
 
     @Published var applications: [Application] = []
@@ -11,19 +11,21 @@ class ApplicationService: ObservableObject {
     @Published var lastSync: Date?
 
     private let apiClient = GraphAPIClient.shared
-    private let cache = CacheManager.shared
-    private var cancellables = Set<AnyCancellable>()
+    private let dataStore = LocalDataStore.shared
 
     private init() {
-        loadCachedApplications()
+        applications = dataStore.fetchApplications()
     }
 
     // MARK: - Public Methods
 
     func fetchApplications(forceRefresh: Bool = false) async throws -> [Application] {
-        if !forceRefresh, let cachedApps = getCachedApplications() {
-            self.applications = cachedApps
-            return cachedApps
+        if !forceRefresh {
+            let cached = dataStore.fetchApplications()
+            if !cached.isEmpty {
+                applications = cached
+                return cached
+            }
         }
 
         isLoading = true
@@ -37,7 +39,7 @@ class ApplicationService: ObservableObject {
                 "$filter": "isAssigned eq true"
             ]
 
-            let fetchedApps: [Application] = try await apiClient.getAllPages(endpoint, parameters: parameters)
+            let fetchedApps: [Application] = try await apiClient.getAllPagesForModels(endpoint, parameters: parameters)
 
             // Filter for macOS, iOS, and iPadOS apps
             let filteredApps = fetchedApps.filter { app in
@@ -54,8 +56,7 @@ class ApplicationService: ObservableObject {
             self.applications = filteredApps
             self.lastSync = Date()
 
-            // Cache the applications
-            await cacheApplications(filteredApps)
+            dataStore.replaceApplications(with: filteredApps)
 
             Logger.shared.info("Fetched \(filteredApps.count) applications from Graph API")
 
@@ -80,7 +81,7 @@ class ApplicationService: ObservableObject {
 
         return applications.filter { app in
             app.displayName.localizedCaseInsensitiveContains(query) ||
-            app.description?.localizedCaseInsensitiveContains(query) == true ||
+            app.appDescription?.localizedCaseInsensitiveContains(query) == true ||
             app.publisher?.localizedCaseInsensitiveContains(query) == true ||
             app.bundleId?.localizedCaseInsensitiveContains(query) == true
         }
@@ -209,18 +210,11 @@ class ApplicationService: ObservableObject {
 
     // MARK: - Private Methods
 
-    private func loadCachedApplications() {
-        if let cachedApps = getCachedApplications() {
-            self.applications = cachedApps
+    func hydrateFromStore() {
+        let cachedApps = dataStore.fetchApplications()
+        if !cachedApps.isEmpty {
+            applications = cachedApps
         }
-    }
-
-    private func getCachedApplications() -> [Application]? {
-        return cache.getObject(forKey: "applications", type: [Application].self)
-    }
-
-    private func cacheApplications(_ applications: [Application]) async {
-        cache.setObject(applications, forKey: "applications", expiration: .hours(1))
     }
 }
 
@@ -234,5 +228,3 @@ struct AppFilterCriteria {
     var searchQuery: String?
 }
 
-// Empty response for delete operations
-private struct EmptyResponse: Decodable {}

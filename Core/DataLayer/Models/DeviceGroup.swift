@@ -5,7 +5,7 @@ import SwiftData
 final class DeviceGroup: Identifiable, Codable {
     @Attribute(.unique) var id: String
     var displayName: String
-    var description: String?
+    var groupDescription: String?
     var createdDateTime: Date?
     var groupTypes: [String]?
     var membershipRule: String?
@@ -126,7 +126,7 @@ final class DeviceGroup: Identifiable, Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         displayName = try container.decode(String.self, forKey: .displayName)
-        description = try container.decodeIfPresent(String.self, forKey: .description)
+        groupDescription = try container.decodeIfPresent(String.self, forKey: .description)
         createdDateTime = try container.decodeIfPresent(Date.self, forKey: .createdDateTime)
         groupTypes = try container.decodeIfPresent([String].self, forKey: .groupTypes)
         membershipRule = try container.decodeIfPresent(String.self, forKey: .membershipRule)
@@ -147,7 +147,7 @@ final class DeviceGroup: Identifiable, Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(displayName, forKey: .displayName)
-        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(groupDescription, forKey: .description)
         try container.encodeIfPresent(createdDateTime, forKey: .createdDateTime)
         try container.encodeIfPresent(groupTypes, forKey: .groupTypes)
         try container.encodeIfPresent(membershipRule, forKey: .membershipRule)

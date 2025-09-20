@@ -54,6 +54,35 @@ struct PlatformFormStyle: ViewModifier {
     }
 }
 
+private struct PlatformGlassBackground: ViewModifier {
+    let cornerRadius: CGFloat?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        #if os(iOS) || os(macOS)
+        if #available(iOS 18, macOS 15, *) {
+            if let cornerRadius {
+                content
+                    .glassBackgroundEffect(in: .rect(cornerRadius: cornerRadius))
+            } else {
+                content
+                    .glassBackgroundEffect()
+            }
+        } else {
+            if let cornerRadius {
+                content
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            } else {
+                content
+                    .background(.ultraThinMaterial)
+            }
+        }
+        #else
+        content
+        #endif
+    }
+}
+
 extension View {
     func platformNavigationStyle() -> some View {
         modifier(PlatformNavigationStyle())
@@ -65,6 +94,11 @@ extension View {
 
     func platformFormStyle() -> some View {
         modifier(PlatformFormStyle())
+    }
+
+    /// Applies Apple's liquid glass styling when available, while gracefully degrading on older OS releases.
+    func platformGlassBackground(cornerRadius: CGFloat? = nil) -> some View {
+        modifier(PlatformGlassBackground(cornerRadius: cornerRadius))
     }
 }
 
@@ -103,7 +137,7 @@ struct PlatformTabView<Content: View>: View {
         }
         #else
         NavigationSplitView {
-            SidebarView(selection: $selection)
+            UnifiedSidebarView(selection: $selection)
         } detail: {
             NavigationStack {
                 content()

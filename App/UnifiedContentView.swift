@@ -37,7 +37,10 @@ struct UnifiedContentView: View {
         } detail: {
             NavigationStack {
                 destinationView(for: appState.selectedTab)
+                    .navigationTitle(appState.selectedTab.rawValue)
+                    .toolbarTitleDisplayMode(.automatic)
             }
+            .platformGlassBackground()
         }
         .navigationSplitViewStyle(.balanced)
     }
@@ -48,7 +51,9 @@ struct UnifiedContentView: View {
                 NavigationStack {
                     destinationView(for: tab)
                         .navigationTitle(tab.rawValue)
+                        .toolbarTitleDisplayMode(.automatic)
                 }
+                .platformGlassBackground()
                 .tabItem {
                     Label(tab.rawValue, systemImage: tab.systemImage)
                 }
@@ -70,6 +75,8 @@ struct UnifiedContentView: View {
             GroupListView()
         case .assignments:
             BulkAssignmentView()
+        case .settings:
+            SettingsView()
         }
     }
 }
@@ -79,6 +86,7 @@ struct UnifiedSidebarView: View {
     @Binding var selection: AppState.Tab
     @EnvironmentObject var authManager: AuthManagerV2
     @EnvironmentObject var credentialManager: CredentialManager
+    @EnvironmentObject var appState: AppState
     @State private var showingSettings = false
     @State private var showingConfiguration = false
 
@@ -167,6 +175,7 @@ struct UnifiedSidebarView: View {
             }
             #endif
         }
+        .platformGlassBackground()
         .sheet(isPresented: $showingSettings) {
             SettingsView()
                 .environmentObject(authManager)
@@ -190,7 +199,11 @@ struct UnifiedSidebarView: View {
     }
 
     private func clearCache() {
-        CacheManager.shared.clearCache()
+        LocalDataStore.shared.reset()
+        DeviceService.shared.hydrateFromStore()
+        ApplicationService.shared.hydrateFromStore()
+        GroupService.shared.hydrateFromStore()
+        AssignmentService.shared.assignmentHistory = []
         PlatformHaptics.trigger(.success)
     }
 
@@ -208,30 +221,24 @@ struct UnifiedLoginView: View {
     @State private var showConfiguration = false
 
     var body: some View {
-        GeometryReader { geometry in
-            ScrollView {
-                VStack(spacing: 30) {
-                    Spacer(minLength: geometry.size.height * 0.1)
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 32) {
+                logoSection
+                signInSection
 
-                    // Logo and title
-                    logoSection
-
-                    // Sign in section
-                    signInSection
-
-                    // Configuration info
-                    if let config = credentialManager.configuration {
-                        configurationInfo(config)
-                    }
-
-                    Spacer(minLength: geometry.size.height * 0.1)
+                if let config = credentialManager.configuration {
+                    configurationInfo(config)
                 }
-                .frame(maxWidth: 500)
-                .frame(maxWidth: .infinity)
-                .padding()
             }
+            .padding(32)
+            .frame(maxWidth: 520)
+            .frame(maxWidth: .infinity)
+            .platformGlassBackground(cornerRadius: 30)
+            .padding(.horizontal)
+            .padding(.top, 80)
+            .padding(.bottom, 120)
         }
-        .background(backgroundGradient)
+        .background(liquidGlassBackground)
         .sheet(isPresented: $showConfiguration) {
             ConfigurationView()
                 #if os(iOS)
@@ -271,9 +278,9 @@ struct UnifiedLoginView: View {
                     .progressViewStyle(CircularProgressViewStyle())
                     .padding()
             } else {
-                PlatformButton(title: "Sign in with Microsoft", style: .primary) {
+                PlatformButton(title: "Sign in with Microsoft", action: {
                     signIn()
-                }
+                }, style: .primary)
                 .frame(maxWidth: 300)
 
                 Button("Reconfigure App") {
@@ -285,7 +292,7 @@ struct UnifiedLoginView: View {
 
             Text("You'll be redirected to Microsoft to authenticate")
                 .font(.caption2)
-                .foregroundColor(.tertiary)
+                .foregroundStyle(.tertiary)
         }
     }
 
@@ -307,21 +314,32 @@ struct UnifiedLoginView: View {
             }
             .foregroundColor(.secondary)
         }
-        .padding()
-        .background(Color.gray.opacity(0.1))
-        .cornerRadius(8)
+        .frame(maxWidth: .infinity)
+        .padding(16)
+        .platformGlassBackground(cornerRadius: 20)
     }
 
-    private var backgroundGradient: some View {
-        LinearGradient(
-            colors: [
-                Color(white: 0.95),
-                Color(white: 0.98)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea()
+    private var liquidGlassBackground: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.accentColor.opacity(0.35),
+                    Color.purple.opacity(0.15),
+                    Color.clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            if #available(iOS 18, macOS 15, *) {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .blur(radius: 60)
+                    .opacity(0.3)
+                    .ignoresSafeArea()
+            }
+        }
     }
 
     private func signIn() {

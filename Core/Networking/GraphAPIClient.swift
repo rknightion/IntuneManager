@@ -1,14 +1,12 @@
 import Foundation
-import Combine
 
-class GraphAPIClient {
+actor GraphAPIClient {
     static let shared = GraphAPIClient()
 
     private let baseURL = "https://graph.microsoft.com/beta"
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
-    private var cancellables = Set<AnyCancellable>()
 
     private init() {
         let config = URLSessionConfiguration.default
@@ -91,24 +89,47 @@ class GraphAPIClient {
 
     // MARK: - Pagination Support
 
-    func getAllPages<T: Decodable>(_ endpoint: String,
-                                   parameters: [String: String]? = nil) async throws -> [T] {
-        var allItems: [T] = []
+    func getAllPages<T: Decodable & Sendable>(_ endpoint: String,
+                                   parameters: [String: String]? = nil,
+                                   headers: [String: String]? = nil) async throws -> [T] {
+        var items: [T] = []
+        let sequence: GraphPageSequence<T> = pageSequence(endpoint, parameters: parameters, headers: headers)
+        for try await item in sequence {
+            items.append(item)
+        }
+        return items
+    }
+
+    // MainActor-isolated version for SwiftData models (non-Sendable)
+    @MainActor
+    func getAllPagesForModels<T: Decodable>(_ endpoint: String,
+                                             parameters: [String: String]? = nil,
+                                             headers: [String: String]? = nil) async throws -> [T] {
+        var results: [T] = []
         var nextLink: String? = endpoint
-        var currentParameters = parameters
+        var currentParams = parameters
 
         while let link = nextLink {
-            let response: GraphResponse<T> = try await get(link, parameters: currentParameters)
-
+            let response: GraphResponse<T> = try await get(link,
+                                                          parameters: currentParams,
+                                                          headers: headers)
             if let value = response.value {
-                allItems.append(contentsOf: value)
+                results.append(contentsOf: value)
             }
-
             nextLink = response.nextLink
-            currentParameters = nil // Parameters are included in nextLink
+            currentParams = nil // Parameters only needed for first request
         }
 
-        return allItems
+        return results
+    }
+
+    func pageSequence<T: Decodable & Sendable>(_ endpoint: String,
+                                    parameters: [String: String]? = nil,
+                                    headers: [String: String]? = nil) -> GraphPageSequence<T> {
+        GraphPageSequence(client: self,
+                          endpoint: endpoint,
+                          initialParameters: parameters,
+                          headers: headers)
     }
 
     // MARK: - Private Methods
@@ -139,8 +160,14 @@ class GraphAPIClient {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         // Add authorization header
-        let token = try await AuthManager.shared.acquireToken()
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        do {
+            let token = try await AuthManagerV2.shared.getAccessToken()
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } catch let authError as AuthError {
+            throw .authenticationFailed(authError)
+        } catch {
+            throw .networkError(error)
+        }
 
         // Add custom headers
         headers?.forEach { key, value in
@@ -149,7 +176,11 @@ class GraphAPIClient {
 
         // Add body if present
         if let body = body {
-            request.httpBody = try encoder.encode(body)
+            do {
+                request.httpBody = try encoder.encode(body)
+            } catch {
+                throw .encodingFailed(error)
+            }
         }
 
         return request
@@ -208,12 +239,55 @@ class GraphAPIClient {
                 }
                 throw GraphAPIError.httpError(statusCode: httpResponse.statusCode)
             }
+        } catch let error as GraphAPIError {
+            throw error
         } catch {
-            if error is GraphAPIError {
-                throw error
-            }
             throw GraphAPIError.networkError(error)
         }
+    }
+}
+
+// MARK: - Async Sequence
+
+struct GraphPageSequence<Element: Decodable & Sendable>: AsyncSequence, Sendable {
+    typealias AsyncIterator = AsyncThrowingStream<Element, any Error>.Iterator
+
+    private let stream: AsyncThrowingStream<Element, any Error>
+
+    init(client: GraphAPIClient,
+         endpoint: String,
+         initialParameters: [String: String]?,
+         headers: [String: String]?) {
+        stream = AsyncThrowingStream { continuation in
+            Task {
+                var nextLink: String? = endpoint
+                var parameters = initialParameters
+
+                do {
+                    while let link = nextLink {
+                        let response: GraphResponse<Element> = try await client.get(link,
+                                                                                    parameters: parameters,
+                                                                                    headers: headers)
+                        if let value = response.value {
+                            for item in value {
+                                continuation.yield(item)
+                            }
+                        }
+                        nextLink = response.nextLink
+                        parameters = nil
+                    }
+                    continuation.finish()
+                } catch let error as GraphAPIError {
+                    continuation.finish(throwing: error)
+                } catch {
+                    continuation.finish(throwing: .networkError(error))
+                }
+            }
+        }
+    }
+
+    func makeAsyncIterator() -> AsyncIterator {
+        stream.makeAsyncIterator()
     }
 }
 
@@ -298,6 +372,8 @@ enum GraphAPIError: LocalizedError {
     case serverError(message: String, code: String)
     case httpError(statusCode: Int)
     case networkError(Error)
+    case authenticationFailed(AuthError)
+    case encodingFailed(Error)
 
     var errorDescription: String? {
         switch self {
@@ -319,6 +395,10 @@ enum GraphAPIError: LocalizedError {
             return "HTTP error: \(statusCode)"
         case .networkError(let error):
             return "Network error: \(error.localizedDescription)"
+        case .authenticationFailed(let authError):
+            return authError.localizedDescription
+        case .encodingFailed(let error):
+            return "Failed to encode request body: \(error.localizedDescription)"
         }
     }
 }

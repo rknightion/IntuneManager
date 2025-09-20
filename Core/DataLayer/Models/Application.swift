@@ -5,7 +5,7 @@ import SwiftData
 final class Application: Identifiable, Codable {
     @Attribute(.unique) var id: String
     var displayName: String
-    var description: String?
+    var appDescription: String?
     var publisher: String?
     var largeIcon: Data?
     var createdDateTime: Date
@@ -47,7 +47,7 @@ final class Application: Identifiable, Codable {
         }
     }
 
-    enum AppType: String, Codable, CaseIterable {
+    enum AppType: String, CaseIterable {
         case macOS
         case iOS
         case macOSLobApp
@@ -87,6 +87,41 @@ final class Application: Identifiable, Codable {
             case .webApp:
                 return "globe"
             }
+        }
+
+        init?(odataType: String) {
+            let sanitized = AppType.sanitizedType(from: odataType)
+
+            switch sanitized {
+            case "macOSApp":
+                self = .macOS
+            case "iosStoreApp":
+                self = .iOS
+            default:
+                guard let value = AppType(rawValue: sanitized) else {
+                    return nil
+                }
+                self = value
+            }
+        }
+
+        var odataType: String {
+            switch self {
+            case .macOS:
+                return "#microsoft.graph.macOSApp"
+            case .iOS:
+                return "#microsoft.graph.iosStoreApp"
+            default:
+                return "#microsoft.graph.\(rawValue)"
+            }
+        }
+
+        private static func sanitizedType(from odataType: String) -> String {
+            let trimmed = odataType.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+            if let lastComponent = trimmed.split(separator: ".").last {
+                return String(lastComponent)
+            }
+            return trimmed
         }
     }
 
@@ -153,7 +188,7 @@ final class Application: Identifiable, Codable {
 
     // Codable conformance
     enum CodingKeys: String, CodingKey {
-        case id = "@odata.id"
+        case id
         case displayName
         case description
         case publisher
@@ -167,7 +202,7 @@ final class Application: Identifiable, Codable {
         case developer
         case notes
         case publishingState
-        case appType = "@odata.type"
+        case rawAppType = "@odata.type"
         case version
         case fileName
         case size
@@ -186,7 +221,7 @@ final class Application: Identifiable, Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         displayName = try container.decode(String.self, forKey: .displayName)
-        description = try container.decodeIfPresent(String.self, forKey: .description)
+        appDescription = try container.decodeIfPresent(String.self, forKey: .description)
         publisher = try container.decodeIfPresent(String.self, forKey: .publisher)
         largeIcon = try container.decodeIfPresent(Data.self, forKey: .largeIcon)
         createdDateTime = try container.decode(Date.self, forKey: .createdDateTime)
@@ -198,7 +233,17 @@ final class Application: Identifiable, Codable {
         developer = try container.decodeIfPresent(String.self, forKey: .developer)
         notes = try container.decodeIfPresent(String.self, forKey: .notes)
         publishingState = try container.decodeIfPresent(PublishingState.self, forKey: .publishingState) ?? .notPublished
-        appType = try container.decodeIfPresent(AppType.self, forKey: .appType) ?? .macOS
+
+        if let rawType = try container.decodeIfPresent(String.self, forKey: .rawAppType) {
+            if let resolvedType = AppType(odataType: rawType) {
+                appType = resolvedType
+            } else {
+                Logger.shared.warning("Unknown application type encountered: \(rawType)")
+                appType = .macOS
+            }
+        } else {
+            appType = .macOS
+        }
         version = try container.decodeIfPresent(String.self, forKey: .version)
         fileName = try container.decodeIfPresent(String.self, forKey: .fileName)
         size = try container.decodeIfPresent(Int64.self, forKey: .size)
@@ -217,7 +262,7 @@ final class Application: Identifiable, Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(displayName, forKey: .displayName)
-        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(appDescription, forKey: .description)
         try container.encodeIfPresent(publisher, forKey: .publisher)
         try container.encodeIfPresent(largeIcon, forKey: .largeIcon)
         try container.encode(createdDateTime, forKey: .createdDateTime)
@@ -229,7 +274,7 @@ final class Application: Identifiable, Codable {
         try container.encodeIfPresent(developer, forKey: .developer)
         try container.encodeIfPresent(notes, forKey: .notes)
         try container.encode(publishingState, forKey: .publishingState)
-        try container.encode(appType, forKey: .appType)
+        try container.encode(appType.odataType, forKey: .rawAppType)
         try container.encodeIfPresent(version, forKey: .version)
         try container.encodeIfPresent(fileName, forKey: .fileName)
         try container.encodeIfPresent(size, forKey: .size)

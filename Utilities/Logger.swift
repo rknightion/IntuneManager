@@ -1,7 +1,7 @@
 import Foundation
 import os.log
 
-class Logger {
+final class Logger: @unchecked Sendable {
     static let shared = Logger()
 
     private let subsystem = Bundle.main.bundleIdentifier ?? "com.intunemanager"
@@ -164,7 +164,7 @@ class Logger {
 
         // Log to system log
         if let logger = loggers[category] {
-            os_log("%{public}@", log: logger, type: level.osLogType, message)
+            os_log("%{public}@", log: logger, type: level.osLogType, formattedMessage)
         }
 
         // Store critical errors for crash reporting

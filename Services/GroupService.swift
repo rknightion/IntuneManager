@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 @MainActor
-class GroupService: ObservableObject {
+final class GroupService: ObservableObject {
     static let shared = GroupService()
 
     @Published var groups: [DeviceGroup] = []
@@ -11,19 +11,21 @@ class GroupService: ObservableObject {
     @Published var lastSync: Date?
 
     private let apiClient = GraphAPIClient.shared
-    private let cache = CacheManager.shared
-    private var cancellables = Set<AnyCancellable>()
+    private let dataStore = LocalDataStore.shared
 
     private init() {
-        loadCachedGroups()
+        groups = dataStore.fetchGroups()
     }
 
     // MARK: - Public Methods
 
     func fetchGroups(forceRefresh: Bool = false) async throws -> [DeviceGroup] {
-        if !forceRefresh, let cachedGroups = getCachedGroups() {
-            self.groups = cachedGroups
-            return cachedGroups
+        if !forceRefresh {
+            let cached = dataStore.fetchGroups()
+            if !cached.isEmpty {
+                groups = cached
+                return cached
+            }
         }
 
         isLoading = true
@@ -40,7 +42,7 @@ class GroupService: ObservableObject {
 
             let headers = ["ConsistencyLevel": "eventual"]
 
-            let fetchedGroups: [DeviceGroup] = try await apiClient.getAllPages(endpoint, parameters: parameters, headers: headers)
+            let fetchedGroups: [DeviceGroup] = try await apiClient.getAllPagesForModels(endpoint, parameters: parameters, headers: headers)
 
             // Filter for groups that can be used for device assignment
             let filteredGroups = fetchedGroups.filter { group in
@@ -54,8 +56,7 @@ class GroupService: ObservableObject {
             // Fetch member counts for each group asynchronously
             await fetchMemberCounts(for: filteredGroups)
 
-            // Cache the groups
-            await cacheGroups(filteredGroups)
+            dataStore.replaceGroups(with: filteredGroups)
 
             Logger.shared.info("Fetched \(filteredGroups.count) groups from Graph API")
 
@@ -86,7 +87,7 @@ class GroupService: ObservableObject {
 
         return groups.filter { group in
             group.displayName.localizedCaseInsensitiveContains(query) ||
-            group.description?.localizedCaseInsensitiveContains(query) == true
+            group.groupDescription?.localizedCaseInsensitiveContains(query) == true
         }
     }
 
@@ -200,25 +201,16 @@ class GroupService: ObservableObject {
     func fetchGroupsWithAssignedApps(_ groupIds: [String]) async throws -> [(group: DeviceGroup, apps: [Application])] {
         var results: [(DeviceGroup, [Application])] = []
 
-        // Fetch groups in parallel
-        await withTaskGroup(of: (DeviceGroup?, [Application]?).self) { group in
-            for groupId in groupIds {
-                group.addTask {
-                    do {
-                        let deviceGroup = try await self.fetchGroup(id: groupId)
-                        let apps = try await self.fetchAssignedApps(for: groupId)
-                        return (deviceGroup, apps)
-                    } catch {
-                        Logger.shared.error("Failed to fetch group \(groupId): \(error)")
-                        return (nil, nil)
-                    }
-                }
-            }
-
-            for await result in group {
-                if let deviceGroup = result.0, let apps = result.1 {
-                    results.append((deviceGroup, apps))
-                }
+        // Fetch groups sequentially since SwiftData models are not Sendable
+        // This is a MainActor-isolated method, so we can't use TaskGroup with non-Sendable types
+        for groupId in groupIds {
+            do {
+                let deviceGroup = try await fetchGroup(id: groupId)
+                let apps = try await fetchAssignedApps(for: groupId)
+                results.append((deviceGroup, apps))
+            } catch {
+                Logger.shared.error("Failed to fetch group \(groupId): \(error)")
+                // Continue with next group instead of failing completely
             }
         }
 
@@ -279,18 +271,11 @@ class GroupService: ObservableObject {
         return response.value
     }
 
-    private func loadCachedGroups() {
-        if let cachedGroups = getCachedGroups() {
-            self.groups = cachedGroups
+    func hydrateFromStore() {
+        let cachedGroups = dataStore.fetchGroups()
+        if !cachedGroups.isEmpty {
+            groups = cachedGroups
         }
-    }
-
-    private func getCachedGroups() -> [DeviceGroup]? {
-        return cache.getObject(forKey: "groups", type: [DeviceGroup].self)
-    }
-
-    private func cacheGroups(_ groups: [DeviceGroup]) async {
-        cache.setObject(groups, forKey: "groups", expiration: .hours(1))
     }
 }
 
@@ -321,5 +306,3 @@ struct UpdateGroupRequest: Encodable {
     let membershipRule: String?
 }
 
-// Empty response for operations that don't return data
-private struct EmptyResponse: Decodable {}

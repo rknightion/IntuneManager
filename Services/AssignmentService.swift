@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 @MainActor
-class AssignmentService: ObservableObject {
+final class AssignmentService: ObservableObject {
     static let shared = AssignmentService()
 
     @Published var activeAssignments: [Assignment] = []
@@ -14,8 +14,7 @@ class AssignmentService: ObservableObject {
     private let apiClient = GraphAPIClient.shared
     private let appService = ApplicationService.shared
     private let groupService = GroupService.shared
-    private let cache = CacheManager.shared
-    private var cancellables = Set<AnyCancellable>()
+    private let dataStore = LocalDataStore.shared
     private let maxConcurrentAssignments = 20 // Graph API batch limit
     private let retryLimit = 3
 
@@ -31,7 +30,7 @@ class AssignmentService: ObservableObject {
     }
 
     private init() {
-        loadAssignmentHistory()
+        assignmentHistory = dataStore.fetchAssignments()
     }
 
     // MARK: - Bulk Assignment Operations
@@ -82,7 +81,7 @@ class AssignmentService: ObservableObject {
         // Update assignment history
         assignmentHistory.append(contentsOf: completedAssignments)
         assignmentHistory.append(contentsOf: failedAssignments)
-        saveAssignmentHistory()
+        persistAssignmentHistory()
 
         currentProgress = nil
         activeAssignments = []
@@ -251,6 +250,11 @@ class AssignmentService: ObservableObject {
         saveAssignmentHistory()
     }
 
+    private func saveAssignmentHistory() {
+        // Save assignment history to persistent storage if needed
+        // For now, just keeping in memory
+    }
+
     func getAssignmentStatistics() -> AssignmentStatistics {
         let total = assignmentHistory.count
         let completed = assignmentHistory.filter { $0.status == .completed }.count
@@ -268,16 +272,9 @@ class AssignmentService: ObservableObject {
 
     // MARK: - Private Methods
 
-    private func loadAssignmentHistory() {
-        if let history = cache.getObject(forKey: "assignmentHistory", type: [Assignment].self) {
-            assignmentHistory = history
-        }
-    }
-
-    private func saveAssignmentHistory() {
-        // Keep only last 1000 assignments
+    private func persistAssignmentHistory() {
         let recentHistory = Array(assignmentHistory.suffix(1000))
-        cache.setObject(recentHistory, forKey: "assignmentHistory", expiration: .days(30))
+        dataStore.storeAssignments(recentHistory)
     }
 }
 

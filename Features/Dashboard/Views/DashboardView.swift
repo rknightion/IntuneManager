@@ -68,7 +68,7 @@ struct DashboardView: View {
 
 struct HeaderSection: View {
     @Binding var timeRange: DashboardView.TimeRange
-    @EnvironmentObject var authManager: AuthManager
+    @EnvironmentObject var authManager: AuthManagerV2
 
     var body: some View {
         HStack {

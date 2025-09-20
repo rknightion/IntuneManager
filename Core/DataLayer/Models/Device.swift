@@ -59,6 +59,18 @@ final class Device: Identifiable, Codable {
             case .unknown, .conflict, .error, .configManager: return "gray"
             }
         }
+
+        var displayName: String {
+            switch self {
+            case .unknown: return "Unknown"
+            case .compliant: return "Compliant"
+            case .noncompliant: return "Non-compliant"
+            case .conflict: return "Conflict"
+            case .error: return "Error"
+            case .inGracePeriod: return "In Grace Period"
+            case .configManager: return "Config Manager"
+            }
+        }
     }
 
     enum ManagementState: String, Codable, CaseIterable {

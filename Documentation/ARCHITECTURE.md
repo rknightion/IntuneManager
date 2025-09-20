@@ -6,11 +6,11 @@ IntuneManager is a cross-platform Apple app (macOS, iOS, iPadOS) for managing Mi
 ## Technology Stack
 
 ### Core Technologies
-- **SwiftUI**: Cross-platform UI framework for macOS 13+, iOS 16+, iPadOS 16+
-- **Swift 5.9+**: Modern Swift with async/await concurrency
+- **SwiftUI**: Cross-platform UI framework for macOS 15+, iOS 18+, iPadOS 18+
+- **Swift 6.2**: Modern Swift with strict-concurrency semantics and typed throws
 - **Microsoft Graph API Beta**: For Intune management operations
 - **MSAL iOS**: Microsoft Authentication Library for secure OAuth2/OIDC authentication
-- **Swift Data**: For local data persistence and caching (iOS 17+/macOS 14+)
+- **SwiftData**: For local data persistence and caching (iOS 18+/macOS 15+)
 - **Combine**: For reactive programming patterns where appropriate
 
 ## Architecture Pattern: MVVM-C (Model-View-ViewModel-Coordinator)
@@ -26,16 +26,14 @@ IntuneManager is a cross-platform Apple app (macOS, iOS, iPadOS) for managing Mi
 
 ```
 IntuneManager/
-├── App/                           # App lifecycle and configuration
+├── App/                           # App lifecycle, navigation, and configuration surfaces
 │   ├── IntuneManagerApp.swift
-│   ├── AppDelegate.swift
-│   └── Configuration/
-│       ├── Environment.swift
-│       └── AppConstants.swift
+│   ├── UnifiedContentView.swift
+│   └── SettingsView.swift
 │
 ├── Core/                          # Core functionality and shared code
 │   ├── Authentication/
-│   │   ├── AuthManager.swift
+│   │   ├── AuthManagerV2.swift
 │   │   ├── MSALConfiguration.swift
 │   │   └── TokenManager.swift
 │   │
@@ -51,11 +49,8 @@ IntuneManager/
 │   │   │   ├── Application.swift
 │   │   │   ├── DeviceGroup.swift
 │   │   │   └── Assignment.swift
-│   │   ├── Repository/
-│   │   │   └── IntuneRepository.swift
-│   │   └── Cache/
-│   │       ├── CacheManager.swift
-│   │       └── SwiftDataModels/
+│   │   └── Persistence/
+│   │       └── LocalDataStore.swift
 │   │
 │   └── Extensions/
 │       ├── View+Extensions.swift
@@ -141,10 +136,10 @@ User Login → MSAL Auth → Token Acquired → Store in Keychain → GraphAPI R
 ### 2. Data Synchronization Strategy
 - **Initial Load**: Fetch all devices, apps, and groups with pagination
 - **Incremental Sync**: Use delta queries where available
-- **Cache Strategy**:
-  - SwiftData for persistent storage
-  - In-memory cache for active session
-  - TTL-based cache invalidation (configurable)
+- **Persistence Strategy**:
+  - SwiftData `LocalDataStore` for offline-ready persistence
+  - In-memory observable services for the active UI session
+  - Automatic reconciliation when Graph responses arrive
 - **Offline Support**: Queue operations when offline, sync when connected
 
 ### 3. Bulk Assignment Optimization
@@ -163,6 +158,7 @@ Select Apps → Select Groups → Preview Changes → Batch API Calls → Progre
 - Keyboard shortcuts
 - Multi-window support
 - Sidebar navigation
+- Assignments quick-look window with liquid glass styling
 - Contextual menus
 - Drag-and-drop support
 
@@ -196,12 +192,12 @@ Different sync strategies based on network conditions and data volume.
 ### 1. Lazy Loading
 - Load device/app details on demand
 - Paginate large lists (50 items per page)
-- Virtual scrolling for large datasets
+- Stream results via `GraphPageSequence` to minimise memory pressure
 
-### 2. Intelligent Caching
-- Cache Graph API responses
-- Implement ETags for conditional requests
-- Background refresh for frequently accessed data
+### 2. Intelligent Persistence
+- Persist Graph results with SwiftData for fast relaunch
+- Use background refresh for frequently accessed datasets
+- Allow operators to reset the local store on demand
 
 ### 3. Batch Operations
 - Combine multiple API calls using Graph batch endpoint

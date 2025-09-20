@@ -1,6 +1,14 @@
 import Foundation
 import MSAL
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
+#if canImport(AppKit)
+import AppKit
+#endif
+
 /// Updated Authentication Manager using MSAL v2 with improved error handling and session management
 @MainActor
 class AuthManagerV2: ObservableObject {
@@ -435,67 +443,3 @@ class AuthManagerV2: ObservableObject {
     }
 }
 
-// MARK: - Enhanced Error Types
-
-extension AuthError {
-    static var notConfigured: AuthError {
-        return .custom("App is not configured. Please provide credentials.")
-    }
-
-    static var msalNotInitialized: AuthError {
-        return .custom("Authentication system not initialized")
-    }
-
-    static var invalidViewController: AuthError {
-        return .custom("Invalid view controller for authentication")
-    }
-
-    static var notAuthenticated: AuthError {
-        return .custom("User is not authenticated")
-    }
-
-    static var unknownError: AuthError {
-        return .custom("An unknown error occurred")
-    }
-
-    static var userCancelled: AuthError {
-        return .custom("Authentication was cancelled")
-    }
-
-    static var insufficientPermissions: AuthError {
-        return .custom("Insufficient permissions granted")
-    }
-
-    static var networkError: AuthError {
-        return .custom("Network connection error")
-    }
-
-    static var interactionRequired: AuthError {
-        return .custom("User interaction required")
-    }
-
-    static func invalidConfiguration(_ details: String) -> AuthError {
-        return .custom("Invalid configuration: \(details)")
-    }
-
-    static func msalInitializationFailed(_ error: Error) -> AuthError {
-        return .custom("MSAL initialization failed: \(error.localizedDescription)")
-    }
-
-    static func signInFailed(_ error: Error) -> AuthError {
-        return .custom("Sign in failed: \(error.localizedDescription)")
-    }
-
-    static func tokenAcquisitionFailed(_ error: Error) -> AuthError {
-        return .custom("Token acquisition failed: \(error.localizedDescription)")
-    }
-
-    case custom(String)
-
-    var localizedDescription: String {
-        switch self {
-        case .custom(let message):
-            return message
-        }
-    }
-}

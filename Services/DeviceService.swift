@@ -1,9 +1,8 @@
 import Foundation
 import Combine
-import SwiftData
 
 @MainActor
-class DeviceService: ObservableObject {
+final class DeviceService: ObservableObject {
     static let shared = DeviceService()
 
     @Published var devices: [Device] = []
@@ -12,19 +11,21 @@ class DeviceService: ObservableObject {
     @Published var lastSync: Date?
 
     private let apiClient = GraphAPIClient.shared
-    private let cache = CacheManager.shared
-    private var cancellables = Set<AnyCancellable>()
+    private let dataStore = LocalDataStore.shared
 
     private init() {
-        loadCachedDevices()
+        devices = dataStore.fetchDevices()
     }
 
     // MARK: - Public Methods
 
     func fetchDevices(forceRefresh: Bool = false) async throws -> [Device] {
-        if !forceRefresh, let cachedDevices = getCachedDevices() {
-            self.devices = cachedDevices
-            return cachedDevices
+        if !forceRefresh {
+            let cached = dataStore.fetchDevices()
+            if !cached.isEmpty {
+                devices = cached
+                return cached
+            }
         }
 
         isLoading = true
@@ -38,13 +39,12 @@ class DeviceService: ObservableObject {
                 "$filter": "operatingSystem eq 'macOS' or operatingSystem eq 'iOS' or operatingSystem eq 'iPadOS'"
             ]
 
-            let fetchedDevices: [Device] = try await apiClient.getAllPages(endpoint, parameters: parameters)
+            let fetchedDevices: [Device] = try await apiClient.getAllPagesForModels(endpoint, parameters: parameters)
 
             self.devices = fetchedDevices
             self.lastSync = Date()
 
-            // Cache the devices
-            await cacheDevices(fetchedDevices)
+            dataStore.replaceDevices(with: fetchedDevices)
 
             Logger.shared.info("Fetched \(fetchedDevices.count) devices from Graph API")
 
@@ -166,18 +166,11 @@ class DeviceService: ObservableObject {
 
     // MARK: - Private Methods
 
-    private func loadCachedDevices() {
-        if let cachedDevices = getCachedDevices() {
-            self.devices = cachedDevices
+    func hydrateFromStore() {
+        let cachedDevices = dataStore.fetchDevices()
+        if !cachedDevices.isEmpty {
+            devices = cachedDevices
         }
-    }
-
-    private func getCachedDevices() -> [Device]? {
-        return cache.getObject(forKey: "devices", type: [Device].self)
-    }
-
-    private func cacheDevices(_ devices: [Device]) async {
-        cache.setObject(devices, forKey: "devices", expiration: .hours(1))
     }
 }
 
@@ -191,6 +184,3 @@ struct FilterCriteria {
     var searchQuery: String?
 }
 
-// MARK: - Empty Body for POST requests
-private struct EmptyBody: Encodable {}
-private struct EmptyResponse: Decodable {}
