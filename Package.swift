@@ -17,7 +17,7 @@ let package = Package(
         // Microsoft Authentication Library
         .package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", from: "1.3.0"),
         // SwiftLint for code quality
-        .package(url: "https://github.com/realm/SwiftLint.git", from: "0.54.0"),
+        .package(url: "https://github.com/realm/SwiftLint.git", from: "0.61.0"),
         // KeychainAccess for secure storage
         .package(url: "https://github.com/kishikawakatsumi/KeychainAccess.git", from: "4.2.2"),
     ],
