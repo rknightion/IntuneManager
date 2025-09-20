@@ -1,8 +1,8 @@
 import Foundation
-import KeychainAccess
 import Combine
 
-/// Manages secure storage and retrieval of authentication credentials
+/// Manages storage and retrieval of application configuration
+/// Note: MSAL handles all token storage securely in the keychain automatically
 @MainActor
 class CredentialManager: ObservableObject {
     static let shared = CredentialManager()
@@ -10,31 +10,18 @@ class CredentialManager: ObservableObject {
     @Published var isConfigured: Bool = false
     @Published var configuration: AppConfiguration?
 
-    private let keychain: Keychain
-    private let keychainServiceIdentifier = "com.intunemanager.credentials"
-    private let configKey = "app_configuration"
-
-    // Keys for secure storage
-    private enum KeychainKeys {
-        static let clientId = "client_id"
-        static let tenantId = "tenant_id"
-        static let clientSecret = "client_secret"
-        static let redirectUri = "redirect_uri"
-        static let configuredDate = "configured_date"
-        static let lastValidatedDate = "last_validated_date"
+    // UserDefaults keys - these aren't secrets, just configuration
+    private enum ConfigKeys {
+        static let clientId = "app.config.clientId"
+        static let tenantId = "app.config.tenantId"
+        static let redirectUri = "app.config.redirectUri"
+        static let configuredDate = "app.config.configuredDate"
+        static let isConfigured = "app.config.isConfigured"
     }
 
-    private init() {
-        // Initialize keychain with access group for shared access
-        #if os(iOS)
-        self.keychain = Keychain(service: keychainServiceIdentifier)
-            .accessibility(.whenUnlockedThisDeviceOnly)
-            .synchronizable(false)
-        #else
-        self.keychain = Keychain(service: keychainServiceIdentifier)
-            .synchronizable(false)
-        #endif
+    private let userDefaults = UserDefaults.standard
 
+    private init() {
         loadConfiguration()
     }
 
@@ -45,66 +32,49 @@ class CredentialManager: ObservableObject {
         return configuration != nil && configuration!.isValid
     }
 
-    /// Loads configuration from keychain
+    /// Loads configuration from UserDefaults
+    /// Note: Client ID and Tenant ID are not secrets - they're public information
+    /// MSAL handles all actual authentication tokens securely
     private func loadConfiguration() {
-        do {
-            guard let clientId = try keychain.getString(KeychainKeys.clientId),
-                  let tenantId = try keychain.getString(KeychainKeys.tenantId) else {
-                isConfigured = false
-                return
-            }
-
-            // Client secret is optional for public clients
-            let clientSecret = try keychain.getString(KeychainKeys.clientSecret)
-            let redirectUri = try keychain.getString(KeychainKeys.redirectUri) ?? generateDefaultRedirectUri()
-
-            configuration = AppConfiguration(
-                clientId: clientId,
-                tenantId: tenantId,
-                clientSecret: clientSecret,
-                redirectUri: redirectUri
-            )
-
-            isConfigured = true
-
-            Logger.shared.info("Configuration loaded successfully")
-        } catch {
-            Logger.shared.error("Failed to load configuration: \(error)")
+        guard userDefaults.bool(forKey: ConfigKeys.isConfigured),
+              let clientId = userDefaults.string(forKey: ConfigKeys.clientId),
+              let tenantId = userDefaults.string(forKey: ConfigKeys.tenantId) else {
             isConfigured = false
+            return
         }
+
+        let redirectUri = userDefaults.string(forKey: ConfigKeys.redirectUri) ?? generateDefaultRedirectUri()
+
+        configuration = AppConfiguration(
+            clientId: clientId,
+            tenantId: tenantId,
+            clientSecret: nil, // Native apps don't use client secrets
+            redirectUri: redirectUri
+        )
+
+        isConfigured = true
+        Logger.shared.info("Configuration loaded successfully")
     }
 
-    /// Saves configuration to keychain
+    /// Saves configuration to UserDefaults
+    /// Note: Only non-sensitive configuration is stored. MSAL handles all tokens.
     func saveConfiguration(_ config: AppConfiguration) async throws {
         // Validate configuration before saving
         guard config.isValid else {
             throw CredentialError.invalidConfiguration
         }
 
-        do {
-            // Store credentials securely in keychain
-            try keychain.set(config.clientId, key: KeychainKeys.clientId)
-            try keychain.set(config.tenantId, key: KeychainKeys.tenantId)
+        // Store configuration in UserDefaults (these aren't secrets)
+        userDefaults.set(config.clientId, forKey: ConfigKeys.clientId)
+        userDefaults.set(config.tenantId, forKey: ConfigKeys.tenantId)
+        userDefaults.set(config.redirectUri, forKey: ConfigKeys.redirectUri)
+        userDefaults.set(Date().iso8601String, forKey: ConfigKeys.configuredDate)
+        userDefaults.set(true, forKey: ConfigKeys.isConfigured)
 
-            if let secret = config.clientSecret {
-                try keychain.set(secret, key: KeychainKeys.clientSecret)
-            }
+        self.configuration = config
+        self.isConfigured = true
 
-            try keychain.set(config.redirectUri, key: KeychainKeys.redirectUri)
-            try keychain.set(Date().iso8601String, key: KeychainKeys.configuredDate)
-
-            self.configuration = config
-            self.isConfigured = true
-
-            // Save to UserDefaults for non-sensitive data
-            UserDefaults.standard.set(true, forKey: "app_configured")
-            UserDefaults.standard.set(config.tenantId, forKey: "tenant_id_display")
-
-            Logger.shared.info("Configuration saved successfully")
-        } catch {
-            Logger.shared.error("Failed to save configuration: \(error)")
-            throw CredentialError.saveFailed(error)
-        }
+        Logger.shared.info("Configuration saved successfully")
     }
 
     /// Updates existing configuration
@@ -121,10 +91,6 @@ class CredentialManager: ObservableObject {
             config.tenantId = tenantId
         }
 
-        if updates.updateSecret {
-            config.clientSecret = updates.clientSecret
-        }
-
         if let redirectUri = updates.redirectUri {
             config.redirectUri = redirectUri
         }
@@ -132,85 +98,34 @@ class CredentialManager: ObservableObject {
         try await saveConfiguration(config)
     }
 
-    /// Clears all stored credentials
+    /// Clears all stored configuration
+    /// Note: This doesn't clear MSAL tokens - use AuthManager.signOut() for that
     func clearConfiguration() async throws {
-        do {
-            try keychain.removeAll()
+        userDefaults.removeObject(forKey: ConfigKeys.clientId)
+        userDefaults.removeObject(forKey: ConfigKeys.tenantId)
+        userDefaults.removeObject(forKey: ConfigKeys.redirectUri)
+        userDefaults.removeObject(forKey: ConfigKeys.configuredDate)
+        userDefaults.removeObject(forKey: ConfigKeys.isConfigured)
 
-            configuration = nil
-            isConfigured = false
+        configuration = nil
+        isConfigured = false
 
-            UserDefaults.standard.removeObject(forKey: "app_configured")
-            UserDefaults.standard.removeObject(forKey: "tenant_id_display")
-
-            Logger.shared.info("Configuration cleared")
-        } catch {
-            Logger.shared.error("Failed to clear configuration: \(error)")
-            throw CredentialError.clearFailed(error)
-        }
+        Logger.shared.info("Configuration cleared")
     }
 
-    /// Validates stored credentials
+    /// Validates stored configuration
     func validateConfiguration() async -> Bool {
         guard let config = configuration else {
             return false
         }
 
-        // Basic validation
-        guard config.isValid else {
-            return false
-        }
-
-        // Store validation timestamp
-        try? keychain.set(Date().iso8601String, key: KeychainKeys.lastValidatedDate)
-
-        return true
+        return config.isValid
     }
 
     /// Generates default redirect URI based on bundle identifier
     private func generateDefaultRedirectUri() -> String {
         let bundleId = Bundle.main.bundleIdentifier ?? "com.intunemanager"
         return "msauth.\(bundleId)://auth"
-    }
-
-    // MARK: - Token Management
-
-    /// Stores access token securely
-    func storeAccessToken(_ token: String, expiresIn: TimeInterval) throws {
-        let expirationDate = Date().addingTimeInterval(expiresIn)
-        try keychain.set(token, key: "access_token")
-        try keychain.set(expirationDate.iso8601String, key: "token_expiration")
-    }
-
-    /// Retrieves access token if valid
-    func getAccessToken() -> String? {
-        do {
-            guard let token = try keychain.getString("access_token"),
-                  let expirationString = try keychain.getString("token_expiration"),
-                  let expirationDate = Date.fromISO8601String(expirationString) else {
-                return nil
-            }
-
-            // Check if token is still valid
-            if expirationDate > Date() {
-                return token
-            } else {
-                // Token expired, clear it
-                try? keychain.remove("access_token")
-                try? keychain.remove("token_expiration")
-                return nil
-            }
-        } catch {
-            Logger.shared.error("Failed to retrieve access token: \(error)")
-            return nil
-        }
-    }
-
-    /// Clears stored tokens
-    func clearTokens() {
-        try? keychain.remove("access_token")
-        try? keychain.remove("token_expiration")
-        try? keychain.remove("refresh_token")
     }
 }
 
@@ -219,7 +134,7 @@ class CredentialManager: ObservableObject {
 struct AppConfiguration: Codable {
     var clientId: String
     var tenantId: String
-    var clientSecret: String?
+    var clientSecret: String? // Always nil for native apps using PKCE
     var redirectUri: String
     var authority: String {
         return "https://login.microsoftonline.com/\(tenantId)"
@@ -229,17 +144,17 @@ struct AppConfiguration: Codable {
         !clientId.isEmpty && !tenantId.isEmpty && !redirectUri.isEmpty
     }
 
-    /// Determines if this is a public client (no secret) or confidential client
+    /// Native apps are always public clients (no secret)
     var isPublicClient: Bool {
-        return clientSecret == nil || clientSecret!.isEmpty
+        return true
     }
 }
 
 struct ConfigurationUpdate {
     var clientId: String?
     var tenantId: String?
-    var clientSecret: String?
-    var updateSecret: Bool = false
+    var clientSecret: String? // Kept for API compatibility but always nil
+    var updateSecret: Bool = false // Ignored for native apps
     var redirectUri: String?
 }
 

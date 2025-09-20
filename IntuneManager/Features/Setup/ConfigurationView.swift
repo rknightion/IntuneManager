@@ -23,6 +23,22 @@ struct ConfigurationView: View {
     }
 
     var body: some View {
+        #if os(iOS)
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                configContent
+            }
+            .ignoresSafeArea(.keyboard)
+        }
+        #else
+        VStack(spacing: 0) {
+            configContent
+        }
+        #endif
+    }
+
+    @ViewBuilder
+    private var configContent: some View {
         VStack(spacing: 0) {
             // Header
             HeaderView()
@@ -65,15 +81,20 @@ struct ConfigurationView: View {
                         Text("Optional Configuration")
                             .font(.headline)
 
-                        Toggle("Use Client Secret (Confidential Client)", isOn: $useClientSecret)
-                            .toggleStyle(SwitchToggleStyle())
-
-                        if useClientSecret {
-                            SecureField("Client Secret", text: $clientSecret)
-                                .textFieldStyle(.roundedBorder)
-                                .focused($focusedField, equals: .clientSecret)
-                                .help("Required for confidential client applications")
+                        // Native apps use PKCE flow - no client secret needed
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "checkmark.shield.fill")
+                                .foregroundColor(.green)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("No Client Secret Required")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                Text("This native app uses PKCE (Proof Key for Code Exchange) for secure authentication. Your app never sees user passwords.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
                         }
+                        .padding(.bottom, 8)
 
                         Toggle("Custom Redirect URI", isOn: $useCustomRedirectUri)
                             .toggleStyle(SwitchToggleStyle())
@@ -105,7 +126,7 @@ struct ConfigurationView: View {
             }
 
             // Action Buttons
-            HStack {
+            HStack(spacing: 16) {
                 if credentialManager.isConfigured {
                     Button("Cancel") {
                         dismiss()
@@ -128,8 +149,16 @@ struct ConfigurationView: View {
                 .disabled(!isValid || isValidating)
             }
             .padding()
+            #if os(iOS)
+            .background(Color(UIColor.systemBackground))
+            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: -4)
+            #endif
         }
+        #if os(macOS)
         .frame(width: 600, height: 700)
+        #else
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .alert("Configuration Error", isPresented: $showingError) {
             Button("OK") { }
         } message: {
@@ -240,8 +269,12 @@ struct InstructionCard: View {
                 InstructionStep(number: 1, text: "Register an app in Azure AD")
                 InstructionStep(number: 2, text: "Configure API permissions for Microsoft Graph")
                 InstructionStep(number: 3, text: "Copy the Client ID and Tenant ID")
-                InstructionStep(number: 4, text: "Create a client secret (optional)")
+                #if os(macOS)
+                InstructionStep(number: 4, text: "Create a client secret (only for server apps)")
                 InstructionStep(number: 5, text: "Configure redirect URI in Azure AD")
+                #else
+                InstructionStep(number: 4, text: "Configure redirect URI in Azure AD")
+                #endif
             }
         }
         .padding()

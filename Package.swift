@@ -11,10 +11,8 @@ let package = Package(
         .iOS(.v18),
     ],
     dependencies: [
-        // Microsoft Authentication Library
+        // Microsoft Authentication Library (handles token storage securely)
         .package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", from: "1.3.0"),
-        // KeychainAccess for secure storage
-        .package(url: "https://github.com/kishikawakatsumi/KeychainAccess.git", from: "4.2.2"),
     ]
 )
 

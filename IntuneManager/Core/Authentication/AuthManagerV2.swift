@@ -332,10 +332,8 @@ class AuthManagerV2: ObservableObject {
         isAuthenticated = true
         authenticationError = nil
 
-        // Store token securely
-        if let expiresIn = result.expiresOn?.timeIntervalSinceNow {
-            try? credentialManager.storeAccessToken(result.accessToken, expiresIn: expiresIn)
-        }
+        // MSAL handles token storage automatically in the keychain
+        // No need to manually store tokens
 
         // Setup token refresh timer
         setupTokenRefreshTimer()
@@ -376,8 +374,8 @@ class AuthManagerV2: ObservableObject {
         tokenExpirationDate = nil
         authenticationError = nil
 
-        // Clear stored tokens
-        credentialManager.clearTokens()
+        // MSAL handles clearing tokens from its cache
+        // No manual token clearing needed
 
         // Cancel token refresh timer
         tokenRefreshTimer?.invalidate()
