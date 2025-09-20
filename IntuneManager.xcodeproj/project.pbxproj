@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		D4EBA8112E7EC88E00F49C25 /* MSAL in Frameworks */ = {isa = PBXBuildFile; productRef = D4EBA8102E7EC88E00F49C25 /* MSAL */; };
-		D4EBA8142E7EC8D000F49C25 /* KeychainAccess in Frameworks */ = {isa = PBXBuildFile; productRef = D4EBA8132E7EC8D000F49C25 /* KeychainAccess */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,7 +56,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D4EBA8142E7EC8D000F49C25 /* KeychainAccess in Frameworks */,
 				D4EBA8112E7EC88E00F49C25 /* MSAL in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -120,7 +118,6 @@
 			name = IntuneManager;
 			packageProductDependencies = (
 				D4EBA8102E7EC88E00F49C25 /* MSAL */,
-				D4EBA8132E7EC8D000F49C25 /* KeychainAccess */,
 			);
 			productName = IntuneManager;
 			productReference = D4EBA7732E7EC5BE00F49C25 /* IntuneManager.app */;
@@ -206,7 +203,6 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				D4EBA80F2E7EC88E00F49C25 /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */,
-				D4EBA8122E7EC8D000F49C25 /* XCRemoteSwiftPackageReference "KeychainAccess" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D4EBA7742E7EC5BE00F49C25 /* Products */;
@@ -669,14 +665,6 @@
 				version = 2.4.0;
 			};
 		};
-		D4EBA8122E7EC8D000F49C25 /* XCRemoteSwiftPackageReference "KeychainAccess" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/kishikawakatsumi/KeychainAccess.git";
-			requirement = {
-				branch = master;
-				kind = branch;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -684,11 +672,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D4EBA80F2E7EC88E00F49C25 /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */;
 			productName = MSAL;
-		};
-		D4EBA8132E7EC8D000F49C25 /* KeychainAccess */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = D4EBA8122E7EC8D000F49C25 /* XCRemoteSwiftPackageReference "KeychainAccess" */;
-			productName = KeychainAccess;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
