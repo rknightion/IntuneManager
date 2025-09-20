@@ -258,12 +258,14 @@ private struct RootScene: View {
         }
         .animation(.easeInOut(duration: 0.3), value: showingSplash)
         .task {
-            await LocalDataStore.shared.configure(with: modelContext)
-            await DeviceService.shared.hydrateFromStore()
-            await ApplicationService.shared.hydrateFromStore()
-            await GroupService.shared.hydrateFromStore()
-            let assignments = await LocalDataStore.shared.fetchAssignments()
-            AssignmentService.shared.assignmentHistory = assignments
+            LocalDataStore.shared.configure(with: modelContext)
+            DeviceService.shared.hydrateFromStore()
+            ApplicationService.shared.hydrateFromStore()
+            GroupService.shared.hydrateFromStore()
+            let assignments = LocalDataStore.shared.fetchAssignments()
+            await MainActor.run {
+                AssignmentService.shared.assignmentHistory = assignments
+            }
             await initializeApp()
         }
         .onAppear {

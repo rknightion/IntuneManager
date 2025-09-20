@@ -13,7 +13,7 @@ struct GroupSelectionView: View {
         if !searchText.isEmpty {
             groups = groups.filter { group in
                 group.displayName.localizedCaseInsensitiveContains(searchText) ||
-                group.description?.localizedCaseInsensitiveContains(searchText) == true
+                group.groupDescription?.localizedCaseInsensitiveContains(searchText) == true
             }
         }
 
@@ -83,7 +83,11 @@ struct GroupSelectionView: View {
         }
         .task {
             if groupService.groups.isEmpty {
-                try? await groupService.fetchGroups()
+                do {
+                    _ = try await groupService.fetchGroups()
+                } catch {
+                    Logger.shared.error("Failed to load groups: \(error)")
+                }
             }
         }
     }

@@ -13,7 +13,6 @@ struct UnifiedContentView: View {
             UnifiedLoginView()
         }
     }
-
     @ViewBuilder
     private var authenticatedView: some View {
         #if os(iOS)
@@ -91,80 +90,7 @@ struct UnifiedSidebarView: View {
     @State private var showingConfiguration = false
 
     var body: some View {
-        List(selection: $selection) {
-            Section("Navigation") {
-                ForEach(AppState.Tab.allCases, id: \.self) { tab in
-                    NavigationLink(value: tab) {
-                        Label(tab.rawValue, systemImage: tab.systemImage)
-                    }
-                }
-            }
-
-            Section("Account") {
-                if let user = authManager.currentUser {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Image(systemName: "person.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(.accentColor)
-
-                            VStack(alignment: .leading) {
-                                Text(user.displayName)
-                                    .font(.subheadline)
-                                    .lineLimit(1)
-                                Text(user.email)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
-
-                        if let tenantId = user.tenantId {
-                            Text("Tenant: \(tenantId)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                        }
-
-                        if let expiration = authManager.tokenExpirationDate {
-                            HStack {
-                                Image(systemName: "clock")
-                                    .font(.caption2)
-                                Text(expiration, style: .relative)
-                                    .font(.caption2)
-                            }
-                            .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-
-                Button(action: { showingSettings = true }) {
-                    Label("Settings", systemImage: "gearshape")
-                }
-
-                Button(action: { showingConfiguration = true }) {
-                    Label("Reconfigure", systemImage: "wrench.and.screwdriver")
-                }
-
-                Button(action: signOut) {
-                    Label("Sign Out", systemImage: "arrow.right.square")
-                        .foregroundColor(.red)
-                }
-            }
-
-            Section("Actions") {
-                Button(action: refresh) {
-                    Label("Refresh All", systemImage: "arrow.clockwise")
-                }
-                .keyboardShortcut("r", modifiers: .command)
-
-                Button(action: clearCache) {
-                    Label("Clear Cache", systemImage: "trash")
-                }
-            }
-        }
-        .listStyle(SidebarListStyle())
+        sidebarContent
         .navigationTitle("IntuneManager")
         .toolbar {
             #if os(macOS)
@@ -183,6 +109,125 @@ struct UnifiedSidebarView: View {
         }
         .sheet(isPresented: $showingConfiguration) {
             ConfigurationView()
+        }
+    }
+
+    @ViewBuilder
+    private var sidebarContent: some View {
+        #if os(macOS)
+        List(selection: $selection) {
+            navigationSectionMac
+            accountSection
+            actionsSection
+        }
+        .listStyle(SidebarListStyle())
+        #else
+        List {
+            navigationSectionIOS
+            accountSection
+            actionsSection
+        }
+        .listStyle(.insetGrouped)
+        #endif
+    }
+
+    @ViewBuilder
+    private var navigationSectionMac: some View {
+        Section("Navigation") {
+            ForEach(AppState.Tab.allCases, id: \.self) { tab in
+                NavigationLink(value: tab) {
+                    Label(tab.rawValue, systemImage: tab.systemImage)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var navigationSectionIOS: some View {
+        Section("Navigation") {
+            ForEach(AppState.Tab.allCases, id: \.self) { tab in
+                Button {
+                    selection = tab
+                } label: {
+                    Label(tab.rawValue, systemImage: tab.systemImage)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .padding(.vertical, 4)
+                        .foregroundColor(selection == tab ? .accentColor : .primary)
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(selection == tab ? Color.accentColor.opacity(0.15) : Color.clear)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var accountSection: some View {
+        Section("Account") {
+            if let user = authManager.currentUser {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Image(systemName: "person.circle.fill")
+                            .font(.title2)
+                            .foregroundColor(.accentColor)
+
+                        VStack(alignment: .leading) {
+                            Text(user.displayName)
+                                .font(.subheadline)
+                                .lineLimit(1)
+                            Text(user.email)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+
+                    if let tenantId = user.tenantId {
+                        Text("Tenant: \(tenantId)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    if let expiration = authManager.tokenExpirationDate {
+                        HStack {
+                            Image(systemName: "clock")
+                                .font(.caption2)
+                            Text(expiration, style: .relative)
+                                .font(.caption2)
+                        }
+                        .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            Button(action: { showingSettings = true }) {
+                Label("Settings", systemImage: "gearshape")
+            }
+
+            Button(action: { showingConfiguration = true }) {
+                Label("Reconfigure", systemImage: "wrench.and.screwdriver")
+            }
+
+            Button(action: signOut) {
+                Label("Sign Out", systemImage: "arrow.right.square")
+                    .foregroundColor(.red)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var actionsSection: some View {
+        Section("Actions") {
+            Button(action: refresh) {
+                Label("Refresh All", systemImage: "arrow.clockwise")
+            }
+            .keyboardShortcut("r", modifiers: .command)
+
+            Button(action: clearCache) {
+                Label("Clear Cache", systemImage: "trash")
+            }
         }
     }
 

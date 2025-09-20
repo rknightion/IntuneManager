@@ -47,7 +47,7 @@ final class Application: Identifiable, Codable {
         }
     }
 
-    enum AppType: String, CaseIterable {
+    enum AppType: String, Codable, CaseIterable {
         case macOS
         case iOS
         case macOSLobApp
@@ -125,12 +125,12 @@ final class Application: Identifiable, Codable {
         }
     }
 
-    struct MinimumOS: Codable {
+    struct MinimumOS: Codable, Sendable {
         var iOS: String?
         var macOS: String?
     }
 
-    struct ApplicableDeviceType: Codable {
+    struct ApplicableDeviceType: Codable, Sendable {
         var iPad: Bool
         var iPhoneAndIPod: Bool
         var mac: Bool
@@ -142,7 +142,7 @@ final class Application: Identifiable, Codable {
         }
     }
 
-    struct InstallSummary: Codable {
+    struct InstallSummary: Codable, Sendable {
         var installedDeviceCount: Int
         var failedDeviceCount: Int
         var notApplicableDeviceCount: Int
@@ -291,7 +291,7 @@ final class Application: Identifiable, Codable {
 }
 
 // MARK: - App Assignment
-struct AppAssignment: Codable, Identifiable {
+struct AppAssignment: Codable, Identifiable, Sendable {
     let id: String
     let intent: AssignmentIntent
     let target: AssignmentTarget
@@ -299,7 +299,7 @@ struct AppAssignment: Codable, Identifiable {
     let source: String?
     let sourceId: String?
 
-    enum AssignmentIntent: String, Codable, CaseIterable {
+    enum AssignmentIntent: String, Codable, CaseIterable, Sendable {
         case available
         case required
         case uninstall
@@ -324,14 +324,14 @@ struct AppAssignment: Codable, Identifiable {
         }
     }
 
-    struct AssignmentTarget: Codable {
+    struct AssignmentTarget: Codable, Sendable {
         let type: TargetType
         let groupId: String?
         let groupName: String?
         let deviceAndAppManagementAssignmentFilterId: String?
         let deviceAndAppManagementAssignmentFilterType: String?
 
-        enum TargetType: String, Codable {
+        enum TargetType: String, Codable, Sendable {
             case allUsers = "@odata.type#microsoft.graph.allUsersAssignmentTarget"
             case allDevices = "@odata.type#microsoft.graph.allDevicesAssignmentTarget"
             case group = "@odata.type#microsoft.graph.groupAssignmentTarget"
@@ -339,25 +339,25 @@ struct AppAssignment: Codable, Identifiable {
         }
     }
 
-    struct AssignmentSettings: Codable {
+    struct AssignmentSettings: Codable, Sendable {
         let notificationsEnabled: Bool?
         let restartSettings: RestartSettings?
         let installTimeSettings: InstallTimeSettings?
         let deliveryOptimizationSettings: DeliveryOptimizationSettings?
 
-        struct RestartSettings: Codable {
+        struct RestartSettings: Codable, Sendable {
             let gracePeriodInMinutes: Int?
             let countdownDisplayBeforeRestartInMinutes: Int?
             let restartNotificationSnoozeDurationInMinutes: Int?
         }
 
-        struct InstallTimeSettings: Codable {
+        struct InstallTimeSettings: Codable, Sendable {
             let useLocalTime: Bool?
             let startDateTime: Date?
             let deadlineDateTime: Date?
         }
 
-        struct DeliveryOptimizationSettings: Codable {
+        struct DeliveryOptimizationSettings: Codable, Sendable {
             let downloadMode: String?
             let groupIdSource: String?
             let bandwidthMode: String?

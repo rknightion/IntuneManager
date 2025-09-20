@@ -150,7 +150,7 @@ class AuthManagerV2: ObservableObject {
         interactiveParameters.extraQueryParameters = ["domain_hint": config.tenantId]
 
         do {
-            let result = try await withCheckedThrowingContinuation { continuation in
+            let result: MSALResult = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<MSALResult, any Error>) in
                 application.acquireToken(with: interactiveParameters) { (result, error) in
                     if let error = error {
                         continuation.resume(throwing: error)
@@ -162,10 +162,10 @@ class AuthManagerV2: ObservableObject {
                 }
             }
 
-            await handleAuthenticationSuccess(result)
+            handleAuthenticationSuccess(result)
 
         } catch let error as NSError {
-            await handleAuthenticationError(error)
+            handleAuthenticationError(error)
             throw AuthError.signInFailed(error)
         }
     }
@@ -177,7 +177,7 @@ class AuthManagerV2: ObservableObject {
             throw AuthError.notAuthenticated
         }
 
-        guard let config = credentialManager.configuration else {
+        guard credentialManager.configuration != nil else {
             throw AuthError.notConfigured
         }
 
@@ -197,7 +197,7 @@ class AuthManagerV2: ObservableObject {
         }
 
         do {
-            let result = try await withCheckedThrowingContinuation { continuation in
+            let result: MSALResult = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<MSALResult, any Error>) in
                 application.acquireTokenSilent(with: silentParameters) { (result, error) in
                     if let error = error {
                         continuation.resume(throwing: error)
@@ -209,7 +209,7 @@ class AuthManagerV2: ObservableObject {
                 }
             }
 
-            await handleAuthenticationSuccess(result)
+            handleAuthenticationSuccess(result)
             return result.accessToken
 
         } catch let error as NSError {
@@ -236,17 +236,24 @@ class AuthManagerV2: ObservableObject {
         if let account = currentAccount {
             do {
                 // Remove account from cache
-                let signoutParameters = MSALSignoutParameters()
-                signoutParameters.signoutFromBrowser = true
+                let signoutParameters: MSALSignoutParameters
 
                 #if os(iOS)
-                if let windowScene = await UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                   let rootViewController = windowScene.windows.first?.rootViewController {
-                    signoutParameters.webviewParameters = MSALWebviewParameters(authPresentationViewController: rootViewController)
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                   let rootVC = (windowScene.windows.first { $0.isKeyWindow } ?? windowScene.windows.first)?.rootViewController {
+                    let webviewParameters = MSALWebviewParameters(authPresentationViewController: rootVC)
+                    signoutParameters = MSALSignoutParameters(webviewParameters: webviewParameters)
+                } else {
+                    signoutParameters = MSALSignoutParameters()
                 }
                 #elseif os(macOS)
-                signoutParameters.webviewParameters = MSALWebviewParameters()
+                let webviewParameters = MSALWebviewParameters()
+                signoutParameters = MSALSignoutParameters(webviewParameters: webviewParameters)
+                #else
+                signoutParameters = MSALSignoutParameters()
                 #endif
+
+                signoutParameters.signoutFromBrowser = true
 
                 try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                     application.signout(with: account, signoutParameters: signoutParameters) { success, error in
@@ -298,7 +305,7 @@ class AuthManagerV2: ObservableObject {
 
     // MARK: - Private Helpers
 
-    private func handleAuthenticationSuccess(_ result: MSALResult) async {
+    private func handleAuthenticationSuccess(_ result: MSALResult) {
         // Update account
         currentAccount = result.account
 
@@ -306,7 +313,7 @@ class AuthManagerV2: ObservableObject {
         let claims = result.account.accountClaims
         let displayName = claims?["name"] as? String ?? result.account.username ?? "Unknown User"
         let email = result.account.username ?? ""
-        let tenantId = result.tenantProfile?.tenantId
+        let tenantId = result.tenantProfile.tenantId
 
         currentUser = User(
             id: result.account.identifier ?? "",
@@ -333,7 +340,7 @@ class AuthManagerV2: ObservableObject {
         Logger.shared.info("Authentication successful for user: \(displayName)")
     }
 
-    private func handleAuthenticationError(_ error: NSError) async {
+    private func handleAuthenticationError(_ error: NSError) {
         clearAuthenticationState()
 
         // Parse MSAL error
@@ -344,8 +351,6 @@ class AuthManagerV2: ObservableObject {
                     authenticationError = .userCancelled
                 case .serverDeclinedScopes:
                     authenticationError = .insufficientPermissions
-                case .networkNotAvailable:
-                    authenticationError = .networkError
                 case .interactionRequired:
                     authenticationError = .interactionRequired
                 default:
@@ -430,9 +435,14 @@ class AuthManagerV2: ObservableObject {
 
     @objc private func handleAppDidBecomeActive() {
         // Validate token when app becomes active
-        Task {
-            if isAuthenticated {
-                _ = await validateToken()
+        Task { [weak self] in
+            guard let self = self else { return }
+            if self.isAuthenticated {
+                do {
+                    _ = try await self.acquireTokenSilently()
+                } catch {
+                    // Ignore here; validation failures are non-fatal on activation
+                }
             }
         }
     }

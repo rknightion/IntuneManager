@@ -59,27 +59,16 @@ private struct PlatformGlassBackground: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        #if os(iOS) || os(macOS)
-        if #available(iOS 18, macOS 15, *) {
-            if let cornerRadius {
-                content
-                    .glassBackgroundEffect(in: .rect(cornerRadius: cornerRadius))
-            } else {
-                content
-                    .glassBackgroundEffect()
-            }
+        if let cornerRadius {
+            content
+                .background(
+                    .ultraThinMaterial,
+                    in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                )
         } else {
-            if let cornerRadius {
-                content
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            } else {
-                content
-                    .background(.ultraThinMaterial)
-            }
+            content
+                .background(.ultraThinMaterial)
         }
-        #else
-        content
-        #endif
     }
 }
 
@@ -184,6 +173,7 @@ struct PlatformHelper {
         // Not applicable on macOS
     }
 
+    @MainActor
     static func toggleSidebar() {
         NSApp.keyWindow?.firstResponder?.tryToPerform(#selector(NSSplitViewController.toggleSidebar(_:)), with: nil)
     }
@@ -216,11 +206,7 @@ struct PlatformButton: View {
                 .padding(.horizontal)
                 #endif
         }
-        #if os(macOS)
-        .buttonStyle(macButtonStyle)
-        #else
         .buttonStyle(.plain)
-        #endif
     }
 
     private var backgroundColor: Color {
@@ -242,24 +228,12 @@ struct PlatformButton: View {
             return .primary
         }
     }
-
-    #if os(macOS)
-    private var macButtonStyle: some PrimitiveButtonStyle {
-        switch style {
-        case .primary:
-            return .borderedProminent
-        case .secondary:
-            return .bordered
-        case .destructive:
-            return .bordered
-        }
-    }
-    #endif
 }
 
 // MARK: - Platform-Specific Alerts
 
 struct PlatformAlert {
+    @MainActor
     static func show(title: String, message: String, buttons: [AlertButton]) {
         #if os(iOS)
         // iOS alert handling
@@ -283,6 +257,7 @@ struct PlatformAlert {
 // MARK: - Platform-Specific File Handling
 
 struct PlatformFileManager {
+    @MainActor
     static func selectFile(completion: @escaping (URL?) -> Void) {
         #if os(iOS)
         // iOS document picker
@@ -301,6 +276,7 @@ struct PlatformFileManager {
         #endif
     }
 
+    @MainActor
     static func saveFile(data: Data, suggestedFilename: String, completion: @escaping (URL?) -> Void) {
         #if os(iOS)
         // iOS document exporter
@@ -377,16 +353,19 @@ struct PlatformHaptics {
 
 struct PlatformWindow {
     #if os(macOS)
+    @MainActor
     static func setWindowSize(width: CGFloat, height: CGFloat) {
         if let window = NSApp.keyWindow {
             window.setContentSize(NSSize(width: width, height: height))
         }
     }
 
+    @MainActor
     static func centerWindow() {
         NSApp.keyWindow?.center()
     }
 
+    @MainActor
     static func setWindowTitle(_ title: String) {
         NSApp.keyWindow?.title = title
     }

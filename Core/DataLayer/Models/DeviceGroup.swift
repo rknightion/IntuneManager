@@ -166,14 +166,14 @@ final class DeviceGroup: Identifiable, Codable {
 }
 
 // MARK: - Group Member
-struct GroupMember: Codable, Identifiable {
+struct GroupMember: Codable, Identifiable, Sendable {
     let id: String
     let displayName: String?
     let userPrincipalName: String?
     let mail: String?
     let memberType: MemberType
 
-    enum MemberType: String, Codable {
+    enum MemberType: String, Codable, Sendable {
         case user = "#microsoft.graph.user"
         case device = "#microsoft.graph.device"
         case group = "#microsoft.graph.group"

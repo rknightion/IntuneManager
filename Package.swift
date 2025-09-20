@@ -9,7 +9,7 @@ let package = Package(
         .iOS(.v18),
     ],
     products: [
-        .library(
+        .executable(
             name: "IntuneManager",
             targets: ["IntuneManager"]),
     ],
@@ -22,7 +22,7 @@ let package = Package(
         .package(url: "https://github.com/kishikawakatsumi/KeychainAccess.git", from: "4.2.2"),
     ],
     targets: [
-        .target(
+        .executableTarget(
             name: "IntuneManager",
             dependencies: [
                 .product(name: "MSAL", package: "microsoft-authentication-library-for-objc"),
@@ -30,7 +30,6 @@ let package = Package(
             ],
             path: ".",
             exclude: [
-                "App/IntuneManagerApp.swift",
                 "Documentation",
                 "README.md",
                 "README-V2.md",

@@ -58,11 +58,9 @@ struct DashboardView: View {
     }
 
     private func loadDashboardData() async {
-        async let devices = deviceService.fetchDevices()
-        async let apps = appService.fetchApplications()
-        async let groups = groupService.fetchGroups()
-
-        _ = try? await (devices, apps, groups)
+        _ = try? await deviceService.fetchDevices()
+        _ = try? await appService.fetchApplications()
+        _ = try? await groupService.fetchGroups()
     }
 }
 

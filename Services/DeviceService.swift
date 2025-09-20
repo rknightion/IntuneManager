@@ -59,7 +59,7 @@ final class DeviceService: ObservableObject {
     func fetchDevice(id: String) async throws -> Device {
         let endpoint = "/deviceManagement/managedDevices/\(id)"
 
-        let device: Device = try await apiClient.get(endpoint)
+        let device: Device = try await apiClient.getModel(endpoint)
         return device
     }
 
@@ -101,7 +101,7 @@ final class DeviceService: ObservableObject {
     func syncDevice(_ device: Device) async throws {
         let endpoint = "/deviceManagement/managedDevices/\(device.id)/syncDevice"
 
-        try await apiClient.post(endpoint, body: EmptyBody(), headers: nil) as EmptyResponse
+        let _: EmptyResponse = try await apiClient.post(endpoint, body: EmptyBody(), headers: nil)
 
         Logger.shared.info("Sync initiated for device: \(device.deviceName)")
 
@@ -112,7 +112,7 @@ final class DeviceService: ObservableObject {
     func retireDevice(_ device: Device) async throws {
         let endpoint = "/deviceManagement/managedDevices/\(device.id)/retire"
 
-        try await apiClient.post(endpoint, body: EmptyBody(), headers: nil) as EmptyResponse
+        let _: EmptyResponse = try await apiClient.post(endpoint, body: EmptyBody(), headers: nil)
 
         Logger.shared.info("Retire initiated for device: \(device.deviceName)")
     }
@@ -127,7 +127,7 @@ final class DeviceService: ObservableObject {
 
         let body = WipeBody(keepEnrollmentData: keepEnrollmentData, keepUserData: keepUserData)
 
-        try await apiClient.post(endpoint, body: body, headers: nil) as EmptyResponse
+        let _: EmptyResponse = try await apiClient.post(endpoint, body: body, headers: nil)
 
         Logger.shared.warning("Wipe initiated for device: \(device.deviceName)")
     }
@@ -135,7 +135,7 @@ final class DeviceService: ObservableObject {
     func shutdownDevice(_ device: Device) async throws {
         let endpoint = "/deviceManagement/managedDevices/\(device.id)/shutDown"
 
-        try await apiClient.post(endpoint, body: EmptyBody(), headers: nil) as EmptyResponse
+        let _: EmptyResponse = try await apiClient.post(endpoint, body: EmptyBody(), headers: nil)
 
         Logger.shared.info("Shutdown initiated for device: \(device.deviceName)")
     }
@@ -143,7 +143,7 @@ final class DeviceService: ObservableObject {
     func restartDevice(_ device: Device) async throws {
         let endpoint = "/deviceManagement/managedDevices/\(device.id)/rebootNow"
 
-        try await apiClient.post(endpoint, body: EmptyBody(), headers: nil) as EmptyResponse
+        let _: EmptyResponse = try await apiClient.post(endpoint, body: EmptyBody(), headers: nil)
 
         Logger.shared.info("Restart initiated for device: \(device.deviceName)")
     }
@@ -183,4 +183,3 @@ struct FilterCriteria {
     var isEncrypted: Bool?
     var searchQuery: String?
 }
-

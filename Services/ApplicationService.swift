@@ -72,7 +72,7 @@ final class ApplicationService: ObservableObject {
         let endpoint = "/deviceAppManagement/mobileApps/\(id)"
         let parameters = ["$expand": "assignments"]
 
-        let app: Application = try await apiClient.get(endpoint, parameters: parameters)
+        let app: Application = try await apiClient.getModel(endpoint, parameters: parameters)
         return app
     }
 
@@ -114,7 +114,7 @@ final class ApplicationService: ObservableObject {
     func getApplicationAssignments(appId: String) async throws -> [AppAssignment] {
         let endpoint = "/deviceAppManagement/mobileApps/\(appId)/assignments"
 
-        struct AssignmentsResponse: Decodable {
+        struct AssignmentsResponse: Decodable, Sendable {
             let value: [AppAssignment]
         }
 
@@ -227,4 +227,3 @@ struct AppFilterCriteria {
     var hasAssignments: Bool = false
     var searchQuery: String?
 }
-

@@ -25,7 +25,7 @@ actor GraphAPIClient {
 
     // MARK: - Generic Request Methods
 
-    func get<T: Decodable>(_ endpoint: String,
+    func get<T: Decodable & Sendable>(_ endpoint: String,
                             parameters: [String: String]? = nil,
                             headers: [String: String]? = nil) async throws -> T {
         let request = try await buildRequest(
@@ -37,7 +37,7 @@ actor GraphAPIClient {
         return try await performRequest(request)
     }
 
-    func post<T: Encodable, R: Decodable>(_ endpoint: String,
+    func post<T: Encodable, R: Decodable & Sendable>(_ endpoint: String,
                                            body: T,
                                            headers: [String: String]? = nil) async throws -> R {
         let request = try await buildRequest(
@@ -49,7 +49,7 @@ actor GraphAPIClient {
         return try await performRequest(request)
     }
 
-    func patch<T: Encodable, R: Decodable>(_ endpoint: String,
+    func patch<T: Encodable, R: Decodable & Sendable>(_ endpoint: String,
                                             body: T,
                                             headers: [String: String]? = nil) async throws -> R {
         let request = try await buildRequest(
@@ -73,7 +73,7 @@ actor GraphAPIClient {
 
     // MARK: - Batch Operations
 
-    func batch<T: Decodable>(_ requests: [BatchRequest]) async throws -> [BatchResponse<T>] {
+    func batch<T: Decodable & Sendable>(_ requests: [BatchRequest]) async throws -> [BatchResponse<T>] {
         let batchBody = BatchRequestBody(requests: requests)
         let batchEndpoint = "/$batch"
 
@@ -110,9 +110,14 @@ actor GraphAPIClient {
         var currentParams = parameters
 
         while let link = nextLink {
-            let response: GraphResponse<T> = try await get(link,
-                                                          parameters: currentParams,
-                                                          headers: headers)
+            let request = try await buildRequest(
+                endpoint: link,
+                method: "GET",
+                parameters: currentParams,
+                headers: headers
+            )
+
+            let response: GraphResponse<T> = try await performModelRequest(request)
             if let value = response.value {
                 results.append(contentsOf: value)
             }
@@ -121,6 +126,61 @@ actor GraphAPIClient {
         }
 
         return results
+    }
+
+    @MainActor
+    func getModel<T: Decodable>(_ endpoint: String,
+                                 parameters: [String: String]? = nil,
+                                 headers: [String: String]? = nil) async throws -> T {
+        let request = try await buildRequest(
+            endpoint: endpoint,
+            method: "GET",
+            parameters: parameters,
+            headers: headers
+        )
+
+        return try await performModelRequest(request)
+    }
+
+    @MainActor
+    func postModel<T: Encodable & Sendable, R: Decodable>(_ endpoint: String,
+                                                body: T,
+                                                headers: [String: String]? = nil) async throws -> R {
+        let request = try await buildRequest(
+            endpoint: endpoint,
+            method: "POST",
+            body: body,
+            headers: headers
+        )
+
+        return try await performModelRequest(request)
+    }
+
+    @MainActor
+    func patchModel<T: Encodable & Sendable, R: Decodable>(_ endpoint: String,
+                                                 body: T,
+                                                 headers: [String: String]? = nil) async throws -> R {
+        let request = try await buildRequest(
+            endpoint: endpoint,
+            method: "PATCH",
+            body: body,
+            headers: headers
+        )
+
+        return try await performModelRequest(request)
+    }
+
+    @MainActor
+    func batchModels<T: Decodable>(_ requests: [BatchRequest]) async throws -> [BatchResponse<T>] {
+        let batchBody = BatchRequestBody(requests: requests)
+        let request = try await buildRequest(
+            endpoint: "/$batch",
+            method: "POST",
+            body: batchBody
+        )
+
+        let responseBody: BatchResponseBody<T> = try await performModelRequest(request)
+        return responseBody.responses
     }
 
     func pageSequence<T: Decodable & Sendable>(_ endpoint: String,
@@ -164,9 +224,9 @@ actor GraphAPIClient {
             let token = try await AuthManagerV2.shared.getAccessToken()
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         } catch let authError as AuthError {
-            throw .authenticationFailed(authError)
+            throw GraphAPIError.authenticationFailed(authError)
         } catch {
-            throw .networkError(error)
+            throw GraphAPIError.networkError(error)
         }
 
         // Add custom headers
@@ -179,7 +239,7 @@ actor GraphAPIClient {
             do {
                 request.httpBody = try encoder.encode(body)
             } catch {
-                throw .encodingFailed(error)
+                throw GraphAPIError.encodingFailed(error)
             }
         }
 
@@ -200,7 +260,7 @@ actor GraphAPIClient {
         )
     }
 
-    private func performRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
+    private func performDataRequest(_ request: URLRequest) async throws -> Data {
         do {
             let (data, response) = try await session.data(for: request)
 
@@ -208,15 +268,11 @@ actor GraphAPIClient {
                 throw GraphAPIError.invalidResponse
             }
 
-            // Log response for debugging
             Logger.shared.debug("API Response: \(httpResponse.statusCode) for \(request.url?.absoluteString ?? "")")
 
             switch httpResponse.statusCode {
             case 200...299:
-                if T.self == EmptyResponse.self {
-                    return EmptyResponse() as! T
-                }
-                return try decoder.decode(T.self, from: data)
+                return data
 
             case 401:
                 throw GraphAPIError.unauthorized
@@ -233,7 +289,6 @@ actor GraphAPIClient {
                 throw GraphAPIError.rateLimited(retryAfter: retryAfter)
 
             default:
-                // Try to decode error response
                 if let errorResponse = try? decoder.decode(GraphErrorResponse.self, from: data) {
                     throw GraphAPIError.serverError(message: errorResponse.error.message, code: errorResponse.error.code)
                 }
@@ -244,6 +299,29 @@ actor GraphAPIClient {
         } catch {
             throw GraphAPIError.networkError(error)
         }
+    }
+
+    private func performRequest<T: Decodable & Sendable>(_ request: URLRequest) async throws -> T {
+        let data = try await performDataRequest(request)
+
+        if T.self == EmptyResponse.self {
+            return EmptyResponse() as! T
+        }
+
+        return try decoder.decode(T.self, from: data)
+    }
+
+    @MainActor
+    private func performModelRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
+        let data = try await performDataRequest(request)
+
+        if T.self == EmptyResponse.self {
+            return EmptyResponse() as! T
+        }
+
+        let modelDecoder = JSONDecoder()
+        modelDecoder.dateDecodingStrategy = .iso8601
+        return try modelDecoder.decode(T.self, from: data)
     }
 }
 
@@ -280,7 +358,7 @@ struct GraphPageSequence<Element: Decodable & Sendable>: AsyncSequence, Sendable
                 } catch let error as GraphAPIError {
                     continuation.finish(throwing: error)
                 } catch {
-                    continuation.finish(throwing: .networkError(error))
+                    continuation.finish(throwing: GraphAPIError.networkError(error))
                 }
             }
         }
@@ -302,6 +380,8 @@ struct GraphResponse<T: Decodable>: Decodable {
         case nextLink = "@odata.nextLink"
     }
 }
+
+extension GraphResponse: Sendable where T: Sendable {}
 
 struct GraphErrorResponse: Decodable {
     let error: GraphError
@@ -357,8 +437,11 @@ struct BatchResponseBody<T: Decodable>: Decodable {
     let responses: [BatchResponse<T>]
 }
 
-struct EmptyBody: Encodable {}
-struct EmptyResponse: Decodable {}
+struct EmptyBody: Encodable, Sendable {}
+struct EmptyResponse: Decodable, Sendable {}
+
+extension BatchResponse: Sendable where T: Sendable {}
+extension BatchResponseBody: Sendable where T: Sendable {}
 
 // MARK: - Error Types
 

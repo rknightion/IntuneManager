@@ -18,7 +18,11 @@ struct GroupListView: View {
         }
         .navigationTitle("Groups")
         .task {
-            try? await groupService.fetchGroups()
+            do {
+                _ = try await groupService.fetchGroups()
+            } catch {
+                Logger.shared.error("Failed to load groups: \(error)")
+            }
         }
     }
 }

@@ -74,7 +74,7 @@ final class GroupService: ObservableObject {
             "$select": "id,displayName,description,createdDateTime,groupTypes,membershipRule,membershipRuleProcessingState,securityEnabled,mailEnabled"
         ]
 
-        let group: DeviceGroup = try await apiClient.get(endpoint, parameters: parameters)
+        let group: DeviceGroup = try await apiClient.getModel(endpoint, parameters: parameters)
 
         // Fetch member count
         await fetchMemberCount(for: group)
@@ -123,7 +123,7 @@ final class GroupService: ObservableObject {
         ]
         let headers = ["ConsistencyLevel": "eventual"]
 
-        struct MembersResponse: Decodable {
+        struct MembersResponse: Decodable, Sendable {
             let value: [GroupMember]
         }
 
@@ -144,7 +144,7 @@ final class GroupService: ObservableObject {
 
         let body = AddMemberBody(odataId: "https://graph.microsoft.com/v1.0/directoryObjects/\(memberId)")
 
-        try await apiClient.post(endpoint, body: body, headers: nil) as EmptyResponse
+        let _: EmptyResponse = try await apiClient.post(endpoint, body: body, headers: nil)
 
         Logger.shared.info("Added member \(memberId) to group \(groupId)")
     }
@@ -162,7 +162,7 @@ final class GroupService: ObservableObject {
     func createGroup(_ group: CreateGroupRequest) async throws -> DeviceGroup {
         let endpoint = "/groups"
 
-        let createdGroup: DeviceGroup = try await apiClient.post(endpoint, body: group)
+        let createdGroup: DeviceGroup = try await apiClient.postModel(endpoint, body: group)
 
         Logger.shared.info("Created group: \(createdGroup.displayName)")
 
@@ -175,7 +175,7 @@ final class GroupService: ObservableObject {
     func updateGroup(groupId: String, updates: UpdateGroupRequest) async throws -> DeviceGroup {
         let endpoint = "/groups/\(groupId)"
 
-        let updatedGroup: DeviceGroup = try await apiClient.patch(endpoint, body: updates)
+        let updatedGroup: DeviceGroup = try await apiClient.patchModel(endpoint, body: updates)
 
         Logger.shared.info("Updated group: \(updatedGroup.displayName)")
 
@@ -226,25 +226,8 @@ final class GroupService: ObservableObject {
     // MARK: - Private Methods
 
     private func fetchMemberCounts(for groups: [DeviceGroup]) async {
-        await withTaskGroup(of: (String, Int?).self) { taskGroup in
-            for group in groups {
-                taskGroup.addTask {
-                    do {
-                        let count = try await self.fetchMemberCount(groupId: group.id)
-                        return (group.id, count)
-                    } catch {
-                        Logger.shared.error("Failed to fetch member count for group \(group.id): \(error)")
-                        return (group.id, nil)
-                    }
-                }
-            }
-
-            for await (groupId, count) in taskGroup {
-                if let index = self.groups.firstIndex(where: { $0.id == groupId }),
-                   let count = count {
-                    self.groups[index].memberCount = count
-                }
-            }
+        for group in groups {
+            await fetchMemberCount(for: group)
         }
     }
 
@@ -263,7 +246,7 @@ final class GroupService: ObservableObject {
         let endpoint = "/groups/\(groupId)/members/$count"
         let headers = ["ConsistencyLevel": "eventual"]
 
-        struct CountResponse: Decodable {
+        struct CountResponse: Decodable, Sendable {
             let value: Int
         }
 
@@ -289,7 +272,7 @@ struct GroupFilterCriteria {
     var searchQuery: String?
 }
 
-struct CreateGroupRequest: Encodable {
+struct CreateGroupRequest: Encodable, Sendable {
     let displayName: String
     let description: String?
     let mailEnabled: Bool
@@ -300,9 +283,8 @@ struct CreateGroupRequest: Encodable {
     let membershipRuleProcessingState: String?
 }
 
-struct UpdateGroupRequest: Encodable {
+struct UpdateGroupRequest: Encodable, Sendable {
     let displayName: String?
     let description: String?
     let membershipRule: String?
 }
-

@@ -11,12 +11,10 @@ class SyncService {
     private init() {}
     
     func performFullSync() async throws {
-        async let devices = deviceService.fetchDevices(forceRefresh: true)
-        async let apps = appService.fetchApplications(forceRefresh: true)
-        async let groups = groupService.fetchGroups(forceRefresh: true)
-        
-        _ = try await (devices, apps, groups)
-        
+        _ = try await deviceService.fetchDevices(forceRefresh: true)
+        _ = try await appService.fetchApplications(forceRefresh: true)
+        _ = try await groupService.fetchGroups(forceRefresh: true)
+
         Logger.shared.info("Full sync completed")
     }
 }

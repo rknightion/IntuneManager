@@ -2,12 +2,12 @@ import Foundation
 import MSAL
 
 struct MSALConfiguration: Sendable {
-    nonisolated(unsafe) static let current = MSALConfiguration()
+    static let current = MSALConfiguration()
 
     let clientId: String
     let tenantId: String
     let redirectUri: String
-    nonisolated(unsafe) let authority: MSALAuthority
+    let authorityURL: URL
     let scopes: [String]
     let bundleId: String
 
@@ -25,9 +25,11 @@ struct MSALConfiguration: Sendable {
         self.redirectUri = "msauth.\(bundleId)://auth"
         #endif
 
-        // Initialize authority
-        let authorityURL = "https://login.microsoftonline.com/\(tenantId)"
-        self.authority = try! MSALAuthority(url: URL(string: authorityURL)!)
+        // Initialize authority URL
+        guard let url = URL(string: "https://login.microsoftonline.com/\(tenantId)") else {
+            fatalError("Invalid authority URL for tenant: \(tenantId)")
+        }
+        self.authorityURL = url
 
         // Required scopes for Intune management
         self.scopes = [
@@ -48,5 +50,9 @@ struct MSALConfiguration: Sendable {
         let config = MSALConfiguration.current
         return config.clientId != "YOUR_CLIENT_ID_HERE" &&
                !config.clientId.isEmpty
+    }
+
+    func makeAuthority() throws -> MSALAuthority {
+        try MSALAuthority(url: authorityURL)
     }
 }

@@ -69,7 +69,7 @@ final class AssignmentService: ObservableObject {
             } catch {
                 Logger.shared.error("Batch \(index + 1) failed: \(error)")
                 // Mark all assignments in this batch as failed
-                for var assignment in batch {
+                for assignment in batch {
                     assignment.status = .failed
                     assignment.errorMessage = error.localizedDescription
                     failedAssignments.append(assignment)
@@ -111,7 +111,7 @@ final class AssignmentService: ObservableObject {
 
         // Process responses
         for (index, response) in responses.enumerated() {
-            var assignment = assignments[index]
+            let assignment = assignments[index]
 
             if response.status >= 200 && response.status < 300 {
                 assignment.status = .completed
@@ -173,7 +173,7 @@ final class AssignmentService: ObservableObject {
     }
 
     private func retrySingleAssignment(_ assignment: Assignment) async throws -> Assignment {
-        var updatedAssignment = assignment
+        let updatedAssignment = assignment
 
         let appAssignment = AppAssignment(
             id: assignment.id,
@@ -231,11 +231,10 @@ final class AssignmentService: ObservableObject {
 
         // Reset failed assignments for retry
         let resetAssignments = failedAssignments.map { assignment -> Assignment in
-            var updated = assignment
-            updated.status = .pending
-            updated.retryCount = 0
-            updated.errorMessage = nil
-            return updated
+            assignment.status = .pending
+            assignment.retryCount = 0
+            assignment.errorMessage = nil
+            return assignment
         }
 
         activeAssignments = resetAssignments

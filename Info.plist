@@ -85,8 +85,6 @@
     <string>NSApplication</string>
 
     <!-- iOS/iPadOS Specific -->
-    <key>UILaunchStoryboardName</key>
-    <string>LaunchScreen</string>
     <key>UIRequiredDeviceCapabilities</key>
     <array>
         <string>armv7</string>
