@@ -6,41 +6,46 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D4EBA8112E7EC88E00F49C25 /* MSAL in Frameworks */ = {isa = PBXBuildFile; productRef = D4EBA8102E7EC88E00F49C25 /* MSAL */; };
+		D4EBA8142E7EC8D000F49C25 /* KeychainAccess in Frameworks */ = {isa = PBXBuildFile; productRef = D4EBA8132E7EC8D000F49C25 /* KeychainAccess */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
-		D4EBA73D2E7EC58600F49C25 /* PBXContainerItemProxy */ = {
+		D4EBA7832E7EC5BF00F49C25 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
-			containerPortal = D4EBA7252E7EC58500F49C25 /* Project object */;
+			containerPortal = D4EBA76B2E7EC5BE00F49C25 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = D4EBA72C2E7EC58500F49C25;
+			remoteGlobalIDString = D4EBA7722E7EC5BE00F49C25;
 			remoteInfo = IntuneManager;
 		};
-		D4EBA7472E7EC58600F49C25 /* PBXContainerItemProxy */ = {
+		D4EBA78D2E7EC5BF00F49C25 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
-			containerPortal = D4EBA7252E7EC58500F49C25 /* Project object */;
+			containerPortal = D4EBA76B2E7EC5BE00F49C25 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = D4EBA72C2E7EC58500F49C25;
+			remoteGlobalIDString = D4EBA7722E7EC5BE00F49C25;
 			remoteInfo = IntuneManager;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		D4EBA72D2E7EC58500F49C25 /* IntuneManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = IntuneManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		D4EBA73C2E7EC58600F49C25 /* IntuneManagerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntuneManagerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		D4EBA7462E7EC58600F49C25 /* IntuneManagerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntuneManagerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D4EBA7732E7EC5BE00F49C25 /* IntuneManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = IntuneManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D4EBA7822E7EC5BF00F49C25 /* IntuneManagerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntuneManagerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D4EBA78C2E7EC5BF00F49C25 /* IntuneManagerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntuneManagerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		D4EBA72F2E7EC58500F49C25 /* IntuneManager */ = {
+		D4EBA7752E7EC5BE00F49C25 /* IntuneManager */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = IntuneManager;
 			sourceTree = "<group>";
 		};
-		D4EBA73F2E7EC58600F49C25 /* IntuneManagerTests */ = {
+		D4EBA7852E7EC5BF00F49C25 /* IntuneManagerTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = IntuneManagerTests;
 			sourceTree = "<group>";
 		};
-		D4EBA7492E7EC58600F49C25 /* IntuneManagerUITests */ = {
+		D4EBA78F2E7EC5BF00F49C25 /* IntuneManagerUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = IntuneManagerUITests;
 			sourceTree = "<group>";
@@ -48,21 +53,23 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		D4EBA72A2E7EC58500F49C25 /* Frameworks */ = {
+		D4EBA7702E7EC5BE00F49C25 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D4EBA8142E7EC8D000F49C25 /* KeychainAccess in Frameworks */,
+				D4EBA8112E7EC88E00F49C25 /* MSAL in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D4EBA77F2E7EC5BF00F49C25 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D4EBA7392E7EC58600F49C25 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		D4EBA7432E7EC58600F49C25 /* Frameworks */ = {
+		D4EBA7892E7EC5BF00F49C25 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -72,22 +79,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		D4EBA7242E7EC58500F49C25 = {
+		D4EBA76A2E7EC5BE00F49C25 = {
 			isa = PBXGroup;
 			children = (
-				D4EBA72F2E7EC58500F49C25 /* IntuneManager */,
-				D4EBA73F2E7EC58600F49C25 /* IntuneManagerTests */,
-				D4EBA7492E7EC58600F49C25 /* IntuneManagerUITests */,
-				D4EBA72E2E7EC58500F49C25 /* Products */,
+				D4EBA7752E7EC5BE00F49C25 /* IntuneManager */,
+				D4EBA7852E7EC5BF00F49C25 /* IntuneManagerTests */,
+				D4EBA78F2E7EC5BF00F49C25 /* IntuneManagerUITests */,
+				D4EBA7742E7EC5BE00F49C25 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		D4EBA72E2E7EC58500F49C25 /* Products */ = {
+		D4EBA7742E7EC5BE00F49C25 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				D4EBA72D2E7EC58500F49C25 /* IntuneManager.app */,
-				D4EBA73C2E7EC58600F49C25 /* IntuneManagerTests.xctest */,
-				D4EBA7462E7EC58600F49C25 /* IntuneManagerUITests.xctest */,
+				D4EBA7732E7EC5BE00F49C25 /* IntuneManager.app */,
+				D4EBA7822E7EC5BF00F49C25 /* IntuneManagerTests.xctest */,
+				D4EBA78C2E7EC5BF00F49C25 /* IntuneManagerUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,134 +102,140 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		D4EBA72C2E7EC58500F49C25 /* IntuneManager */ = {
+		D4EBA7722E7EC5BE00F49C25 /* IntuneManager */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = D4EBA7502E7EC58600F49C25 /* Build configuration list for PBXNativeTarget "IntuneManager" */;
+			buildConfigurationList = D4EBA7962E7EC5BF00F49C25 /* Build configuration list for PBXNativeTarget "IntuneManager" */;
 			buildPhases = (
-				D4EBA7292E7EC58500F49C25 /* Sources */,
-				D4EBA72A2E7EC58500F49C25 /* Frameworks */,
-				D4EBA72B2E7EC58500F49C25 /* Resources */,
+				D4EBA76F2E7EC5BE00F49C25 /* Sources */,
+				D4EBA7702E7EC5BE00F49C25 /* Frameworks */,
+				D4EBA7712E7EC5BE00F49C25 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				D4EBA72F2E7EC58500F49C25 /* IntuneManager */,
+				D4EBA7752E7EC5BE00F49C25 /* IntuneManager */,
 			);
 			name = IntuneManager;
 			packageProductDependencies = (
+				D4EBA8102E7EC88E00F49C25 /* MSAL */,
+				D4EBA8132E7EC8D000F49C25 /* KeychainAccess */,
 			);
 			productName = IntuneManager;
-			productReference = D4EBA72D2E7EC58500F49C25 /* IntuneManager.app */;
+			productReference = D4EBA7732E7EC5BE00F49C25 /* IntuneManager.app */;
 			productType = "com.apple.product-type.application";
 		};
-		D4EBA73B2E7EC58600F49C25 /* IntuneManagerTests */ = {
+		D4EBA7812E7EC5BF00F49C25 /* IntuneManagerTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = D4EBA7532E7EC58600F49C25 /* Build configuration list for PBXNativeTarget "IntuneManagerTests" */;
+			buildConfigurationList = D4EBA7992E7EC5BF00F49C25 /* Build configuration list for PBXNativeTarget "IntuneManagerTests" */;
 			buildPhases = (
-				D4EBA7382E7EC58600F49C25 /* Sources */,
-				D4EBA7392E7EC58600F49C25 /* Frameworks */,
-				D4EBA73A2E7EC58600F49C25 /* Resources */,
+				D4EBA77E2E7EC5BF00F49C25 /* Sources */,
+				D4EBA77F2E7EC5BF00F49C25 /* Frameworks */,
+				D4EBA7802E7EC5BF00F49C25 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				D4EBA73E2E7EC58600F49C25 /* PBXTargetDependency */,
+				D4EBA7842E7EC5BF00F49C25 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				D4EBA73F2E7EC58600F49C25 /* IntuneManagerTests */,
+				D4EBA7852E7EC5BF00F49C25 /* IntuneManagerTests */,
 			);
 			name = IntuneManagerTests;
 			packageProductDependencies = (
 			);
 			productName = IntuneManagerTests;
-			productReference = D4EBA73C2E7EC58600F49C25 /* IntuneManagerTests.xctest */;
+			productReference = D4EBA7822E7EC5BF00F49C25 /* IntuneManagerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		D4EBA7452E7EC58600F49C25 /* IntuneManagerUITests */ = {
+		D4EBA78B2E7EC5BF00F49C25 /* IntuneManagerUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = D4EBA7562E7EC58600F49C25 /* Build configuration list for PBXNativeTarget "IntuneManagerUITests" */;
+			buildConfigurationList = D4EBA79C2E7EC5BF00F49C25 /* Build configuration list for PBXNativeTarget "IntuneManagerUITests" */;
 			buildPhases = (
-				D4EBA7422E7EC58600F49C25 /* Sources */,
-				D4EBA7432E7EC58600F49C25 /* Frameworks */,
-				D4EBA7442E7EC58600F49C25 /* Resources */,
+				D4EBA7882E7EC5BF00F49C25 /* Sources */,
+				D4EBA7892E7EC5BF00F49C25 /* Frameworks */,
+				D4EBA78A2E7EC5BF00F49C25 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				D4EBA7482E7EC58600F49C25 /* PBXTargetDependency */,
+				D4EBA78E2E7EC5BF00F49C25 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				D4EBA7492E7EC58600F49C25 /* IntuneManagerUITests */,
+				D4EBA78F2E7EC5BF00F49C25 /* IntuneManagerUITests */,
 			);
 			name = IntuneManagerUITests;
 			packageProductDependencies = (
 			);
 			productName = IntuneManagerUITests;
-			productReference = D4EBA7462E7EC58600F49C25 /* IntuneManagerUITests.xctest */;
+			productReference = D4EBA78C2E7EC5BF00F49C25 /* IntuneManagerUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		D4EBA7252E7EC58500F49C25 /* Project object */ = {
+		D4EBA76B2E7EC5BE00F49C25 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
-					D4EBA72C2E7EC58500F49C25 = {
+					D4EBA7722E7EC5BE00F49C25 = {
 						CreatedOnToolsVersion = 26.0;
 					};
-					D4EBA73B2E7EC58600F49C25 = {
+					D4EBA7812E7EC5BF00F49C25 = {
 						CreatedOnToolsVersion = 26.0;
-						TestTargetID = D4EBA72C2E7EC58500F49C25;
+						TestTargetID = D4EBA7722E7EC5BE00F49C25;
 					};
-					D4EBA7452E7EC58600F49C25 = {
+					D4EBA78B2E7EC5BF00F49C25 = {
 						CreatedOnToolsVersion = 26.0;
-						TestTargetID = D4EBA72C2E7EC58500F49C25;
+						TestTargetID = D4EBA7722E7EC5BE00F49C25;
 					};
 				};
 			};
-			buildConfigurationList = D4EBA7282E7EC58500F49C25 /* Build configuration list for PBXProject "IntuneManager" */;
+			buildConfigurationList = D4EBA76E2E7EC5BE00F49C25 /* Build configuration list for PBXProject "IntuneManager" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = D4EBA7242E7EC58500F49C25;
+			mainGroup = D4EBA76A2E7EC5BE00F49C25;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D4EBA80F2E7EC88E00F49C25 /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */,
+				D4EBA8122E7EC8D000F49C25 /* XCRemoteSwiftPackageReference "KeychainAccess" */,
+			);
 			preferredProjectObjectVersion = 77;
-			productRefGroup = D4EBA72E2E7EC58500F49C25 /* Products */;
+			productRefGroup = D4EBA7742E7EC5BE00F49C25 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				D4EBA72C2E7EC58500F49C25 /* IntuneManager */,
-				D4EBA73B2E7EC58600F49C25 /* IntuneManagerTests */,
-				D4EBA7452E7EC58600F49C25 /* IntuneManagerUITests */,
+				D4EBA7722E7EC5BE00F49C25 /* IntuneManager */,
+				D4EBA7812E7EC5BF00F49C25 /* IntuneManagerTests */,
+				D4EBA78B2E7EC5BF00F49C25 /* IntuneManagerUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		D4EBA72B2E7EC58500F49C25 /* Resources */ = {
+		D4EBA7712E7EC5BE00F49C25 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D4EBA73A2E7EC58600F49C25 /* Resources */ = {
+		D4EBA7802E7EC5BF00F49C25 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D4EBA7442E7EC58600F49C25 /* Resources */ = {
+		D4EBA78A2E7EC5BF00F49C25 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -232,21 +245,21 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		D4EBA7292E7EC58500F49C25 /* Sources */ = {
+		D4EBA76F2E7EC5BE00F49C25 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D4EBA7382E7EC58600F49C25 /* Sources */ = {
+		D4EBA77E2E7EC5BF00F49C25 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D4EBA7422E7EC58600F49C25 /* Sources */ = {
+		D4EBA7882E7EC5BF00F49C25 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -256,20 +269,20 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		D4EBA73E2E7EC58600F49C25 /* PBXTargetDependency */ = {
+		D4EBA7842E7EC5BF00F49C25 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = D4EBA72C2E7EC58500F49C25 /* IntuneManager */;
-			targetProxy = D4EBA73D2E7EC58600F49C25 /* PBXContainerItemProxy */;
+			target = D4EBA7722E7EC5BE00F49C25 /* IntuneManager */;
+			targetProxy = D4EBA7832E7EC5BF00F49C25 /* PBXContainerItemProxy */;
 		};
-		D4EBA7482E7EC58600F49C25 /* PBXTargetDependency */ = {
+		D4EBA78E2E7EC5BF00F49C25 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = D4EBA72C2E7EC58500F49C25 /* IntuneManager */;
-			targetProxy = D4EBA7472E7EC58600F49C25 /* PBXContainerItemProxy */;
+			target = D4EBA7722E7EC5BE00F49C25 /* IntuneManager */;
+			targetProxy = D4EBA78D2E7EC5BF00F49C25 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		D4EBA74E2E7EC58600F49C25 /* Debug */ = {
+		D4EBA7942E7EC5BF00F49C25 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -331,7 +344,7 @@
 			};
 			name = Debug;
 		};
-		D4EBA74F2E7EC58600F49C25 /* Release */ = {
+		D4EBA7952E7EC5BF00F49C25 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -385,7 +398,7 @@
 			};
 			name = Release;
 		};
-		D4EBA7512E7EC58600F49C25 /* Debug */ = {
+		D4EBA7972E7EC5BF00F49C25 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -404,10 +417,10 @@
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = "";
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
@@ -418,18 +431,19 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Debug;
 		};
-		D4EBA7522E7EC58600F49C25 /* Release */ = {
+		D4EBA7982E7EC5BF00F49C25 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -448,10 +462,10 @@
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = "";
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
@@ -462,18 +476,19 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Release;
 		};
-		D4EBA7542E7EC58600F49C25 /* Debug */ = {
+		D4EBA79A2E7EC5BF00F49C25 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -499,7 +514,7 @@
 			};
 			name = Debug;
 		};
-		D4EBA7552E7EC58600F49C25 /* Release */ = {
+		D4EBA79B2E7EC5BF00F49C25 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -525,7 +540,7 @@
 			};
 			name = Release;
 		};
-		D4EBA7572E7EC58600F49C25 /* Debug */ = {
+		D4EBA79D2E7EC5BF00F49C25 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
@@ -550,7 +565,7 @@
 			};
 			name = Debug;
 		};
-		D4EBA7582E7EC58600F49C25 /* Release */ = {
+		D4EBA79E2E7EC5BF00F49C25 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
@@ -578,43 +593,75 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		D4EBA7282E7EC58500F49C25 /* Build configuration list for PBXProject "IntuneManager" */ = {
+		D4EBA76E2E7EC5BE00F49C25 /* Build configuration list for PBXProject "IntuneManager" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				D4EBA74E2E7EC58600F49C25 /* Debug */,
-				D4EBA74F2E7EC58600F49C25 /* Release */,
+				D4EBA7942E7EC5BF00F49C25 /* Debug */,
+				D4EBA7952E7EC5BF00F49C25 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		D4EBA7502E7EC58600F49C25 /* Build configuration list for PBXNativeTarget "IntuneManager" */ = {
+		D4EBA7962E7EC5BF00F49C25 /* Build configuration list for PBXNativeTarget "IntuneManager" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				D4EBA7512E7EC58600F49C25 /* Debug */,
-				D4EBA7522E7EC58600F49C25 /* Release */,
+				D4EBA7972E7EC5BF00F49C25 /* Debug */,
+				D4EBA7982E7EC5BF00F49C25 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		D4EBA7532E7EC58600F49C25 /* Build configuration list for PBXNativeTarget "IntuneManagerTests" */ = {
+		D4EBA7992E7EC5BF00F49C25 /* Build configuration list for PBXNativeTarget "IntuneManagerTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				D4EBA7542E7EC58600F49C25 /* Debug */,
-				D4EBA7552E7EC58600F49C25 /* Release */,
+				D4EBA79A2E7EC5BF00F49C25 /* Debug */,
+				D4EBA79B2E7EC5BF00F49C25 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		D4EBA7562E7EC58600F49C25 /* Build configuration list for PBXNativeTarget "IntuneManagerUITests" */ = {
+		D4EBA79C2E7EC5BF00F49C25 /* Build configuration list for PBXNativeTarget "IntuneManagerUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				D4EBA7572E7EC58600F49C25 /* Debug */,
-				D4EBA7582E7EC58600F49C25 /* Release */,
+				D4EBA79D2E7EC5BF00F49C25 /* Debug */,
+				D4EBA79E2E7EC5BF00F49C25 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D4EBA80F2E7EC88E00F49C25 /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.4.0;
+			};
+		};
+		D4EBA8122E7EC8D000F49C25 /* XCRemoteSwiftPackageReference "KeychainAccess" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/kishikawakatsumi/KeychainAccess.git";
+			requirement = {
+				branch = master;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D4EBA8102E7EC88E00F49C25 /* MSAL */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D4EBA80F2E7EC88E00F49C25 /* XCRemoteSwiftPackageReference "microsoft-authentication-library-for-objc" */;
+			productName = MSAL;
+		};
+		D4EBA8132E7EC8D000F49C25 /* KeychainAccess */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D4EBA8122E7EC8D000F49C25 /* XCRemoteSwiftPackageReference "KeychainAccess" */;
+			productName = KeychainAccess;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = D4EBA7252E7EC58500F49C25 /* Project object */;
+	rootObject = D4EBA76B2E7EC5BE00F49C25 /* Project object */;
 }

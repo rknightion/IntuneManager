@@ -1,234 +1,164 @@
-# IntuneManager
+# IntuneManager - Xcode Project
 
-A powerful, native macOS/iOS/iPadOS application for efficiently managing Microsoft Intune devices, with a focus on streamlining app-to-device-group assignments.
+## Project Setup Complete! ✅
 
-## Overview
+All source files have been successfully migrated from the Package.swift structure to the Xcode project structure.
 
-IntuneManager solves the pain points of managing hundreds of applications in Microsoft Intune through the web interface. Built with SwiftUI and leveraging the Microsoft Graph API, it provides a fast, native experience across all Apple platforms.
+## Next Steps in Xcode
 
-### Key Features
+### 1. Add Package Dependencies
+1. Open `IntuneManager.xcodeproj` in Xcode
+2. Select the project in the navigator
+3. Go to **Package Dependencies** tab
+4. Click **+** and add these packages:
+   - `https://github.com/AzureAD/microsoft-authentication-library-for-objc.git` (Version: 1.3.0+)
+   - `https://github.com/kishikawakatsumi/KeychainAccess.git` (Version: 4.2.2+)
 
-- **Bulk App Assignment**: Assign multiple applications to multiple device groups in seconds
-- **Native Performance**: Built with SwiftUI for blazing-fast performance
-- **Cross-Platform**: Works seamlessly on macOS, iOS, and iPadOS
-- **Smart Caching**: Intelligent caching reduces API calls and improves responsiveness
-- **Batch Operations**: Process hundreds of assignments efficiently with progress tracking
-- **Modern Architecture**: Modular, extensible design for future enhancements
+### 2. Configure Build Settings
+1. Select each target (iOS and macOS)
+2. Go to **Build Settings**
+3. Set these important settings:
+   - Swift Language Version: **Swift 6**
+   - Minimum Deployments: **iOS 18.0**, **macOS 15.0**
+   - Enable **Strict Concurrency** checking
 
-## Requirements
+### 3. Configure Signing & Capabilities
+For **both iOS and macOS targets**:
 
-- macOS 13.0+ / iOS 16.0+ / iPadOS 16.0+
-- Xcode 15.0+
-- Swift 5.9+
-- Microsoft Azure AD Application Registration
-- Microsoft Intune License
+1. Go to **Signing & Capabilities**
+2. Select your team
+3. Add these capabilities:
+   - ✅ Keychain Sharing
+   - ✅ App Groups (create group: `group.$(PRODUCT_BUNDLE_IDENTIFIER)`)
 
-## Setup Instructions
+For **macOS only**:
+   - ✅ App Sandbox
+   - ✅ Outgoing Connections (Client)
 
-### 1. Azure AD App Registration
+### 4. Update Info.plist Location
+1. Select each target
+2. Go to **Build Settings**
+3. Search for "Info.plist"
+4. Set path to: `IntuneManager/Info.plist`
 
-1. Go to [Azure Portal](https://portal.azure.com)
-2. Navigate to Azure Active Directory > App registrations
-3. Click "New registration"
-4. Configure the application:
-   - Name: `IntuneManager`
-   - Supported account types: Single tenant (or as per your needs)
-   - Redirect URI:
-     - Platform: Mobile and desktop applications
-     - URI: `msauth.com.yourorganization.intunemanager://auth`
-5. Note the Application (client) ID and Directory (tenant) ID
+### 5. Update Entitlements
+1. Select each target
+2. Go to **Build Settings**
+3. Search for "Entitlements"
+4. Set path to: `IntuneManager/IntuneManager.entitlements`
 
-### 2. Configure API Permissions
-
-In your app registration, add the following Microsoft Graph API permissions:
-
-- `DeviceManagementManagedDevices.Read.All`
-- `DeviceManagementManagedDevices.ReadWrite.All`
-- `DeviceManagementApps.Read.All`
-- `DeviceManagementApps.ReadWrite.All`
-- `DeviceManagementConfiguration.Read.All`
-- `DeviceManagementConfiguration.ReadWrite.All`
-- `DeviceManagementRBAC.Read.All`
-- `Group.Read.All`
-- `GroupMember.Read.All`
-- `User.Read`
-
-Grant admin consent for your organization if required.
-
-### 3. Project Setup
-
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/intune-macos-tools.git
-cd intune-macos-tools/IntuneManager
-```
-
-2. Open the project in Xcode:
-```bash
-open IntuneManager.xcodeproj
-```
-
-3. Configure environment variables:
-   - Create a `.env` file in the project root:
-   ```
-   INTUNE_CLIENT_ID=your_client_id_here
-   INTUNE_TENANT_ID=your_tenant_id_here
-   ```
-
-4. Update the Bundle Identifier:
-   - In Xcode, select the project
-   - Update Bundle Identifier to match your organization
-   - Update the redirect URI in `MSALConfiguration.swift` if needed
-
-### 4. Install Dependencies
-
-The project uses Swift Package Manager. Dependencies will be automatically resolved when you open the project in Xcode.
-
-Required packages:
-- MSAL (Microsoft Authentication Library)
-- KeychainAccess
-
-### 5. Build and Run
-
-1. Select your target device/simulator
-2. Build and run (⌘+R)
-3. Sign in with your Microsoft account
-4. Grant necessary permissions
-
-## Usage
-
-### Initial Setup
-
-1. **Launch the app** and sign in with your Microsoft Intune administrator account
-2. **Grant permissions** when prompted
-3. The app will automatically sync your devices, applications, and groups
-
-### Bulk App Assignment (Main Feature)
-
-1. Navigate to the **Assignments** tab
-2. **Select Applications**: Choose multiple apps you want to assign
-3. **Select Groups**: Choose the device groups for assignment
-4. **Configure Settings**: Set the assignment intent (Required/Available/Uninstall)
-5. **Review**: Verify your selections
-6. **Execute**: Click "Assign" to process all assignments in batch
-
-The app will handle all assignments efficiently, showing progress and any errors in real-time.
-
-### Device Management
-
-- View all enrolled macOS, iOS, and iPadOS devices
-- Filter by compliance state, ownership, or OS version
-- Search devices by name, user, or serial number
-- Perform device actions (sync, restart, retire, wipe)
-
-### Application Management
-
-- Browse all managed applications
-- Filter by app type or publishing state
-- View installation statistics
-- Manage individual app assignments
-
-### Group Management
-
-- View all Azure AD groups
-- See member counts and types
-- Filter dynamic vs. static groups
-- Preview group membership
-
-## Architecture
-
-The app follows MVVM-C architecture with a modular structure:
+## Project Structure
 
 ```
 IntuneManager/
-├── App/                    # App lifecycle
+├── App/                    # Main app files
+│   ├── IntuneManagerApp.swift  # @main entry point
+│   ├── UnifiedContentView.swift # Root content view
+│   └── SettingsView.swift
 ├── Core/                   # Core functionality
-│   ├── Authentication/     # MSAL integration
-│   ├── Networking/         # Graph API client
-│   └── DataLayer/          # Models and persistence
-├── Features/               # Feature modules
-│   ├── BulkAssignment/     # Main assignment feature
+│   ├── Authentication/     # MSAL auth
+│   ├── DataLayer/         # SwiftData models
+│   ├── Networking/        # Graph API client
+│   ├── Security/          # Credential management
+│   └── CrossPlatform/     # Platform compatibility
+├── Features/              # Feature modules
+│   ├── Dashboard/
 │   ├── Devices/
 │   ├── Applications/
-│   └── Groups/
-├── Services/               # Business logic
-└── Utilities/              # Helpers and extensions
+│   ├── Groups/
+│   ├── Assignments/
+│   └── Setup/
+├── Services/              # Business logic
+└── Utilities/             # Helper utilities
 ```
 
-## Performance Optimizations
+## Configuration
 
-- **Intelligent Caching**: 1-hour cache for device/app/group data
-- **Batch Processing**: Groups API calls in batches of 20
-- **Lazy Loading**: Loads data on-demand with pagination
-- **Background Sync**: Refreshes data in background
-- **Optimistic UI**: Updates UI immediately while processing
+### MSAL Setup
+1. Register your app in Azure AD
+2. Get your Client ID and Tenant ID
+3. Update `MSALConfiguration.swift` with your values
+4. Or use the in-app configuration screen on first launch
 
-## Security
+### Bundle Identifier
+Make sure your bundle identifier matches what's registered in Azure AD for the redirect URI:
+- Redirect URI format: `msauth.{your-bundle-id}://auth`
 
-- **OAuth 2.0/OIDC**: Secure authentication via MSAL
-- **Token Management**: Automatic token refresh
-- **Keychain Storage**: Secure credential storage
-- **Certificate Pinning**: For enhanced security (optional)
-- **Audit Logging**: All actions are logged
+## Building & Running
+
+### iOS
+1. Select an iOS Simulator or device
+2. Press ⌘R to build and run
+
+### macOS
+1. Select "My Mac" as the destination
+2. Press ⌘R to build and run
 
 ## Troubleshooting
 
-### Authentication Issues
+### "No such module 'MSAL'"
+- Make sure you've added the package dependencies (see step 1 above)
+- Clean build folder: ⌘⇧K
+- Reset package caches: File → Packages → Reset Package Caches
 
-1. Verify your Azure AD app registration
-2. Check redirect URI matches your bundle ID
-3. Ensure admin consent is granted
-4. Clear app cache and re-authenticate
+### App doesn't launch
+- Check that Info.plist path is correctly set
+- Verify entitlements file path is set
+- Check Console.app for crash logs
 
-### API Errors
+### MSAL Authentication fails
+- Verify your redirect URI matches: `msauth.{bundle-id}://auth`
+- Check keychain sharing is enabled
+- Ensure Client ID and Tenant ID are correct
 
-- **401 Unauthorized**: Token expired - sign out and back in
-- **403 Forbidden**: Missing permissions - check API permissions
-- **429 Too Many Requests**: Rate limited - app handles automatically
+## Testing
 
-### Performance Issues
+### Unit Tests
+Located in `IntuneManagerTests/`
 
-1. Clear cache via Settings
-2. Check network connectivity
-3. Reduce batch size in settings
-4. Enable background refresh
+### UI Tests
+Located in `IntuneManagerUITests/`
 
-## Future Enhancements
+Run tests with ⌘U
 
-- **Policy Management**: Configure and deploy device policies
-- **Compliance Reporting**: Advanced compliance dashboards
-- **Automation Rules**: Conditional assignments based on device properties
-- **Export/Import**: Bulk configuration management
-- **Analytics Dashboard**: Usage trends and insights
-- **Notifications**: Push notifications for critical events
+## Distribution
 
-## Contributing
+### TestFlight (iOS)
+1. Archive the app (Product → Archive)
+2. Upload to App Store Connect
+3. Submit for TestFlight review
 
-Contributions are welcome! Please read our contributing guidelines before submitting PRs.
+### Mac App Store
+1. Archive the app (Product → Archive)
+2. Upload to App Store Connect
+3. Submit for review
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to your fork
-5. Submit a pull request
+### Direct Distribution (macOS)
+1. Archive the app
+2. Export with Developer ID
+3. Notarize with Apple
+4. Distribute .dmg or .pkg
+
+## Important Files
+
+- `Info.plist` - App configuration and permissions
+- `IntuneManager.entitlements` - App capabilities and sandbox settings
+- `MSALConfiguration.swift` - MSAL/Azure AD configuration
+- `IntuneManagerApp.swift` - Main app entry point
+
+## Notes
+
+- All files have been moved from `/Users/rob/repos/IntuneManager`
+- The original Package.swift structure is no longer needed
+- This is now a standard Xcode project ready for App Store distribution
+- SwiftData models are included and configured
+- MSAL authentication is ready to use
 
 ## Support
 
-For issues, questions, or feature requests:
-- Create an issue on GitHub
-- Contact your IT administrator
-- Check the [Wiki](https://github.com/yourusername/intune-macos-tools/wiki)
+For issues, check:
+1. Xcode's Issue navigator (⌘5)
+2. Console.app for runtime logs
+3. The Logger output in Xcode's console
 
-## License
-
-This project is licensed under the MIT License - see LICENSE file for details.
-
-## Acknowledgments
-
-- Microsoft Graph API Team
-- MSAL iOS Team
-- SwiftUI Community
-
----
-
-**Note**: This app is not affiliated with or endorsed by Microsoft. It's an independent tool built to enhance the Intune management experience.
+Good luck with your app! 🚀

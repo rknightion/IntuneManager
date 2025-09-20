@@ -1,49 +1,28 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 5.10
+// This file is for dependency management reference only
+// Add these dependencies through Xcode's Package Dependencies interface
 
 import PackageDescription
 
 let package = Package(
-    name: "IntuneManager",
+    name: "IntuneManager-Dependencies",
     platforms: [
         .macOS(.v15),
         .iOS(.v18),
     ],
-    products: [
-        .executable(
-            name: "IntuneManager",
-            targets: ["IntuneManager"]),
-    ],
     dependencies: [
         // Microsoft Authentication Library
         .package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", from: "1.3.0"),
-        // SwiftLint for code quality
-        .package(url: "https://github.com/realm/SwiftLint.git", from: "0.54.0"),
         // KeychainAccess for secure storage
         .package(url: "https://github.com/kishikawakatsumi/KeychainAccess.git", from: "4.2.2"),
-    ],
-    targets: [
-        .executableTarget(
-            name: "IntuneManager",
-            dependencies: [
-                .product(name: "MSAL", package: "microsoft-authentication-library-for-objc"),
-                .product(name: "KeychainAccess", package: "KeychainAccess"),
-            ],
-            path: ".",
-            exclude: [
-                "Documentation",
-                "README.md",
-                "README-V2.md",
-                "LICENSE",
-                "Info.plist",
-                "IntuneManager.entitlements",
-                "Tests"
-            ],
-            sources: ["App", "Core", "Features", "Services", "Utilities"],
-            swiftSettings: [
-                .enableUpcomingFeature("StrictConcurrency")
-            ]),
-        .testTarget(
-            name: "IntuneManagerTests",
-            dependencies: ["IntuneManager"]),
     ]
 )
+
+// HOW TO ADD DEPENDENCIES IN XCODE:
+// 1. Select your project in the navigator
+// 2. Select the project (not a target) in the editor
+// 3. Click "Package Dependencies" tab
+// 4. Click the + button
+// 5. Enter the package URL above
+// 6. Click "Add Package"
+// 7. Select which targets should use the package
