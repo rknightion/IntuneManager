@@ -264,6 +264,8 @@ struct UnifiedLoginView: View {
     @EnvironmentObject var authManager: AuthManagerV2
     @EnvironmentObject var credentialManager: CredentialManager
     @State private var showConfiguration = false
+    @State private var showError = false
+    @State private var errorMessage = ""
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -289,6 +291,11 @@ struct UnifiedLoginView: View {
                 #if os(iOS)
                 .presentationDetents([.large])
                 #endif
+        }
+        .alert("Sign In Error", isPresented: $showError) {
+            Button("OK") { }
+        } message: {
+            Text(errorMessage)
         }
     }
 
@@ -388,8 +395,21 @@ struct UnifiedLoginView: View {
     }
 
     private func signIn() {
+        // First check if we have a configuration
+        guard credentialManager.configuration != nil else {
+            errorMessage = "No configuration found. Please configure the app first."
+            showError = true
+            return
+        }
+
+        // Check if MSAL is initialized
         Task {
             do {
+                // Try to initialize MSAL if not already done
+                if !authManager.isAuthenticated {
+                    try await authManager.initializeMSAL()
+                }
+
                 #if os(iOS)
                 if let viewController = await PlatformHelper.getRootViewController() {
                     try await authManager.signIn(from: viewController)
@@ -398,9 +418,36 @@ struct UnifiedLoginView: View {
                 try await authManager.signIn()
                 #endif
                 PlatformHaptics.trigger(.success)
-            } catch {
+            } catch AuthError.msalNotInitialized {
+                await MainActor.run {
+                    errorMessage = "Authentication system not initialized. Please restart the app."
+                    showError = true
+                }
                 PlatformHaptics.trigger(.error)
-                // Error handled by alert in parent view
+            } catch AuthError.notConfigured {
+                await MainActor.run {
+                    errorMessage = "App not configured. Please complete the setup first."
+                    showError = true
+                }
+                PlatformHaptics.trigger(.error)
+            } catch AuthError.invalidConfiguration(let message) {
+                await MainActor.run {
+                    errorMessage = "Invalid configuration: \(message)"
+                    showError = true
+                }
+                PlatformHaptics.trigger(.error)
+            } catch AuthError.signInFailed(let underlyingError) {
+                await MainActor.run {
+                    errorMessage = "Sign in failed: \(underlyingError.localizedDescription)"
+                    showError = true
+                }
+                PlatformHaptics.trigger(.error)
+            } catch {
+                await MainActor.run {
+                    errorMessage = "An unexpected error occurred: \(error.localizedDescription)"
+                    showError = true
+                }
+                PlatformHaptics.trigger(.error)
             }
         }
     }

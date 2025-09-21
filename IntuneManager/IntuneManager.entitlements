@@ -6,12 +6,20 @@
     <key>com.apple.security.app-sandbox</key>
     <true/>
 
-    <!-- Network Access (required for Microsoft Graph API) -->
+    <!-- Network Access -->
+    <!-- Allow outgoing connections (required for Microsoft Graph API and OAuth) -->
     <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- Allow incoming connections (for OAuth redirect handling) -->
+    <key>com.apple.security.network.server</key>
     <true/>
 
     <!-- File Access (for potential export features) -->
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
+
+    <!-- Keychain Access REMOVED - Using in-memory token storage only -->
+    <!-- Removed to avoid sandboxed app keychain permission issues (errSecMissingEntitlement -34018) -->
 </dict>
 </plist>

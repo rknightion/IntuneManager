@@ -203,10 +203,17 @@ struct PlatformButton: View {
                 .foregroundColor(foregroundColor)
                 .cornerRadius(10)
                 #else
-                .padding(.horizontal)
+                .frame(minWidth: 120)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
                 #endif
         }
+        #if os(macOS)
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        #else
         .buttonStyle(.plain)
+        #endif
     }
 
     private var backgroundColor: Color {

@@ -20,12 +20,6 @@
     <key>CFBundleVersion</key>
     <string>1</string>
 
-    <!-- App Icon -->
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>CFBundleIconName</key>
-    <string>AppIcon</string>
-
     <!-- MSAL Authentication Configuration -->
     <key>CFBundleURLTypes</key>
     <array>

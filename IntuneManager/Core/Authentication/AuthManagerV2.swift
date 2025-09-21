@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import MSAL
+import Security
 
 #if canImport(UIKit)
 import UIKit
@@ -63,6 +64,27 @@ class AuthManagerV2: ObservableObject {
             // Configure for public client (no secret)
             msalConfig.clientApplicationCapabilities = ["CP1"] // Claims challenge capability
 
+            // Configure token cache for sandboxed app
+            #if os(macOS)
+            // For sandboxed macOS apps, we need a workaround for keychain access issues
+            // The -34018 errSecMissingEntitlement error occurs when accessing shared keychains
+
+            // WORKAROUND: Don't set keychainSharingGroup at all on macOS
+            // This makes MSAL default to using the login keychain with fallback to in-memory
+            // When keychain access fails (which it will in sandbox), MSAL uses in-memory cache
+            Logger.shared.info("Keychain group not set - MSAL will use in-memory cache when keychain fails")
+            Logger.shared.info("Note: Tokens won't persist between app launches in sandboxed mode")
+            #else
+            // iOS can use keychain normally
+            if let bundleIdentifier = Bundle.main.bundleIdentifier {
+                if let teamID = resolveTeamIdentifierPrefix() {
+                    let keychainGroup = "\(teamID).\(bundleIdentifier)"
+                    msalConfig.cacheConfig.keychainSharingGroup = keychainGroup
+                    Logger.shared.debug("MSAL Keychain Group: \(keychainGroup)")
+                }
+            }
+            #endif
+
             // Enable logging for debugging
             MSALGlobalConfig.loggerConfig.logLevel = .verbose
             MSALGlobalConfig.loggerConfig.setLogCallback { (level, message, containsPII) in
@@ -101,7 +123,14 @@ class AuthManagerV2: ObservableObject {
                 // Attempt silent token acquisition
                 _ = try? await acquireTokenSilently()
             }
-        } catch {
+        } catch let error as NSError {
+            #if os(macOS)
+            if error.code == -34018 { // errSecMissingEntitlement
+                Logger.shared.info("Keychain access unavailable in sandbox - fresh authentication required")
+                // Don't throw, just continue without cached account
+                return
+            }
+            #endif
             Logger.shared.info("No cached accounts found: \(error)")
         }
     }
@@ -128,22 +157,30 @@ class AuthManagerV2: ObservableObject {
             "https://graph.microsoft.com/Group.Read.All"
         ]
 
-        // Setup webview parameters based on platform
+        // Create interactive parameters with webview
         #if os(iOS)
         guard let presentingViewController = viewController as? UIViewController else {
             throw AuthError.invalidViewController
         }
         let webviewParameters = MSALWebviewParameters(authPresentationViewController: presentingViewController)
         #elseif os(macOS)
-        // For macOS, we need a view controller or we can't proceed
-        guard let presentingViewController = viewController as? NSViewController else {
-            // On macOS, if no view controller is provided, we cannot show the auth UI
-            throw AuthError.invalidViewController
+        // For macOS, get the main window's content view controller
+        // If none exists, we'll pass nil and MSAL will use the default browser
+        let contentViewController = NSApplication.shared.mainWindow?.contentViewController ?? NSApplication.shared.keyWindow?.contentViewController
+        let webviewParameters: MSALWebviewParameters
+
+        if let vc = contentViewController {
+            webviewParameters = MSALWebviewParameters(authPresentationViewController: vc)
+        } else {
+            // Create a minimal view controller to satisfy the requirement
+            let vc = NSViewController()
+            webviewParameters = MSALWebviewParameters(authPresentationViewController: vc)
         }
-        let webviewParameters = MSALWebviewParameters(authPresentationViewController: presentingViewController)
+
+        // Use authentication session which opens system browser
+        webviewParameters.webviewType = .authenticationSession
         #endif
 
-        // Create interactive parameters with webview
         let interactiveParameters = MSALInteractiveTokenParameters(
             scopes: scopes,
             webviewParameters: webviewParameters
@@ -153,7 +190,10 @@ class AuthManagerV2: ObservableObject {
         interactiveParameters.promptType = MSALPromptType.selectAccount
 
         // Set extra query parameters if needed
-        interactiveParameters.extraQueryParameters = ["domain_hint": config.tenantId]
+        // Only add domain_hint if not using "common" tenant
+        if config.tenantId != "common" {
+            interactiveParameters.extraQueryParameters = ["domain_hint": config.tenantId]
+        }
 
         do {
             let result: MSALResult = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<MSALResult, any Error>) in
@@ -171,6 +211,15 @@ class AuthManagerV2: ObservableObject {
             handleAuthenticationSuccess(result)
 
         } catch let error as NSError {
+            // Log more details about the MSAL error
+            Logger.shared.error("MSAL Sign In Failed - Code: \(error.code), Domain: \(error.domain)")
+            Logger.shared.error("Error Details: \(error.localizedDescription)")
+            if let msalError = error.userInfo[MSALErrorDescriptionKey] as? String {
+                Logger.shared.error("MSAL Error Description: \(msalError)")
+            }
+            if let msalOAuthError = error.userInfo[MSALOAuthErrorKey] as? String {
+                Logger.shared.error("MSAL OAuth Error: \(msalOAuthError)")
+            }
             handleAuthenticationError(error)
             throw AuthError.signInFailed(error)
         }
@@ -219,6 +268,18 @@ class AuthManagerV2: ObservableObject {
             return result.accessToken
 
         } catch let error as NSError {
+            // Handle keychain access errors specifically for macOS sandbox
+            #if os(macOS)
+            if error.code == -34018 { // errSecMissingEntitlement
+                Logger.shared.warning("Keychain access failed in sandbox - triggering re-authentication")
+                // Clear the current account to force fresh auth
+                currentAccount = nil
+                isAuthenticated = false
+                // Throw interaction required to trigger login
+                throw AuthError.interactionRequired
+            }
+            #endif
+
             // Check if interaction is required
             if error.domain == MSALErrorDomain,
                let errorCode = MSALError(rawValue: error.code),
@@ -332,8 +393,8 @@ class AuthManagerV2: ObservableObject {
         isAuthenticated = true
         authenticationError = nil
 
-        // MSAL handles token storage automatically in the keychain
-        // No need to manually store tokens
+        // Token is now automatically stored in our custom in-memory cache
+        // No need for additional storage as the custom cache handles it
 
         // Setup token refresh timer
         setupTokenRefreshTimer()
@@ -452,5 +513,52 @@ class AuthManagerV2: ObservableObject {
         // Pause token refresh timer when app goes to background
         tokenRefreshTimer?.invalidate()
     }
-}
 
+    private func resolveTeamIdentifierPrefix() -> String? {
+        if let prefixes = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? [String],
+           let prefix = prefixes.first {
+            return sanitizeTeamIdentifier(prefix)
+        }
+
+        if let prefix = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? String {
+            return sanitizeTeamIdentifier(prefix)
+        }
+
+        #if os(macOS)
+        if let prefix = fetchTeamIdentifierFromCodeSigning() {
+            return sanitizeTeamIdentifier(prefix)
+        }
+        #endif
+
+        return nil
+    }
+
+    private func sanitizeTeamIdentifier(_ identifier: String) -> String {
+        identifier.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+    }
+
+    #if os(macOS)
+    private func fetchTeamIdentifierFromCodeSigning() -> String? {
+        var code: SecCode?
+        guard SecCodeCopySelf([], &code) == errSecSuccess, let code else {
+            return nil
+        }
+
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else {
+            return nil
+        }
+
+        var signingInfo: CFDictionary?
+        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(), &signingInfo) == errSecSuccess,
+              let info = signingInfo as? [String: Any],
+              let entitlements = info[kSecCodeInfoEntitlementsDict as String] as? [String: Any],
+              let applicationIdentifier = entitlements["application-identifier"] as? String,
+              let prefix = applicationIdentifier.split(separator: ".").first else {
+            return nil
+        }
+
+        return String(prefix)
+    }
+    #endif
+}
