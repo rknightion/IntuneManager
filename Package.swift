@@ -12,7 +12,7 @@ let package = Package(
     ],
     dependencies: [
         // Microsoft Authentication Library (handles token storage securely)
-        .package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", from: "1.9.0"),
+        .package(url: "https://github.com/AzureAD/microsoft-authentication-library-for-objc.git", from: "2.4.0"),
     ]
 )
 
