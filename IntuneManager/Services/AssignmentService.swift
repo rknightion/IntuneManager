@@ -150,13 +150,14 @@ final class AssignmentService: ObservableObject {
     }
 
     private func createBatchRequest(for assignment: Assignment) -> BatchRequest {
+        let targetType = assignment.targetType
         let appAssignment = AppAssignment(
             id: assignment.id,
             intent: AppAssignment.AssignmentIntent(rawValue: assignment.intent.rawValue) ?? .required,
             target: AppAssignment.AssignmentTarget(
-                type: .group,
-                groupId: assignment.groupId,
-                groupName: assignment.groupName,
+                type: targetType,
+                groupId: targetType.requiresGroupId ? assignment.groupId : nil,
+                groupName: targetType.requiresGroupId ? assignment.groupName : nil,
                 deviceAndAppManagementAssignmentFilterId: assignment.filter?.filterId,
                 deviceAndAppManagementAssignmentFilterType: assignment.filter?.filterType?.rawValue
             ),
@@ -175,13 +176,14 @@ final class AssignmentService: ObservableObject {
     private func retrySingleAssignment(_ assignment: Assignment) async throws -> Assignment {
         let updatedAssignment = assignment
 
+        let targetType = assignment.targetType
         let appAssignment = AppAssignment(
             id: assignment.id,
             intent: AppAssignment.AssignmentIntent(rawValue: assignment.intent.rawValue) ?? .required,
             target: AppAssignment.AssignmentTarget(
-                type: .group,
-                groupId: assignment.groupId,
-                groupName: assignment.groupName,
+                type: targetType,
+                groupId: targetType.requiresGroupId ? assignment.groupId : nil,
+                groupName: targetType.requiresGroupId ? assignment.groupName : nil,
                 deviceAndAppManagementAssignmentFilterId: nil,
                 deviceAndAppManagementAssignmentFilterType: nil
             ),

@@ -97,8 +97,14 @@ actor GraphAPIClient {
         var results: [T] = []
         var nextLink: String? = endpoint
         var currentParams = parameters
+        var pageCount = 0
+
+        Logger.shared.info("Starting paginated request for: \(endpoint)", category: .network)
 
         while let link = nextLink {
+            pageCount += 1
+            Logger.shared.info("Fetching page \(pageCount) from: \(link)", category: .network)
+
             let request = try await buildRequest(
                 endpoint: link,
                 method: "GET",
@@ -108,12 +114,23 @@ actor GraphAPIClient {
 
             let response: GraphResponse<T> = try await performRequest(request)
             if let value = response.value {
+                Logger.shared.info("Page \(pageCount) returned \(value.count) items", category: .network)
                 results.append(contentsOf: value)
+            } else {
+                Logger.shared.warning("Page \(pageCount) returned no items", category: .network)
             }
-            nextLink = response.nextLink
-            currentParams = nil
+
+            if let next = response.nextLink {
+                Logger.shared.info("Next page link found: \(next)", category: .network)
+                nextLink = next
+            } else {
+                Logger.shared.info("No more pages - pagination complete", category: .network)
+                nextLink = nil
+            }
+            currentParams = nil // Parameters only needed for first request
         }
 
+        Logger.shared.info("Pagination complete: \(pageCount) pages, \(results.count) total items", category: .network)
         return results
     }
 
@@ -125,8 +142,14 @@ actor GraphAPIClient {
         var results: [T] = []
         var nextLink: String? = endpoint
         var currentParams = parameters
+        var pageCount = 0
+
+        Logger.shared.info("Starting paginated request for: \(endpoint)", category: .network)
 
         while let link = nextLink {
+            pageCount += 1
+            Logger.shared.info("Fetching page \(pageCount) from: \(link)", category: .network)
+
             let request = try await buildRequest(
                 endpoint: link,
                 method: "GET",
@@ -136,12 +159,23 @@ actor GraphAPIClient {
 
             let response: GraphModelResponse<T> = try await performModelRequest(request)
             if let value = response.value {
+                Logger.shared.info("Page \(pageCount) returned \(value.count) items", category: .network)
                 results.append(contentsOf: value)
+            } else {
+                Logger.shared.warning("Page \(pageCount) returned no items", category: .network)
             }
-            nextLink = response.nextLink
+
+            if let next = response.nextLink {
+                Logger.shared.info("Next page link found: \(next)", category: .network)
+                nextLink = next
+            } else {
+                Logger.shared.info("No more pages - pagination complete", category: .network)
+                nextLink = nil
+            }
             currentParams = nil // Parameters only needed for first request
         }
 
+        Logger.shared.info("Pagination complete: \(pageCount) pages, \(results.count) total items", category: .network)
         return results
     }
 
@@ -282,37 +316,48 @@ actor GraphAPIClient {
     }
 
     private func performDataRequest(_ request: URLRequest) async throws -> Data {
+        // Log the outgoing request
+        Logger.shared.logNetworkRequest(request)
+
         do {
             let (data, response) = try await session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
+                Logger.shared.error("Invalid response - not HTTP", category: .network)
                 throw GraphAPIError.invalidResponse
             }
 
-            await Logger.shared.debug("API Response: \(httpResponse.statusCode) for \(request.url?.absoluteString ?? "")")
+            // Log the response
+            Logger.shared.info("← Response: \(httpResponse.statusCode) from \(request.url?.path ?? "")", category: .network)
 
             switch httpResponse.statusCode {
             case 200...299:
                 return data
 
             case 401:
+                Logger.shared.error("Unauthorized (401) - Token may be expired", category: .network)
                 throw GraphAPIError.unauthorized
 
             case 403:
+                Logger.shared.error("Forbidden (403) - Insufficient permissions", category: .network)
                 throw GraphAPIError.forbidden
 
             case 404:
+                Logger.shared.warning("Not Found (404) - Resource doesn't exist", category: .network)
                 throw GraphAPIError.notFound
 
             case 429:
                 // Rate limiting - extract retry after header
                 let retryAfter = httpResponse.value(forHTTPHeaderField: "Retry-After")
+                Logger.shared.warning("Rate Limited (429) - Retry after: \(retryAfter ?? "unknown")", category: .network)
                 throw GraphAPIError.rateLimited(retryAfter: retryAfter)
 
             default:
                 if let errorResponse = try? decoder.decode(GraphErrorResponse.self, from: data) {
+                    Logger.shared.error("API Error (\(httpResponse.statusCode)): \(errorResponse.error.message) (Code: \(errorResponse.error.code))", category: .network)
                     throw GraphAPIError.serverError(message: errorResponse.error.message, code: errorResponse.error.code)
                 }
+                Logger.shared.error("HTTP Error: \(httpResponse.statusCode)", category: .network)
                 throw GraphAPIError.httpError(statusCode: httpResponse.statusCode)
             }
         } catch let error as GraphAPIError {

@@ -157,7 +157,7 @@ final class Device: Identifiable, Codable {
         case lastSyncDateTime
         case complianceState
         case managementState
-        case ownership
+        case ownership = "managedDeviceOwnerType"
         case enrollmentType
         case azureADDeviceId
         case azureADRegistered
@@ -198,7 +198,7 @@ final class Device: Identifiable, Codable {
         ownership = try container.decode(Ownership.self, forKey: .ownership)
         enrollmentType = try container.decodeIfPresent(String.self, forKey: .enrollmentType)
         azureADDeviceId = try container.decodeIfPresent(String.self, forKey: .azureADDeviceId)
-        azureADRegistered = try container.decode(Bool.self, forKey: .azureADRegistered)
+        azureADRegistered = try container.decodeIfPresent(Bool.self, forKey: .azureADRegistered) ?? false
         deviceCategory = try container.decodeIfPresent(String.self, forKey: .deviceCategory)
         deviceEnrollmentType = try container.decodeIfPresent(String.self, forKey: .deviceEnrollmentType)
         userPrincipalName = try container.decodeIfPresent(String.self, forKey: .userPrincipalName)
@@ -211,8 +211,8 @@ final class Device: Identifiable, Codable {
         wiFiMacAddress = try container.decodeIfPresent(String.self, forKey: .wiFiMacAddress)
         freeStorageSpace = try container.decodeIfPresent(Int64.self, forKey: .freeStorageSpace)
         totalStorageSpace = try container.decodeIfPresent(Int64.self, forKey: .totalStorageSpace)
-        isEncrypted = try container.decode(Bool.self, forKey: .isEncrypted)
-        isSupervised = try container.decode(Bool.self, forKey: .isSupervised)
+        isEncrypted = try container.decodeIfPresent(Bool.self, forKey: .isEncrypted) ?? false
+        isSupervised = try container.decodeIfPresent(Bool.self, forKey: .isSupervised) ?? false
         jailBroken = try container.decodeIfPresent(String.self, forKey: .jailBroken)
         managedDeviceName = try container.decodeIfPresent(String.self, forKey: .managedDeviceName)
         partnerReportedThreatState = try container.decodeIfPresent(String.self, forKey: .partnerReportedThreatState)

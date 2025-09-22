@@ -1,6 +1,6 @@
 import Foundation
 
-enum AuthError: LocalizedError {
+enum AuthError: LocalizedError, Equatable {
     case custom(String)
     case signInFailed(Error)
     case tokenAcquisitionFailed(Error)
@@ -46,6 +46,33 @@ enum AuthError: LocalizedError {
             return "Network connection error"
         case .interactionRequired:
             return "User interaction required"
+        }
+    }
+
+    static func == (lhs: AuthError, rhs: AuthError) -> Bool {
+        switch (lhs, rhs) {
+        case (.custom(let a), .custom(let b)):
+            return a == b
+        case (.signInFailed(let a), .signInFailed(let b)):
+            return (a as NSError) == (b as NSError)
+        case (.tokenAcquisitionFailed(let a), .tokenAcquisitionFailed(let b)):
+            return (a as NSError) == (b as NSError)
+        case (.msalInitializationFailed(let a), .msalInitializationFailed(let b)):
+            return (a as NSError) == (b as NSError)
+        case (.invalidConfiguration(let a), .invalidConfiguration(let b)):
+            return a == b
+        case (.notConfigured, .notConfigured),
+             (.msalNotInitialized, .msalNotInitialized),
+             (.invalidViewController, .invalidViewController),
+             (.notAuthenticated, .notAuthenticated),
+             (.unknownError, .unknownError),
+             (.userCancelled, .userCancelled),
+             (.insufficientPermissions, .insufficientPermissions),
+             (.networkError, .networkError),
+             (.interactionRequired, .interactionRequired):
+            return true
+        default:
+            return false
         }
     }
 }

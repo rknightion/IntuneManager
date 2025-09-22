@@ -132,6 +132,7 @@ struct BulkAssignmentView: View {
     private func nextStep() {
         withAnimation {
             if let nextStep = AssignmentStep(rawValue: currentStep.rawValue + 1) {
+                Logger.shared.info("Navigating to \(nextStep.title)", category: .ui)
                 currentStep = nextStep
             }
         }
@@ -140,25 +141,30 @@ struct BulkAssignmentView: View {
     private func previousStep() {
         withAnimation {
             if let previousStep = AssignmentStep(rawValue: currentStep.rawValue - 1) {
+                Logger.shared.info("Navigating back to \(previousStep.title)", category: .ui)
                 currentStep = previousStep
             }
         }
     }
 
     private func performAssignment() {
+        Logger.shared.info("User initiated assignment confirmation", category: .ui)
         showingConfirmation = true
     }
 
     private func executeAssignment() {
+        Logger.shared.info("Executing bulk assignment with \(viewModel.totalAssignments) assignments", category: .ui)
         showingProgress = true
         Task {
             await viewModel.executeAssignment()
             showingProgress = false
             resetAssignment()
+            Logger.shared.info("Bulk assignment completed", category: .ui)
         }
     }
 
     private func resetAssignment() {
+        Logger.shared.info("Resetting bulk assignment", category: .ui)
         viewModel.reset()
         currentStep = .selectApps
     }
@@ -231,12 +237,28 @@ struct ApplicationSelectionView: View {
     @StateObject private var appService = ApplicationService.shared
     @State private var searchText = ""
     @State private var selectedFilter: Application.AppType?
+    @State private var assignmentFilter: AssignmentFilter = .all
     @State private var sortOrder: SortOrder = .name
+
+    enum AssignmentFilter: String, CaseIterable {
+        case all = "All Apps"
+        case unassigned = "Unassigned"
+        case assigned = "Assigned"
+
+        var systemImage: String {
+            switch self {
+            case .all: return "square.grid.2x2"
+            case .unassigned: return "square"
+            case .assigned: return "person.2.square.stack"
+            }
+        }
+    }
 
     enum SortOrder: String, CaseIterable {
         case name = "Name"
         case type = "Type"
         case modified = "Modified"
+        case assignments = "Assignments"
 
         var comparator: (Application, Application) -> Bool {
             switch self {
@@ -246,12 +268,24 @@ struct ApplicationSelectionView: View {
                 return { $0.appType.displayName < $1.appType.displayName }
             case .modified:
                 return { $0.lastModifiedDateTime > $1.lastModifiedDateTime }
+            case .assignments:
+                return { $0.assignmentCount > $1.assignmentCount }
             }
         }
     }
 
     var filteredApps: [Application] {
         var apps = appService.applications
+
+        // Apply assignment filter
+        switch assignmentFilter {
+        case .all:
+            break // No filter
+        case .unassigned:
+            apps = apps.filter { !$0.hasAssignments }
+        case .assigned:
+            apps = apps.filter { $0.hasAssignments }
+        }
 
         if !searchText.isEmpty {
             apps = apps.filter { app in
@@ -270,49 +304,76 @@ struct ApplicationSelectionView: View {
     var body: some View {
         VStack {
             // Toolbar
-            HStack {
+            VStack(spacing: 12) {
                 HStack {
-                    Image(systemName: "magnifyingglass")
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.secondary)
+                        TextField("Search applications...", text: $searchText)
+                            .textFieldStyle(.plain)
+                    }
+                    .padding(8)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
+
+                    Spacer()
+
+                    // Assignment status filter
+                    Picker("", selection: $assignmentFilter) {
+                        ForEach(AssignmentFilter.allCases, id: \.self) { filter in
+                            Label(filter.rawValue, systemImage: filter.systemImage).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 300)
+
+                    Spacer()
+
+                    Text("\(filteredApps.count) apps • \(selectedApps.count) selected")
                         .foregroundColor(.secondary)
-                    TextField("Search applications...", text: $searchText)
-                        .textFieldStyle(.plain)
-                }
-                .padding(8)
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(8)
 
-                Picker("Type", selection: $selectedFilter) {
-                    Text("All Types").tag(Application.AppType?.none)
-                    Divider()
-                    ForEach(Application.AppType.allCases, id: \.self) { type in
-                        Label(type.displayName, systemImage: type.icon)
-                            .tag(Application.AppType?.some(type))
+                    Button("Select All") {
+                        selectedApps = Set(filteredApps)
+                    }
+
+                    Button("Clear") {
+                        selectedApps.removeAll()
+                    }
+                    .disabled(selectedApps.isEmpty)
+                }
+
+                HStack {
+                    Picker("Type", selection: $selectedFilter) {
+                        Text("All Types").tag(Application.AppType?.none)
+                        Divider()
+                        ForEach(Application.AppType.allCases, id: \.self) { type in
+                            Label(type.displayName, systemImage: type.icon)
+                                .tag(Application.AppType?.some(type))
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 150)
+
+                    Picker("Sort", selection: $sortOrder) {
+                        ForEach(SortOrder.allCases, id: \.self) { order in
+                            Text(order.rawValue).tag(order)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 120)
+
+                    Spacer()
+
+                    // Summary statistics
+                    HStack(spacing: 16) {
+                        Label("\(appService.applications.filter { !$0.hasAssignments }.count) unassigned", systemImage: "square")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                        Label("\(appService.applications.filter { $0.hasAssignments }.count) assigned", systemImage: "person.2.square.stack")
+                            .font(.caption)
+                            .foregroundColor(.green)
                     }
                 }
-                .pickerStyle(.menu)
-                .frame(width: 150)
-
-                Picker("Sort", selection: $sortOrder) {
-                    ForEach(SortOrder.allCases, id: \.self) { order in
-                        Text(order.rawValue).tag(order)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(width: 100)
-
-                Spacer()
-
-                Text("\(selectedApps.count) selected")
-                    .foregroundColor(.secondary)
-
-                Button("Select All") {
-                    selectedApps = Set(filteredApps)
-                }
-
-                Button("Clear") {
-                    selectedApps.removeAll()
-                }
-                .disabled(selectedApps.isEmpty)
             }
             .padding()
 
@@ -362,9 +423,27 @@ struct ApplicationRowView: View {
                 .font(.title3)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(application.displayName)
-                    .font(.system(.body, design: .default))
-                    .lineLimit(1)
+                HStack {
+                    Text(application.displayName)
+                        .font(.system(.body, design: .default))
+                        .lineLimit(1)
+
+                    // Assignment indicator badge
+                    if application.hasAssignments {
+                        HStack(spacing: 3) {
+                            Image(systemName: "person.2.fill")
+                                .font(.caption2)
+                            Text("\(application.assignmentCount)")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.15))
+                        .foregroundColor(.accentColor)
+                        .cornerRadius(4)
+                    }
+                }
 
                 HStack {
                     Label(application.appType.displayName, systemImage: application.appType.icon)
@@ -383,6 +462,14 @@ struct ApplicationRowView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
+                }
+
+                // Assignment summary if app has assignments
+                if application.hasAssignments {
+                    Text(application.assignmentSummary)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
                 }
             }
 

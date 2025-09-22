@@ -7,8 +7,15 @@ struct GroupSelectionView: View {
     @State private var showOnlyDynamic = false
     @State private var showOnlySecurity = true
 
+    private var availableGroups: [DeviceGroup] {
+        let custom = DeviceGroup.builtInAssignmentTargets
+        // Ensure we don't duplicate built-in targets if the service ever returns them.
+        let graphGroups = groupService.groups.filter { !$0.isBuiltInAssignmentTarget }
+        return custom + graphGroups
+    }
+
     var filteredGroups: [DeviceGroup] {
-        var groups = groupService.groups
+        var groups = availableGroups
 
         if !searchText.isEmpty {
             groups = groups.filter { group in
@@ -124,7 +131,11 @@ struct GroupRowView: View {
                             .foregroundColor(.green)
                     }
 
-                    if let memberCount = group.memberCount {
+                    if group.isBuiltInAssignmentTarget {
+                        Text("• Tenant-wide")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else if let memberCount = group.memberCount {
                         Text("• \(memberCount) members")
                             .font(.caption)
                             .foregroundColor(.secondary)

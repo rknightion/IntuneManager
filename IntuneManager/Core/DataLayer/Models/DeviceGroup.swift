@@ -165,6 +165,55 @@ final class DeviceGroup: Identifiable, Codable {
     }
 }
 
+// MARK: - Intune Built-In Targets
+extension DeviceGroup {
+    static let allDevicesGroupID = "intune-all-devices"
+    static let allUsersGroupID = "intune-all-users"
+
+    static var builtInAssignmentTargets: [DeviceGroup] {
+        Self.builtInTargetsStorage
+    }
+
+    var isBuiltInAssignmentTarget: Bool {
+        id == DeviceGroup.allDevicesGroupID || id == DeviceGroup.allUsersGroupID
+    }
+
+    var assignmentTargetType: AppAssignment.AssignmentTarget.TargetType {
+        switch id {
+        case DeviceGroup.allDevicesGroupID:
+            return .allDevices
+        case DeviceGroup.allUsersGroupID:
+            return .allUsers
+        default:
+            return .group
+        }
+    }
+
+    private static let builtInTargetsStorage: [DeviceGroup] = {
+        let allDevices = DeviceGroup(
+            id: DeviceGroup.allDevicesGroupID,
+            displayName: "All Devices",
+            securityEnabled: true,
+            mailEnabled: false
+        )
+        allDevices.groupDescription = "Assigns to every managed device in the tenant."
+        allDevices.deviceCount = nil
+        allDevices.userCount = nil
+
+        let allUsers = DeviceGroup(
+            id: DeviceGroup.allUsersGroupID,
+            displayName: "All Users",
+            securityEnabled: true,
+            mailEnabled: false
+        )
+        allUsers.groupDescription = "Assigns to every licensed user in the tenant."
+        allUsers.deviceCount = nil
+        allUsers.userCount = nil
+
+        return [allDevices, allUsers]
+    }()
+}
+
 // MARK: - Group Member
 struct GroupMember: Codable, Identifiable, Sendable {
     let id: String

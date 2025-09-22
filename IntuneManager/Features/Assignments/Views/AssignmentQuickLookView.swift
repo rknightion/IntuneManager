@@ -24,7 +24,7 @@ struct AssignmentQuickLookView: View {
         .onAppear {
             storageSummary = LocalDataStore.shared.summary()
         }
-        .onReceive(assignmentService.$assignmentHistory) { _ in
+        .onChange(of: assignmentService.assignmentHistory) { _, _ in
             storageSummary = LocalDataStore.shared.summary()
         }
     }

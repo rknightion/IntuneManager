@@ -88,12 +88,16 @@ final class Logger: @unchecked Sendable {
     // MARK: - Network Logging
 
     func logNetworkRequest(_ request: URLRequest) {
+        #if DEBUG
+        // Always log in debug mode
+        #else
         guard UserDefaults.standard.bool(forKey: "LOGGING_ENABLED") else { return }
+        #endif
 
         let method = request.httpMethod ?? "GET"
         let url = request.url?.absoluteString ?? "Unknown URL"
 
-        var logMessage = "\(method) \(url)"
+        var logMessage = "→ \(method) \(url)"
 
         if let headers = request.allHTTPHeaderFields, !headers.isEmpty {
             // Redact sensitive headers
@@ -114,7 +118,11 @@ final class Logger: @unchecked Sendable {
     }
 
     func logNetworkResponse(_ response: URLResponse?, data: Data?, error: Error?) {
+        #if DEBUG
+        // Always log in debug mode
+        #else
         guard UserDefaults.standard.bool(forKey: "LOGGING_ENABLED") else { return }
+        #endif
 
         if let httpResponse = response as? HTTPURLResponse {
             let statusCode = httpResponse.statusCode
@@ -150,17 +158,19 @@ final class Logger: @unchecked Sendable {
     // MARK: - Private Methods
 
     private func log(_ message: String, level: LogLevel, category: LogCategory, file: String, function: String, line: Int) {
+        // Always log in DEBUG builds, check preference in RELEASE
+        #if DEBUG
+        // Always log in debug mode
+        #else
         guard UserDefaults.standard.bool(forKey: "LOGGING_ENABLED") else { return }
+        #endif
 
         let filename = URL(fileURLWithPath: file).lastPathComponent
-        let timestamp = dateFormatter.string(from: Date())
 
-        let formattedMessage = "\(level.prefix) [\(timestamp)] [\(category.rawValue)] \(filename):\(line) - \(function) - \(message)"
+        let formattedMessage = "\(level.prefix) [\(category.rawValue)] \(filename):\(line) - \(function) - \(message)"
 
-        // Log to console in debug builds
-        #if DEBUG
+        // Log to console
         print(formattedMessage)
-        #endif
 
         // Log to system log
         if let logger = loggers[category] {

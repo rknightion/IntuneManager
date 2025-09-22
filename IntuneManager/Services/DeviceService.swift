@@ -41,7 +41,7 @@ final class DeviceService: ObservableObject {
         do {
             let endpoint = "/deviceManagement/managedDevices"
             let parameters = [
-                "$select": "id,deviceName,model,manufacturer,operatingSystem,osVersion,serialNumber,enrolledDateTime,lastSyncDateTime,complianceState,managementState,ownership,userPrincipalName,userDisplayName,isEncrypted,isSupervised",
+                "$select": "id,deviceName,model,manufacturer,operatingSystem,osVersion,serialNumber,enrolledDateTime,lastSyncDateTime,complianceState,managementState,managedDeviceOwnerType,userPrincipalName,userDisplayName,isEncrypted,isSupervised",
                 "$orderby": "deviceName",
                 "$filter": "operatingSystem eq 'macOS' or operatingSystem eq 'iOS' or operatingSystem eq 'iPadOS'"
             ]

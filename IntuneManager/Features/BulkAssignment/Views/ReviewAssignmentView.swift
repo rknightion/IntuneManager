@@ -16,13 +16,33 @@ struct ReviewAssignmentView: View {
                 // Selected Applications
                 SectionView(title: "Selected Applications (\(summary.applicationCount))") {
                     ForEach(Array(viewModel.selectedApplications), id: \.id) { app in
-                        HStack {
-                            Text(app.displayName)
-                                .lineLimit(1)
-                            Spacer()
-                            Text("→ \(summary.groupCount) groups")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(app.displayName)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text("→ \(summary.groupCount) groups")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            HStack(spacing: 8) {
+                                Label(app.appType.displayName, systemImage: app.appType.icon)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+
+                                if let version = app.version, !version.isEmpty {
+                                    Text("v\(version)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                if let publisher = app.publisher, !publisher.isEmpty {
+                                    Text(publisher)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
                         }
                         .padding(.vertical, 4)
                     }

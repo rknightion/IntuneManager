@@ -26,12 +26,16 @@ final class ApplicationService: ObservableObject {
     // MARK: - Public Methods
 
     func fetchApplications(forceRefresh: Bool = false) async throws -> [Application] {
+        Logger.shared.info("Fetching applications (forceRefresh: \(forceRefresh))", category: .data)
+
         if !forceRefresh {
             let cached = dataStore.fetchApplications()
             if !cached.isEmpty {
+                Logger.shared.info("Using cached applications: \(cached.count) items", category: .data)
                 applications = cached
                 return cached
             }
+            Logger.shared.info("No cached applications found, fetching from API", category: .data)
         }
 
         isLoading = true
@@ -42,34 +46,44 @@ final class ApplicationService: ObservableObject {
             let parameters = [
                 "$expand": "assignments",
                 "$orderby": "displayName",
-                "$filter": "isAssigned eq true"
+                "$top": "999"  // Request maximum apps per page to reduce pagination
+                // Removed filter - now fetching ALL apps to enable assignment of unassigned apps
             ]
 
-            let fetchedApps: [Application] = try await apiClient.getAllPagesForModels(endpoint, parameters: parameters)
+            Logger.shared.info("Requesting applications from Graph API with pagination support...", category: .network)
+            Logger.shared.info("API endpoint: \(endpoint)", category: .network)
+            Logger.shared.info("Parameters: \(parameters)", category: .network)
 
-            // Filter for macOS, iOS, and iPadOS apps
-            let filteredApps = fetchedApps.filter { app in
-                switch app.appType {
-                case .macOS, .iOS, .macOSLobApp, .iosLobApp, .iosVppApp, .macOSVppApp,
-                     .managedIOSStoreApp, .managedMacOSStoreApp, .macOSOfficeSuiteApp,
-                     .macOSPkgApp, .macOSDmgApp:
-                    return true
-                default:
-                    return false
-                }
+            let fetchedApps: [Application] = try await apiClient.getAllPagesForModels(endpoint, parameters: parameters)
+            Logger.shared.info("Received \(fetchedApps.count) total apps from API after pagination", category: .data)
+
+            // Log app type distribution for debugging
+            let appTypeGroups = Dictionary(grouping: fetchedApps, by: { $0.appType })
+            Logger.shared.info("=== App Type Distribution ===", category: .data)
+            for (type, apps) in appTypeGroups.sorted(by: { $0.value.count > $1.value.count }) {
+                Logger.shared.info("  \(type.displayName) (\(type.rawValue)): \(apps.count) apps", category: .data)
+                // Log first few app names of each type for debugging
+                let sampleApps = apps.prefix(3).map { $0.displayName }.joined(separator: ", ")
+                Logger.shared.debug("    Sample: \(sampleApps)", category: .data)
             }
+            Logger.shared.info("=== End Distribution ===", category: .data)
+
+            // Don't filter ANY apps - show everything to the user
+            // Users need to see all apps to properly manage assignments
+            let filteredApps = fetchedApps
+
+            Logger.shared.info("Total apps available: \(filteredApps.count)", category: .data)
 
             self.applications = filteredApps
             self.lastSync = Date()
 
             dataStore.replaceApplications(with: filteredApps)
-
-            Logger.shared.info("Fetched \(filteredApps.count) applications from Graph API")
+            Logger.shared.info("Stored \(filteredApps.count) applications in cache", category: .data)
 
             return filteredApps
         } catch {
             self.error = error
-            Logger.shared.error("Failed to fetch applications: \(error)")
+            Logger.shared.error("Failed to fetch applications: \(error.localizedDescription)", category: .data)
             throw error
         }
     }

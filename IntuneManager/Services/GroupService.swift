@@ -37,12 +37,16 @@ final class GroupService: ObservableObject {
     // MARK: - Public Methods
 
     func fetchGroups(forceRefresh: Bool = false) async throws -> [DeviceGroup] {
+        Logger.shared.info("Fetching groups (forceRefresh: \(forceRefresh))", category: .data)
+
         if !forceRefresh {
             let cached = dataStore.fetchGroups()
             if !cached.isEmpty {
+                Logger.shared.info("Using cached groups: \(cached.count) items", category: .data)
                 groups = cached
                 return cached
             }
+            Logger.shared.info("No cached groups found, fetching from API", category: .data)
         }
 
         isLoading = true
@@ -59,7 +63,9 @@ final class GroupService: ObservableObject {
 
             let headers = ["ConsistencyLevel": "eventual"]
 
+            Logger.shared.info("Requesting groups from Graph API...", category: .network)
             let fetchedGroups: [DeviceGroup] = try await apiClient.getAllPagesForModels(endpoint, parameters: parameters, headers: headers)
+            Logger.shared.info("Received \(fetchedGroups.count) groups from API", category: .data)
 
             // Filter for groups that can be used for device assignment
             let filteredGroups = fetchedGroups.filter { group in
@@ -67,20 +73,22 @@ final class GroupService: ObservableObject {
                 group.securityEnabled || group.isDynamicGroup
             }
 
+            Logger.shared.info("Filtered to \(filteredGroups.count) assignable groups", category: .data)
+
             self.groups = filteredGroups
             self.lastSync = Date()
 
             // Fetch member counts for each group asynchronously
+            Logger.shared.info("Fetching member counts for groups...", category: .data)
             await fetchMemberCounts(for: filteredGroups)
 
             dataStore.replaceGroups(with: filteredGroups)
-
-            Logger.shared.info("Fetched \(filteredGroups.count) groups from Graph API")
+            Logger.shared.info("Stored \(filteredGroups.count) groups in cache", category: .data)
 
             return filteredGroups
         } catch {
             self.error = error
-            Logger.shared.error("Failed to fetch groups: \(error)")
+            Logger.shared.error("Failed to fetch groups: \(error.localizedDescription)", category: .data)
             throw error
         }
     }

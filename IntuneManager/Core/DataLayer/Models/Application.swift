@@ -60,6 +60,14 @@ final class Application: Identifiable, Codable {
         case webApp
         case macOSPkgApp
         case macOSDmgApp
+        case iosStoreApp
+        case androidStoreApp
+        case androidManagedStoreApp
+        case windowsMobileMSI
+        case winAppX
+        case win32LobApp
+        case microsoftEdgeApp
+        case unknown  // For any unrecognized app types
 
         var displayName: String {
             switch self {
@@ -75,6 +83,14 @@ final class Application: Identifiable, Codable {
             case .webApp: return "Web App"
             case .macOSPkgApp: return "macOS PKG"
             case .macOSDmgApp: return "macOS DMG"
+            case .iosStoreApp: return "iOS Store"
+            case .androidStoreApp: return "Android Store"
+            case .androidManagedStoreApp: return "Android Managed Store"
+            case .windowsMobileMSI: return "Windows Mobile MSI"
+            case .winAppX: return "Windows AppX"
+            case .win32LobApp: return "Windows Win32"
+            case .microsoftEdgeApp: return "Microsoft Edge"
+            case .unknown: return "Unknown"
             }
         }
 
@@ -82,26 +98,55 @@ final class Application: Identifiable, Codable {
             switch self {
             case .macOS, .macOSLobApp, .macOSVppApp, .managedMacOSStoreApp, .macOSOfficeSuiteApp, .macOSPkgApp, .macOSDmgApp:
                 return "desktopcomputer"
-            case .iOS, .iosLobApp, .iosVppApp, .managedIOSStoreApp:
+            case .iOS, .iosLobApp, .iosVppApp, .managedIOSStoreApp, .iosStoreApp:
                 return "iphone"
             case .webApp:
                 return "globe"
+            case .androidStoreApp, .androidManagedStoreApp:
+                return "phone"
+            case .windowsMobileMSI, .winAppX, .win32LobApp:
+                return "pc"
+            case .microsoftEdgeApp:
+                return "network"
+            case .unknown:
+                return "questionmark.app"
             }
         }
 
-        init?(odataType: String) {
+        init(odataType: String) {
             let sanitized = AppType.sanitizedType(from: odataType)
 
-            switch sanitized {
-            case "macOSApp":
-                self = .macOS
-            case "iosStoreApp":
-                self = .iOS
-            default:
-                guard let value = AppType(rawValue: sanitized) else {
-                    return nil
-                }
+            Logger.shared.debug("Processing app type: '\(odataType)' -> sanitized: '\(sanitized)'", category: .data)
+
+            // Try direct mapping first
+            if let value = AppType(rawValue: sanitized) {
                 self = value
+                return
+            }
+
+            // Handle special cases and variations
+            switch sanitized {
+            case "macOSApp", "macOSApplication":
+                self = .macOS
+            case "iosApp", "iosApplication":
+                self = .iOS
+            case "iosStoreApp":
+                self = .iosStoreApp
+            case "iosVppApp":
+                self = .iosVppApp
+            case "macOSVppApp":
+                self = .macOSVppApp
+            case "managedIOSStoreApp":
+                self = .managedIOSStoreApp
+            case "managedMacOSStoreApp":
+                self = .managedMacOSStoreApp
+            case "macOSLobApp":
+                self = .macOSLobApp
+            case "iosLobApp":
+                self = .iosLobApp
+            default:
+                Logger.shared.warning("Unknown application type encountered: '\(odataType)' (sanitized: '\(sanitized)'). Using 'unknown'.", category: .data)
+                self = .unknown
             }
         }
 
@@ -255,14 +300,10 @@ final class Application: Identifiable, Codable {
         publishingState = try container.decodeIfPresent(PublishingState.self, forKey: .publishingState) ?? .notPublished
 
         if let rawType = try container.decodeIfPresent(String.self, forKey: .rawAppType) {
-            if let resolvedType = AppType(odataType: rawType) {
-                appType = resolvedType
-            } else {
-                Logger.shared.warning("Unknown application type encountered: \(rawType)")
-                appType = .macOS
-            }
+            appType = AppType(odataType: rawType)
         } else {
-            appType = .macOS
+            Logger.shared.warning("No @odata.type found for application. Using 'unknown'.", category: .data)
+            appType = .unknown
         }
         version = try container.decodeIfPresent(String.self, forKey: .version)
         fileName = try container.decodeIfPresent(String.self, forKey: .fileName)
@@ -307,6 +348,56 @@ final class Application: Identifiable, Codable {
         try container.encode(ignoreVersionDetection, forKey: .ignoreVersionDetection)
         try container.encodeIfPresent(assignments, forKey: .assignments)
         try container.encodeIfPresent(installSummary, forKey: .installSummary)
+    }
+
+    // MARK: - Computed Properties for Assignment Info
+
+    var assignmentCount: Int {
+        assignments?.count ?? 0
+    }
+
+    var hasAssignments: Bool {
+        assignmentCount > 0
+    }
+
+    var isAssigned: Bool {
+        hasAssignments
+    }
+
+    var assignmentSummary: String {
+        guard let assignments = assignments, !assignments.isEmpty else {
+            return "No assignments"
+        }
+
+        let groupCount = assignments.filter { assignment in
+            assignment.target.type == .group || assignment.target.type == .exclusionGroup
+        }.count
+
+        let allUsersCount = assignments.filter { $0.target.type == .allUsers || $0.target.type == .allLicensedUsers }.count
+        let allDevicesCount = assignments.filter { $0.target.type == .allDevices }.count
+
+        var parts: [String] = []
+        if groupCount > 0 {
+            parts.append("\(groupCount) group\(groupCount == 1 ? "" : "s")")
+        }
+        if allUsersCount > 0 {
+            parts.append("All users")
+        }
+        if allDevicesCount > 0 {
+            parts.append("All devices")
+        }
+
+        return parts.joined(separator: ", ")
+    }
+
+    var primaryAssignmentIntent: AppAssignment.AssignmentIntent? {
+        // Return the most restrictive intent (required > available)
+        if assignments?.contains(where: { $0.intent == .required }) == true {
+            return .required
+        } else if assignments?.contains(where: { $0.intent == .available }) == true {
+            return .available
+        }
+        return nil
     }
 }
 
@@ -381,6 +472,15 @@ struct AppAssignment: Codable, Identifiable, Sendable {
                     return "Exclusion Group"
                 case .configurationManagerCollection:
                     return "Configuration Manager Collection"
+                }
+            }
+
+            var requiresGroupId: Bool {
+                switch self {
+                case .group, .exclusionGroup, .configurationManagerCollection:
+                    return true
+                case .allUsers, .allLicensedUsers, .allDevices:
+                    return false
                 }
             }
         }

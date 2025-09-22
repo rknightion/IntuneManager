@@ -8,6 +8,7 @@ final class Assignment: Identifiable, Codable {
     var applicationName: String
     var groupId: String
     var groupName: String
+    var targetType: AppAssignment.AssignmentTarget.TargetType
     var intent: AssignmentIntent
     var status: AssignmentStatus
     var createdDate: Date
@@ -166,6 +167,7 @@ final class Assignment: Identifiable, Codable {
          applicationName: String,
          groupId: String,
          groupName: String,
+         targetType: AppAssignment.AssignmentTarget.TargetType = .group,
          intent: AssignmentIntent,
          status: AssignmentStatus = .pending,
          priority: AssignmentPriority = .normal) {
@@ -174,6 +176,7 @@ final class Assignment: Identifiable, Codable {
         self.applicationName = applicationName
         self.groupId = groupId
         self.groupName = groupName
+        self.targetType = targetType
         self.intent = intent
         self.status = status
         self.priority = priority
@@ -189,6 +192,7 @@ final class Assignment: Identifiable, Codable {
         case applicationName
         case groupId
         case groupName
+        case targetType
         case intent
         case status
         case createdDate
@@ -212,6 +216,7 @@ final class Assignment: Identifiable, Codable {
         applicationName = try container.decode(String.self, forKey: .applicationName)
         groupId = try container.decode(String.self, forKey: .groupId)
         groupName = try container.decode(String.self, forKey: .groupName)
+        targetType = try container.decodeIfPresent(AppAssignment.AssignmentTarget.TargetType.self, forKey: .targetType) ?? .group
         intent = try container.decode(AssignmentIntent.self, forKey: .intent)
         status = try container.decode(AssignmentStatus.self, forKey: .status)
         createdDate = try container.decode(Date.self, forKey: .createdDate)
@@ -235,6 +240,7 @@ final class Assignment: Identifiable, Codable {
         try container.encode(applicationName, forKey: .applicationName)
         try container.encode(groupId, forKey: .groupId)
         try container.encode(groupName, forKey: .groupName)
+        try container.encode(targetType, forKey: .targetType)
         try container.encode(intent, forKey: .intent)
         try container.encode(status, forKey: .status)
         try container.encode(createdDate, forKey: .createdDate)
@@ -286,6 +292,7 @@ struct BulkAssignmentOperation: Identifiable {
                     applicationName: app.displayName,
                     groupId: group.id,
                     groupName: group.displayName,
+                    targetType: group.assignmentTargetType,
                     intent: intent
                 )
                 assignment.batchId = id

@@ -20,7 +20,7 @@ struct UnifiedContentView: View {
                 } message: {
                     Text(errorMessage)
                 }
-                .onReceive(authManager.$authenticationError) { error in
+                .onChange(of: authManager.authenticationError) { _, error in
                     if let error = error {
                         handleAuthError(error)
                     }
@@ -106,16 +106,22 @@ struct UnifiedContentView: View {
         switch tab {
         case .dashboard:
             DashboardView()
+                .onAppear { Logger.shared.info("Navigated to Dashboard", category: .ui) }
         case .devices:
             DeviceListView()
+                .onAppear { Logger.shared.info("Navigated to Devices", category: .ui) }
         case .applications:
             ApplicationListView()
+                .onAppear { Logger.shared.info("Navigated to Applications", category: .ui) }
         case .groups:
             GroupListView()
+                .onAppear { Logger.shared.info("Navigated to Groups", category: .ui) }
         case .assignments:
             BulkAssignmentView()
+                .onAppear { Logger.shared.info("Navigated to Bulk Assignments", category: .ui) }
         case .settings:
             SettingsView()
+                .onAppear { Logger.shared.info("Navigated to Settings", category: .ui) }
         }
     }
 }
@@ -274,24 +280,40 @@ struct UnifiedSidebarView: View {
     }
 
     private func signOut() {
+        Logger.shared.info("User initiated sign out", category: .auth)
         Task {
             await authManager.signOut()
+            Logger.shared.info("Sign out completed", category: .auth)
         }
     }
 
     private func refresh() {
+        Logger.shared.info("User initiated refresh all", category: .ui)
         Task {
             await appState.syncAll()
+            Logger.shared.info("Refresh all completed", category: .sync)
         }
     }
 
     private func clearCache() {
+        Logger.shared.info("User initiated cache clear", category: .data)
+
+        // Clear in-memory data FIRST to avoid accessing detached objects
+        DeviceService.shared.devices = []
+        ApplicationService.shared.applications = []
+        GroupService.shared.groups = []
+        AssignmentService.shared.assignmentHistory = []
+
+        // Then clear the persistent store
         LocalDataStore.shared.reset()
+
+        // Finally reload from the (now empty) store
         DeviceService.shared.hydrateFromStore()
         ApplicationService.shared.hydrateFromStore()
         GroupService.shared.hydrateFromStore()
-        AssignmentService.shared.assignmentHistory = []
+
         PlatformHaptics.trigger(.success)
+        Logger.shared.info("Cache cleared successfully", category: .data)
     }
 
     #if os(macOS)
