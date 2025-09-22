@@ -336,12 +336,14 @@ struct ApplicationSelectionView: View {
                 .padding(.horizontal)
             }
         }
-        .task {
-            if appService.applications.isEmpty {
-                do {
-                    _ = try await appService.fetchApplications()
-                } catch {
-                    Logger.shared.error("Failed to load applications: \(error)")
+        .onAppear {
+            Task {
+                if appService.applications.isEmpty {
+                    do {
+                        _ = try await appService.fetchApplications()
+                    } catch {
+                        Logger.shared.error("Failed to load applications: \(error)")
+                    }
                 }
             }
         }

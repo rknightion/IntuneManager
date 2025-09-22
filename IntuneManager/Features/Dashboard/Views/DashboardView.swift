@@ -52,8 +52,10 @@ struct DashboardView: View {
             .padding()
         }
         .navigationTitle("Dashboard")
-        .task {
-            await loadDashboardData()
+        .onAppear {
+            Task {
+                await loadDashboardData()
+            }
         }
     }
 

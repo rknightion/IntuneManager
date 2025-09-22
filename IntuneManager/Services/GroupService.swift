@@ -249,10 +249,25 @@ final class GroupService: ObservableObject {
 
     private func fetchMemberCount(groupId: String) async throws -> Int {
         let endpoint = "/groups/\(groupId)/members/$count"
-        let headers = ["ConsistencyLevel": "eventual"]
+        let headers = [
+            "ConsistencyLevel": "eventual",
+            "Accept": "text/plain"
+        ]
 
-        let response: CountResponse = try await apiClient.getModel(endpoint, headers: headers)
-        return response.value
+        // Use raw data request since count endpoint returns plain text integer
+        let request = try await apiClient.buildCountRequest(
+            endpoint: endpoint,
+            headers: headers
+        )
+
+        let data = try await apiClient.performRawRequest(request)
+
+        guard let countString = String(data: data, encoding: .utf8),
+              let count = Int(countString.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            throw GraphAPIError.invalidResponse
+        }
+
+        return count
     }
 
     func hydrateFromStore() {

@@ -197,6 +197,22 @@ actor GraphAPIClient {
         return responseBody.responses
     }
 
+    // MARK: - Public Helper Methods for Special Cases
+
+    func buildCountRequest(endpoint: String,
+                           headers: [String: String]? = nil) async throws -> URLRequest {
+        return try await buildRequest(
+            endpoint: endpoint,
+            method: "GET",
+            parameters: nil,
+            headers: headers
+        )
+    }
+
+    func performRawRequest(_ request: URLRequest) async throws -> Data {
+        return try await performDataRequest(request)
+    }
+
     // MARK: - Private Methods
 
     private func buildRequest<T: Encodable>(endpoint: String,

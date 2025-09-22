@@ -17,11 +17,13 @@ struct ApplicationListView: View {
             }
         }
         .navigationTitle("Applications")
-        .task {
-            do {
-                _ = try await appService.fetchApplications()
-            } catch {
-                Logger.shared.error("Failed to load applications: \(error)")
+        .onAppear {
+            Task {
+                do {
+                    _ = try await appService.fetchApplications()
+                } catch {
+                    Logger.shared.error("Failed to load applications: \(error)")
+                }
             }
         }
     }

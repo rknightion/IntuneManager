@@ -140,6 +140,26 @@ final class Application: Identifiable, Codable {
             self.iPhoneAndIPod = iPhoneAndIPod
             self.mac = mac
         }
+
+        enum CodingKeys: String, CodingKey {
+            case iPad
+            case iPhoneAndIPod
+            case mac
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            iPad = try container.decodeIfPresent(Bool.self, forKey: .iPad) ?? false
+            iPhoneAndIPod = try container.decodeIfPresent(Bool.self, forKey: .iPhoneAndIPod) ?? false
+            mac = try container.decodeIfPresent(Bool.self, forKey: .mac) ?? false
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(iPad, forKey: .iPad)
+            try container.encode(iPhoneAndIPod, forKey: .iPhoneAndIPod)
+            try container.encode(mac, forKey: .mac)
+        }
     }
 
     struct InstallSummary: Codable, Sendable {
@@ -331,11 +351,38 @@ struct AppAssignment: Codable, Identifiable, Sendable {
         let deviceAndAppManagementAssignmentFilterId: String?
         let deviceAndAppManagementAssignmentFilterType: String?
 
+        enum CodingKeys: String, CodingKey {
+            case type = "@odata.type"
+            case groupId
+            case groupName
+            case deviceAndAppManagementAssignmentFilterId
+            case deviceAndAppManagementAssignmentFilterType
+        }
+
         enum TargetType: String, Codable, Sendable {
-            case allUsers = "@odata.type#microsoft.graph.allUsersAssignmentTarget"
-            case allDevices = "@odata.type#microsoft.graph.allDevicesAssignmentTarget"
-            case group = "@odata.type#microsoft.graph.groupAssignmentTarget"
-            case exclusionGroup = "@odata.type#microsoft.graph.exclusionGroupAssignmentTarget"
+            case allUsers = "#microsoft.graph.allUsersAssignmentTarget"
+            case allLicensedUsers = "#microsoft.graph.allLicensedUsersAssignmentTarget"
+            case allDevices = "#microsoft.graph.allDevicesAssignmentTarget"
+            case group = "#microsoft.graph.groupAssignmentTarget"
+            case exclusionGroup = "#microsoft.graph.exclusionGroupAssignmentTarget"
+            case configurationManagerCollection = "#microsoft.graph.configurationManagerCollectionAssignmentTarget"
+
+            var displayName: String {
+                switch self {
+                case .allUsers:
+                    return "All Users"
+                case .allLicensedUsers:
+                    return "All Licensed Users"
+                case .allDevices:
+                    return "All Devices"
+                case .group:
+                    return "Group"
+                case .exclusionGroup:
+                    return "Exclusion Group"
+                case .configurationManagerCollection:
+                    return "Configuration Manager Collection"
+                }
+            }
         }
     }
 

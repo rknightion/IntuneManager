@@ -81,12 +81,14 @@ struct GroupSelectionView: View {
                 .padding(.horizontal)
             }
         }
-        .task {
-            if groupService.groups.isEmpty {
-                do {
-                    _ = try await groupService.fetchGroups()
-                } catch {
-                    Logger.shared.error("Failed to load groups: \(error)")
+        .onAppear {
+            Task {
+                if groupService.groups.isEmpty {
+                    do {
+                        _ = try await groupService.fetchGroups()
+                    } catch {
+                        Logger.shared.error("Failed to load groups: \(error)")
+                    }
                 }
             }
         }

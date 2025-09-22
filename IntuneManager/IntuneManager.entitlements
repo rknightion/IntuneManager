@@ -2,24 +2,19 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- macOS App Sandbox -->
-    <key>com.apple.security.app-sandbox</key>
-    <true/>
-
-    <!-- Network Access -->
-    <!-- Allow outgoing connections (required for Microsoft Graph API and OAuth) -->
-    <key>com.apple.security.network.client</key>
-    <true/>
-
-    <!-- Allow incoming connections (for OAuth redirect handling) -->
-    <key>com.apple.security.network.server</key>
-    <true/>
-
-    <!-- File Access (for potential export features) -->
-    <key>com.apple.security.files.user-selected.read-write</key>
-    <true/>
-
-    <!-- Keychain Access REMOVED - Using in-memory token storage only -->
-    <!-- Removed to avoid sandboxed app keychain permission issues (errSecMissingEntitlement -34018) -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
+	<true/>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.m7kni.io.IntuneManager</string>
+		<string>$(AppIdentifierPrefix)com.microsoft.adalcache</string>
+		<string>$(AppIdentifierPrefix)com.microsoft.identity.universalstorage</string>
+	</array>
 </dict>
 </plist>

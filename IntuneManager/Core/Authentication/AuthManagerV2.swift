@@ -64,16 +64,10 @@ class AuthManagerV2: ObservableObject {
             // Configure for public client (no secret)
             msalConfig.clientApplicationCapabilities = ["CP1"] // Claims challenge capability
 
-            // Configure token cache for sandboxed app
+            // Configure keychain for token storage
             #if os(macOS)
-            // For sandboxed macOS apps, we need a workaround for keychain access issues
-            // The -34018 errSecMissingEntitlement error occurs when accessing shared keychains
-
-            // WORKAROUND: Don't set keychainSharingGroup at all on macOS
-            // This makes MSAL default to using the login keychain with fallback to in-memory
-            // When keychain access fails (which it will in sandbox), MSAL uses in-memory cache
-            Logger.shared.info("Keychain group not set - MSAL will use in-memory cache when keychain fails")
-            Logger.shared.info("Note: Tokens won't persist between app launches in sandboxed mode")
+            // macOS uses default keychain configuration
+            Logger.shared.info("Using default keychain configuration for macOS")
             #else
             // iOS can use keychain normally
             if let bundleIdentifier = Bundle.main.bundleIdentifier {
@@ -123,14 +117,7 @@ class AuthManagerV2: ObservableObject {
                 // Attempt silent token acquisition
                 _ = try? await acquireTokenSilently()
             }
-        } catch let error as NSError {
-            #if os(macOS)
-            if error.code == -34018 { // errSecMissingEntitlement
-                Logger.shared.info("Keychain access unavailable in sandbox - fresh authentication required")
-                // Don't throw, just continue without cached account
-                return
-            }
-            #endif
+        } catch {
             Logger.shared.info("No cached accounts found: \(error)")
         }
     }
@@ -268,18 +255,6 @@ class AuthManagerV2: ObservableObject {
             return result.accessToken
 
         } catch let error as NSError {
-            // Handle keychain access errors specifically for macOS sandbox
-            #if os(macOS)
-            if error.code == -34018 { // errSecMissingEntitlement
-                Logger.shared.warning("Keychain access failed in sandbox - triggering re-authentication")
-                // Clear the current account to force fresh auth
-                currentAccount = nil
-                isAuthenticated = false
-                // Throw interaction required to trigger login
-                throw AuthError.interactionRequired
-            }
-            #endif
-
             // Check if interaction is required
             if error.domain == MSALErrorDomain,
                let errorCode = MSALError(rawValue: error.code),

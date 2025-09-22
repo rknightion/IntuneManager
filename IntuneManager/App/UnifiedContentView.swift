@@ -5,12 +5,52 @@ struct UnifiedContentView: View {
     @EnvironmentObject var authManager: AuthManagerV2
     @EnvironmentObject var appState: AppState
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
 
     var body: some View {
         if authManager.isAuthenticated {
             authenticatedView
         } else {
             UnifiedLoginView()
+                .alert("Authentication Error", isPresented: $showingErrorAlert) {
+                    Button("OK") {
+                        showingErrorAlert = false
+                    }
+                } message: {
+                    Text(errorMessage)
+                }
+                .onReceive(authManager.$authenticationError) { error in
+                    if let error = error {
+                        handleAuthError(error)
+                    }
+                }
+        }
+    }
+
+    private func handleAuthError(_ error: AuthError) {
+        switch error {
+        case .tokenAcquisitionFailed(let error):
+            if let nsError = error as NSError?, nsError.code == -34018 {
+                errorMessage = """
+                ⚠️ Keychain Access Error (-34018)
+
+                The app cannot access the keychain in sandbox mode.
+                This is a known issue with MSAL and sandboxed macOS apps.
+
+                Error: \(nsError.localizedDescription)
+
+                The app requires authentication to function properly.
+                Please disable the sandbox or grant keychain entitlements.
+                """
+                showingErrorAlert = true
+            } else {
+                errorMessage = "Failed to acquire token: \(error.localizedDescription)"
+                showingErrorAlert = true
+            }
+        default:
+            errorMessage = error.localizedDescription
+            showingErrorAlert = true
         }
     }
     @ViewBuilder
@@ -149,11 +189,13 @@ struct UnifiedSidebarView: View {
                 Button {
                     selection = tab
                 } label: {
-                    Label(tab.rawValue, systemImage: tab.systemImage)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .padding(.vertical, 4)
-                        .foregroundColor(selection == tab ? .accentColor : .primary)
+                    HStack {
+                        Label(tab.rawValue, systemImage: tab.systemImage)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                    .padding(.vertical, 4)
+                    .foregroundColor(selection == tab ? .accentColor : .primary)
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(selection == tab ? Color.accentColor.opacity(0.15) : Color.clear)
@@ -279,7 +321,6 @@ struct UnifiedLoginView: View {
             }
             .padding(32)
             .frame(maxWidth: 520)
-            .frame(maxWidth: .infinity)
             .platformGlassBackground(cornerRadius: 30)
             .padding(.horizontal)
             .padding(.top, 80)
