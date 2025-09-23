@@ -1,8 +1,3 @@
-# Unit Test Playbook
-
-## Scope
-- Applies to `IntuneManagerTests/`. Use alongside root guidance on verification.
-
 ## Organization
 - Mirror the source tree: `Core` helpers → `*Tests.swift`, feature view models → `<Feature>Tests.swift`.
 - Keep filenames suffixed with `Tests.swift` so Xcode discovers them automatically.

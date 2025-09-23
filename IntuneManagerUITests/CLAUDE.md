@@ -1,8 +1,5 @@
 # UI Test Guidance
 
-## Scope
-- Applies to `IntuneManagerUITests/`. Follow this after the global build/test rules.
-
 ## Strategy
 - Target the primary cross-platform flows: authentication shell, sidebar/tab navigation, critical workflows (device search, assignment wizard).
 - Keep scenarios platform-agnostic when possible by using accessibility identifiers rather than positional queries.

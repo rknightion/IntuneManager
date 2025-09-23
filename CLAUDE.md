@@ -1,9 +1,9 @@
 # Claude Operator Guide
 
 ## Read Me First
-- Load this file before touching the codebase and then consult each directory's own `CLAUDE.md` as you descend; guidance compounds, it does not repeat.
-- Review `AGENTS.md` for broad repository expectations; this guide adds Claude-specific workflow and guardrails.
-- Work transparently: call out assumptions, cite the files you inspected, and prefer incremental changes with clear reasoning.
+- Follow any direct instructions within this file as you edit. Ensure this file and any relevant CLAUDE.md files in sub directories is kept up to date as the project evolves with any significant architecture changes or new best practices introduced but do not update this file for every minor change only significant ones that would be useful for a future LLMs context
+- Work transparently: call out assumptions, and prefer incremental changes with clear reasoning.
+- Use context7 MCP server when searching for library documentation. Use context7 library ID 'microsoftgraph/microsoft-graph-docs-contrib' for all information about the microsoft graph API. Search there first for any required information before doing generic web searches but also you should verify context obtained from context7 with web searches where you are not confident of a result
 
 ## Non-Negotiable Rules
 - Never run git commands that mutate history or remotes (`git commit`, `git push`, `git reset --hard`, etc.). Local diff inspection (`git status`, `git diff`) is fine.
@@ -48,7 +48,3 @@ Data flows from the Microsoft Graph through `GraphAPIClient` → rate-limited ba
 - Expand the XCTest suite whenever you add new service logic, models, or complex UI state; place files under mirrors of the source path and suffix them with `Tests.swift`.
 - Use `xcodebuild test` destinations that match the platform you touched (macOS for shared logic, add iOS simulator for iOS-only changes). Summarize results in your final message.
 - For diagnostics and migrations, prefer targeted utility scripts over modifying production code paths.
-
-## Navigation to Sub-Guides
-- `IntuneManager/CLAUDE.md` dives into module-level conventions.
-- Each major subdirectory (`Core`, `Features`, `Services`, tests) provides additional, non-duplicated guardrails. Read them when you enter those folders.
