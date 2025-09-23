@@ -42,8 +42,8 @@ final class DeviceService: ObservableObject {
             let endpoint = "/deviceManagement/managedDevices"
             let parameters = [
                 "$select": "id,deviceName,model,manufacturer,operatingSystem,osVersion,serialNumber,enrolledDateTime,lastSyncDateTime,complianceState,managementState,managedDeviceOwnerType,userPrincipalName,userDisplayName,isEncrypted,isSupervised",
-                "$orderby": "deviceName",
-                "$filter": "operatingSystem eq 'macOS' or operatingSystem eq 'iOS' or operatingSystem eq 'iPadOS'"
+                "$orderby": "deviceName"
+                // Removed filter to get ALL device types including Windows, Android, etc.
             ]
 
             let fetchedDevices: [Device] = try await apiClient.getAllPagesForModels(endpoint, parameters: parameters)

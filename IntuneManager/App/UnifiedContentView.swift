@@ -22,7 +22,10 @@ struct UnifiedContentView: View {
                 }
                 .onChange(of: authManager.authenticationError) { _, error in
                     if let error = error {
-                        handleAuthError(error)
+                        // Delay to avoid state change during view update
+                        DispatchQueue.main.async {
+                            handleAuthError(error)
+                        }
                     }
                 }
         }
@@ -119,6 +122,9 @@ struct UnifiedContentView: View {
         case .assignments:
             BulkAssignmentView()
                 .onAppear { Logger.shared.info("Navigated to Bulk Assignments", category: .ui) }
+        case .reports:
+            ReportsView()
+                .onAppear { Logger.shared.info("Navigated to Reports", category: .ui) }
         case .settings:
             SettingsView()
                 .onAppear { Logger.shared.info("Navigated to Settings", category: .ui) }
@@ -180,7 +186,7 @@ struct UnifiedSidebarView: View {
     @ViewBuilder
     private var navigationSectionMac: some View {
         Section("Navigation") {
-            ForEach(AppState.Tab.allCases, id: \.self) { tab in
+            ForEach(AppState.Tab.allCases.filter { $0 != .settings }, id: \.self) { tab in
                 NavigationLink(value: tab) {
                     Label(tab.rawValue, systemImage: tab.systemImage)
                 }
@@ -191,7 +197,7 @@ struct UnifiedSidebarView: View {
     @ViewBuilder
     private var navigationSectionIOS: some View {
         Section("Navigation") {
-            ForEach(AppState.Tab.allCases, id: \.self) { tab in
+            ForEach(AppState.Tab.allCases.filter { $0 != .settings }, id: \.self) { tab in
                 Button {
                     selection = tab
                 } label: {
@@ -250,12 +256,15 @@ struct UnifiedSidebarView: View {
                 .padding(.vertical, 4)
             }
 
-            Button(action: { showingSettings = true }) {
+            Button(action: {
+                selection = .settings
+                // On iOS, we need to dismiss the sheet if it's shown
+                #if os(iOS)
+                showingSettings = false
+                showingConfiguration = false
+                #endif
+            }) {
                 Label("Settings", systemImage: "gearshape")
-            }
-
-            Button(action: { showingConfiguration = true }) {
-                Label("Reconfigure", systemImage: "wrench.and.screwdriver")
             }
 
             Button(action: signOut) {

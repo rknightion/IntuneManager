@@ -42,12 +42,6 @@ struct DashboardView: View {
                     PlatformDistributionView(devices: deviceService.devices)
                 }
                 .frame(height: 300)
-
-                // Recent Activity
-                RecentActivitySection(assignments: assignmentService.assignmentHistory)
-
-                // Quick Actions
-                QuickActionsSection()
             }
             .padding()
         }
@@ -60,9 +54,18 @@ struct DashboardView: View {
     }
 
     private func loadDashboardData() async {
-        _ = try? await deviceService.fetchDevices()
-        _ = try? await appService.fetchApplications()
-        _ = try? await groupService.fetchGroups()
+        // Use Task to avoid state updates during view rendering
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                _ = try? await self.deviceService.fetchDevices()
+            }
+            group.addTask {
+                _ = try? await self.appService.fetchApplications()
+            }
+            group.addTask {
+                _ = try? await self.groupService.fetchGroups()
+            }
+        }
     }
 }
 
@@ -270,137 +273,4 @@ struct PlatformDistributionView: View {
     }
 }
 
-struct RecentActivitySection: View {
-    let assignments: [Assignment]
-
-    var recentAssignments: [Assignment] {
-        assignments.sorted { $0.createdDate > $1.createdDate }
-            .prefix(5)
-            .map { $0 }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Recent Activity")
-                    .font(.headline)
-                Spacer()
-                NavigationLink("View All") {
-                    // AssignmentHistoryView()
-                }
-                .font(.caption)
-            }
-
-            if recentAssignments.isEmpty {
-                Text("No recent activity")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 20)
-            } else {
-                ForEach(recentAssignments) { assignment in
-                    HStack {
-                        Image(systemName: assignment.status.icon)
-                            .foregroundColor(Color(assignment.status.color))
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(assignment.applicationName) → \(assignment.groupName)")
-                                .font(.subheadline)
-                                .lineLimit(1)
-
-                            Text(assignment.createdDate.formatted(.relative(presentation: .named)))
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-
-                        Spacer()
-
-                        Label(assignment.intent.displayName, systemImage: assignment.intent.icon)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-        }
-        .padding()
-        .background(Color.gray.opacity(0.05))
-        .cornerRadius(12)
-    }
-}
-
-struct QuickActionsSection: View {
-    @EnvironmentObject var appState: AppState
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Quick Actions")
-                .font(.headline)
-
-            HStack(spacing: 12) {
-                QuickActionButton(
-                    title: "Bulk Assignment",
-                    icon: "arrow.right.square.fill",
-                    color: .blue
-                ) {
-                    appState.selectedTab = .assignments
-                }
-
-                QuickActionButton(
-                    title: "Sync Devices",
-                    icon: "arrow.clockwise",
-                    color: .green
-                ) {
-                    Task {
-                        await appState.syncAll()
-                    }
-                }
-
-                QuickActionButton(
-                    title: "View Reports",
-                    icon: "chart.bar.doc.horizontal",
-                    color: .orange
-                ) {
-                    // Navigate to reports
-                }
-
-                QuickActionButton(
-                    title: "Settings",
-                    icon: "gearshape",
-                    color: .purple
-                ) {
-                    // Open settings
-                }
-            }
-        }
-        .padding()
-        .background(Color.gray.opacity(0.05))
-        .cornerRadius(12)
-    }
-}
-
-struct QuickActionButton: View {
-    let title: String
-    let icon: String
-    let color: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundColor(color)
-
-                Text(title)
-                    .font(.caption)
-                    .foregroundColor(.primary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(color.opacity(0.1))
-            .cornerRadius(8)
-        }
-        .buttonStyle(.plain)
-    }
-}
+// Removed unused structs - RecentActivitySection and QuickActionsSection moved to Reports

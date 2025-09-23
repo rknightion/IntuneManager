@@ -16,6 +16,7 @@ class AppState: ObservableObject {
         case applications = "Applications"
         case groups = "Groups"
         case assignments = "Assignments"
+        case reports = "Reports"
         case settings = "Settings"
 
         var systemImage: String {
@@ -25,6 +26,7 @@ class AppState: ObservableObject {
             case .applications: return "app.badge"
             case .groups: return "person.3"
             case .assignments: return "checklist"
+            case .reports: return "chart.bar.doc.horizontal"
             case .settings: return "gear"
             }
         }

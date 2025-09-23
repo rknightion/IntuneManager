@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 @Model
-final class Application: Identifiable, Codable {
+final class Application: Identifiable, Codable, Hashable {
     @Attribute(.unique) var id: String
     var displayName: String
     var appDescription: String?
@@ -32,6 +32,120 @@ final class Application: Identifiable, Codable {
     // Assignment related
     var assignments: [AppAssignment]?
     var installSummary: InstallSummary?
+
+    // MARK: - Platform Compatibility Helpers
+
+    /// Returns the platforms this app supports based on its type
+    var supportedPlatforms: Set<DevicePlatform> {
+        switch appType {
+        case .macOS, .macOSLobApp, .managedMacOSStoreApp, .macOSOfficeSuiteApp, .macOSPkgApp, .macOSDmgApp:
+            return [.macOS]
+        case .iOS, .iosLobApp, .managedIOSStoreApp, .iosStoreApp:
+            // iOS apps without VPP info default to iPhone/iPad
+            return [.iOS, .iPadOS]
+        case .iosVppApp:
+            // VPP apps use applicableDeviceType if available
+            if let deviceType = applicableDeviceType {
+                var platforms: Set<DevicePlatform> = []
+                if deviceType.iPhoneAndIPod { platforms.insert(.iOS) }
+                if deviceType.iPad { platforms.insert(.iPadOS) }
+                if deviceType.mac { platforms.insert(.macOS) }
+                return platforms.isEmpty ? [.iOS, .iPadOS] : platforms
+            }
+            return [.iOS, .iPadOS]
+        case .macOSVppApp:
+            // macOS VPP apps might also support iOS via Catalyst
+            if let deviceType = applicableDeviceType {
+                var platforms: Set<DevicePlatform> = []
+                if deviceType.mac { platforms.insert(.macOS) }
+                if deviceType.iPhoneAndIPod { platforms.insert(.iOS) }
+                if deviceType.iPad { platforms.insert(.iPadOS) }
+                return platforms.isEmpty ? [.macOS] : platforms
+            }
+            return [.macOS]
+        case .webApp, .windowsWebApp:
+            // Web apps can run on any platform
+            return [.macOS, .iOS, .iPadOS, .windows, .android]
+        case .androidStoreApp, .androidManagedStoreApp:
+            return [.android]
+        case .windowsMobileMSI, .winAppX, .win32LobApp, .microsoftEdgeApp, .microsoftStoreForBusinessApp, .windowsUniversalAppX, .winGetApp, .win32CatalogApp, .microsoftDefenderForEndpoint:
+            return [.windows]
+        case .officeSuiteApp:
+            // Office suite apps typically support Windows and sometimes Mac
+            return [.windows, .macOS]
+        case .unknown:
+            // Unknown apps - be conservative
+            return []
+        }
+    }
+
+    /// Check if this app is compatible with a specific device OS
+    func isCompatibleWith(deviceOS: String) -> Bool {
+        let devicePlatform = DevicePlatform(from: deviceOS)
+        return supportedPlatforms.contains(devicePlatform)
+    }
+
+    /// Returns a human-readable string of supported platforms
+    var supportedPlatformsDescription: String {
+        let platforms = supportedPlatforms.sorted { $0.rawValue < $1.rawValue }
+        if platforms.isEmpty {
+            return "Unknown"
+        }
+        return platforms.map { $0.displayName }.joined(separator: ", ")
+    }
+
+    enum DevicePlatform: String, CaseIterable {
+        case macOS = "macOS"
+        case iOS = "iOS"
+        case iPadOS = "iPadOS"
+        case windows = "Windows"
+        case android = "Android"
+        case linux = "Linux"
+        case unknown = "Unknown"
+
+        init(from operatingSystem: String) {
+            switch operatingSystem.lowercased() {
+            case "macos":
+                self = .macOS
+            case "ios":
+                self = .iOS
+            case "ipados":
+                self = .iPadOS
+            case "windows", "windows 10", "windows 11":
+                self = .windows
+            case "android":
+                self = .android
+            case "linux":
+                self = .linux
+            default:
+                self = .unknown
+            }
+        }
+
+        var displayName: String {
+            switch self {
+            case .macOS: return "macOS"
+            case .iOS: return "iOS"
+            case .iPadOS: return "iPadOS"
+            case .windows: return "Windows"
+            case .android: return "Android"
+            case .linux: return "Linux"
+            case .unknown: return "Unknown"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .macOS: return "desktopcomputer"
+            case .iOS: return "iphone"
+            case .iPadOS: return "ipad"
+            case .windows: return "pc"
+            case .android: return "phone.badge.checkmark"
+            case .linux: return "terminal"
+            case .unknown: return "questionmark"
+            }
+        }
+    }
 
     enum PublishingState: String, Codable, CaseIterable {
         case notPublished
@@ -67,6 +181,14 @@ final class Application: Identifiable, Codable {
         case winAppX
         case win32LobApp
         case microsoftEdgeApp
+        // Additional Windows app types
+        case microsoftStoreForBusinessApp
+        case windowsUniversalAppX
+        case winGetApp
+        case officeSuiteApp
+        case windowsWebApp
+        case win32CatalogApp  // Windows catalog app (Enterprise App Catalog)
+        case microsoftDefenderForEndpoint  // Microsoft Defender for Endpoint onboarding
         case unknown  // For any unrecognized app types
 
         var displayName: String {
@@ -90,6 +212,13 @@ final class Application: Identifiable, Codable {
             case .winAppX: return "Windows AppX"
             case .win32LobApp: return "Windows Win32"
             case .microsoftEdgeApp: return "Microsoft Edge"
+            case .microsoftStoreForBusinessApp: return "Microsoft Store app (new)"
+            case .windowsUniversalAppX: return "Windows Universal App"
+            case .winGetApp: return "Windows Package Manager"
+            case .officeSuiteApp: return "Microsoft 365 Apps"
+            case .windowsWebApp: return "Windows Web App"
+            case .win32CatalogApp: return "Windows catalog app (Win32)"
+            case .microsoftDefenderForEndpoint: return "Microsoft Defender for Endpoint"
             case .unknown: return "Unknown"
             }
         }
@@ -104,10 +233,14 @@ final class Application: Identifiable, Codable {
                 return "globe"
             case .androidStoreApp, .androidManagedStoreApp:
                 return "phone"
-            case .windowsMobileMSI, .winAppX, .win32LobApp:
+            case .windowsMobileMSI, .winAppX, .win32LobApp, .microsoftStoreForBusinessApp, .windowsUniversalAppX, .winGetApp, .win32CatalogApp, .microsoftDefenderForEndpoint:
                 return "pc"
-            case .microsoftEdgeApp:
+            case .microsoftEdgeApp, .windowsWebApp:
                 return "network"
+            case .officeSuiteApp:
+                return "briefcase"
+            case .microsoftDefenderForEndpoint:
+                return "shield"
             case .unknown:
                 return "questionmark.app"
             }
@@ -126,7 +259,7 @@ final class Application: Identifiable, Codable {
 
             // Handle special cases and variations
             switch sanitized {
-            case "macOSApp", "macOSApplication":
+            case "macOSApp", "macOSApplication", "macOsApp", "macOsApplication":
                 self = .macOS
             case "iosApp", "iosApplication":
                 self = .iOS
@@ -134,16 +267,50 @@ final class Application: Identifiable, Codable {
                 self = .iosStoreApp
             case "iosVppApp":
                 self = .iosVppApp
-            case "macOSVppApp":
+            case "macOSVppApp", "macOsVppApp":
                 self = .macOSVppApp
             case "managedIOSStoreApp":
                 self = .managedIOSStoreApp
-            case "managedMacOSStoreApp":
+            case "managedMacOSStoreApp", "managedMacOsStoreApp":
                 self = .managedMacOSStoreApp
-            case "macOSLobApp":
+            case "macOSLobApp", "macOsLobApp":
                 self = .macOSLobApp
             case "iosLobApp":
                 self = .iosLobApp
+            case "microsoftStoreForBusinessApp":
+                self = .microsoftStoreForBusinessApp
+            case "windowsUniversalAppX":
+                self = .windowsUniversalAppX
+            case "winGetApp":
+                self = .winGetApp
+            case "officeSuiteApp":
+                self = .officeSuiteApp
+            case "windowsWebApp":
+                self = .windowsWebApp
+            case "webApp":
+                self = .webApp
+            case "win32CatalogApp":
+                self = .win32CatalogApp
+            case "microsoftDefenderForEndpointOnboardingPackageWindows10":
+                self = .microsoftDefenderForEndpoint
+            case "win32LobApp":
+                self = .win32LobApp
+            case "windowsMobileMSI":
+                self = .windowsMobileMSI
+            case "winAppX":
+                self = .winAppX
+            case "microsoftEdgeApp":
+                self = .microsoftEdgeApp
+            case "androidStoreApp":
+                self = .androidStoreApp
+            case "androidManagedStoreApp":
+                self = .androidManagedStoreApp
+            case "macOSOfficeSuiteApp", "macOsOfficeSuiteApp":
+                self = .macOSOfficeSuiteApp
+            case "macOSPkgApp", "macOsPkgApp":
+                self = .macOSPkgApp
+            case "macOSDmgApp", "macOsDmgApp":
+                self = .macOSDmgApp
             default:
                 Logger.shared.warning("Unknown application type encountered: '\(odataType)' (sanitized: '\(sanitized)'). Using 'unknown'.", category: .data)
                 self = .unknown
@@ -319,6 +486,16 @@ final class Application: Identifiable, Codable {
         installSummary = try container.decodeIfPresent(InstallSummary.self, forKey: .installSummary)
     }
 
+    // MARK: - Hashable
+
+    static func == (lhs: Application, rhs: Application) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
@@ -431,6 +608,19 @@ struct AppAssignment: Codable, Identifiable, Sendable {
             case .required: return "exclamationmark.circle.fill"
             case .uninstall: return "trash.circle"
             case .availableWithoutEnrollment: return "arrow.down.circle.dotted"
+            }
+        }
+
+        var detailedDescription: String {
+            switch self {
+            case .required:
+                return "App will be automatically installed and cannot be uninstalled by users. Required for compliance."
+            case .available:
+                return "App is available in Company Portal for users to install when needed. Users can install and uninstall."
+            case .uninstall:
+                return "App will be uninstalled from targeted devices if already installed."
+            case .availableWithoutEnrollment:
+                return "App is available without requiring device enrollment in MDM. Useful for personal devices."
             }
         }
     }

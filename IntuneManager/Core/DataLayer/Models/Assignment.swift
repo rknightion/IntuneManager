@@ -58,6 +58,19 @@ final class Assignment: Identifiable, Codable {
             case .availableWithoutEnrollment: return "purple"
             }
         }
+
+        var detailedDescription: String {
+            switch self {
+            case .required:
+                return "App will be automatically installed and cannot be uninstalled by users. Required for compliance."
+            case .available:
+                return "App is available in Company Portal for users to install when needed. Users can install and uninstall."
+            case .uninstall:
+                return "App will be uninstalled from targeted devices if already installed."
+            case .availableWithoutEnrollment:
+                return "App is available without requiring device enrollment in MDM. Useful for personal devices."
+            }
+        }
     }
 
     enum AssignmentStatus: String, Codable, CaseIterable {
@@ -95,13 +108,13 @@ final class Assignment: Identifiable, Codable {
 
         var color: String {
             switch self {
-            case .pending: return "gray"
-            case .inProgress: return "blue"
-            case .completed: return "green"
-            case .failed: return "red"
-            case .cancelled: return "orange"
-            case .scheduled: return "purple"
-            case .retrying: return "yellow"
+            case .pending: return "systemGray"
+            case .inProgress: return "systemBlue"
+            case .completed: return "systemGreen"
+            case .failed: return "systemRed"
+            case .cancelled: return "systemOrange"
+            case .scheduled: return "systemPurple"
+            case .retrying: return "systemYellow"
             }
         }
     }

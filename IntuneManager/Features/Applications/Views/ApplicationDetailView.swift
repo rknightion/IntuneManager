@@ -37,12 +37,19 @@ final class ApplicationDetailViewModel: ObservableObject {
             hasLoadedOnce = true
             Logger.shared.info("Successfully loaded details for \(fresh.displayName)", category: .ui)
 
-            if fresh.installSummary != nil {
-                installSummary = fresh.installSummary
+            // Install summary might be included in the app object
+            if let summary = fresh.installSummary {
+                installSummary = summary
                 Logger.shared.debug("Install summary included in response", category: .ui)
             } else {
-                Logger.shared.debug("Fetching install summary separately", category: .ui)
-                installSummary = try? await appService.fetchInstallSummary(appId: fresh.id)
+                // Fetch install summary from device and user statuses
+                Logger.shared.debug("Fetching install summary from statuses", category: .ui)
+                do {
+                    installSummary = try await appService.fetchInstallSummary(appId: fresh.id)
+                } catch {
+                    Logger.shared.warning("Could not fetch install summary: \(error)", category: .ui)
+                    installSummary = nil
+                }
             }
         } catch {
             Logger.shared.error("Failed to load app details: \(error.localizedDescription)", category: .ui)
@@ -99,11 +106,9 @@ struct ApplicationDetailView: View {
                 }
             }
         }
-        .onAppear {
+        .task {
             Logger.shared.info("ApplicationDetailView appeared for: \(viewModel.application.displayName)", category: .ui)
-            Task {
-                await viewModel.loadDetails()
-            }
+            await viewModel.loadDetails()
         }
         .refreshable {
             await viewModel.loadDetails(force: true)

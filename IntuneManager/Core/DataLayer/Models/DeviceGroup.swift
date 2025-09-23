@@ -45,9 +45,9 @@ final class DeviceGroup: Identifiable, Codable {
 
         var displayColor: String {
             switch self {
-            case .on: return "green"
-            case .paused: return "orange"
-            case .evaluating: return "blue"
+            case .on: return "systemGreen"
+            case .paused: return "systemOrange"
+            case .evaluating: return "systemBlue"
             }
         }
     }

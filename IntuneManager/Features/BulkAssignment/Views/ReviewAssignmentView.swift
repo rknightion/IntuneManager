@@ -7,11 +7,66 @@ struct ReviewAssignmentView: View {
         viewModel.getAssignmentSummary()
     }
     
+    var compatibilityWarnings: [String] {
+        var warnings: [String] = []
+
+        // Get the intersection of supported platforms from all selected apps
+        let platformSets = viewModel.selectedApplications.map { $0.supportedPlatforms }
+        let commonPlatforms = platformSets.first.map { first in
+            platformSets.dropFirst().reduce(first) { $0.intersection($1) }
+        } ?? []
+
+        if commonPlatforms.isEmpty && !viewModel.selectedApplications.isEmpty {
+            warnings.append("⚠️ Selected apps have no common platform support. Assignments may fail for incompatible devices.")
+        } else if !commonPlatforms.isEmpty {
+            let unsupportedPlatforms = Application.DevicePlatform.allCases.filter {
+                $0 != .unknown && !commonPlatforms.contains($0)
+            }
+            if !unsupportedPlatforms.isEmpty {
+                let platformNames = unsupportedPlatforms.map { $0.displayName }.joined(separator: ", ")
+                warnings.append("ℹ️ Selected apps do not support: \(platformNames)")
+            }
+        }
+
+        // Check for VPP apps and Windows groups
+        let hasVppApps = viewModel.selectedApplications.contains {
+            $0.appType == .iosVppApp || $0.appType == .macOSVppApp
+        }
+        let hasWindowsOnlyApps = viewModel.selectedApplications.contains {
+            app in
+            let platforms = app.supportedPlatforms
+            return platforms.count == 1 && platforms.contains(.windows)
+        }
+
+        if hasVppApps && hasWindowsOnlyApps {
+            warnings.append("⚠️ Mixing VPP apps with Windows-only apps. These will fail on incompatible devices.")
+        }
+
+        return warnings
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                // Compatibility Warnings
+                if !compatibilityWarnings.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(compatibilityWarnings, id: \.self) { warning in
+                            HStack {
+                                Text(warning)
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                                Spacer()
+                            }
+                            .padding()
+                            .background(Color.orange.opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                    }
+                }
+
                 // Summary Card
-                SummaryCard(summary: summary)
+                SummaryCard(summary: summary, targetPlatform: viewModel.targetPlatform)
                 
                 // Selected Applications
                 SectionView(title: "Selected Applications (\(summary.applicationCount))") {
@@ -30,6 +85,17 @@ struct ReviewAssignmentView: View {
                                 Label(app.appType.displayName, systemImage: app.appType.icon)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
+
+                                // Show supported platforms
+                                if !app.supportedPlatforms.isEmpty {
+                                    HStack(spacing: 2) {
+                                        ForEach(Array(app.supportedPlatforms.sorted { $0.rawValue < $1.rawValue }), id: \.self) { platform in
+                                            Image(systemName: platform.icon)
+                                                .font(.caption2)
+                                                .foregroundColor(.blue)
+                                        }
+                                    }
+                                }
 
                                 if let version = app.version, !version.isEmpty {
                                     Text("v\(version)")
@@ -70,7 +136,8 @@ struct ReviewAssignmentView: View {
 
 struct SummaryCard: View {
     let summary: BulkAssignmentViewModel.AssignmentSummary
-    
+    let targetPlatform: Application.DevicePlatform?
+
     var body: some View {
         VStack(spacing: 16) {
             HStack {
@@ -86,15 +153,23 @@ struct SummaryCard: View {
                     .font(.largeTitle)
                     .foregroundColor(.accentColor)
             }
-            
-            HStack {
-                Label("Estimated Time: \(summary.estimatedTime)", systemImage: "clock")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Spacer()
-                Label(summary.intent.displayName, systemImage: summary.intent.icon)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Label("Estimated Time: \(summary.estimatedTime)", systemImage: "clock")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Label(summary.intent.displayName, systemImage: summary.intent.icon)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                if let platform = targetPlatform {
+                    Label("Target Platform: \(platform.displayName)", systemImage: platform.icon)
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
             }
         }
         .padding()

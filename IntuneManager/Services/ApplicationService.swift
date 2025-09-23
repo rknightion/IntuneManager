@@ -83,7 +83,17 @@ final class ApplicationService: ObservableObject {
             return filteredApps
         } catch {
             self.error = error
-            Logger.shared.error("Failed to fetch applications: \(error.localizedDescription)", category: .data)
+            // Provide more helpful error messages for rate limiting
+            if let graphError = error as? GraphAPIError {
+                switch graphError {
+                case .rateLimited(let retryAfter):
+                    Logger.shared.warning("Rate limited when fetching applications. Retry after: \(retryAfter ?? "unknown") seconds", category: .data)
+                default:
+                    Logger.shared.error("Failed to fetch applications: \(error.localizedDescription)", category: .data)
+                }
+            } else {
+                Logger.shared.error("Failed to fetch applications: \(error.localizedDescription)", category: .data)
+            }
             throw error
         }
     }
@@ -217,10 +227,75 @@ final class ApplicationService: ObservableObject {
 
     // MARK: - Install Summary
 
+    // Fetches and calculates install summary from device and user statuses
     func fetchInstallSummary(appId: String) async throws -> Application.InstallSummary {
-        let endpoint = "/deviceAppManagement/mobileApps/\(appId)/installSummary"
+        var summary = Application.InstallSummary()
 
-        let summary: Application.InstallSummary = try await apiClient.getModel(endpoint)
+        // Fetch device statuses
+        let deviceStatusEndpoint = "/deviceAppManagement/mobileApps/\(appId)/deviceStatuses"
+        do {
+            struct DeviceStatus: Decodable {
+                let installState: String?
+                let deviceId: String?
+                let deviceName: String?
+                let userPrincipalName: String?
+            }
+
+            let deviceStatuses: [DeviceStatus] = try await apiClient.getAllPagesForModels(
+                deviceStatusEndpoint,
+                parameters: ["$select": "installState,deviceId,deviceName,userPrincipalName"]
+            )
+
+            // Count device install states
+            for status in deviceStatuses {
+                switch status.installState?.lowercased() {
+                case "installed":
+                    summary.installedDeviceCount += 1
+                case "failed":
+                    summary.failedDeviceCount += 1
+                case "notinstalled", "notapplicable":
+                    summary.notApplicableDeviceCount += 1
+                case "pending", "pendinginstall":
+                    summary.pendingInstallDeviceCount += 1
+                default:
+                    summary.notInstalledDeviceCount += 1
+                }
+            }
+
+            Logger.shared.debug("Fetched \(deviceStatuses.count) device statuses for app \(appId)", category: .network)
+        } catch {
+            // If we can't fetch device statuses, log but don't fail
+            Logger.shared.warning("Failed to fetch device statuses for app \(appId): \(error)", category: .network)
+        }
+
+        // Fetch user statuses
+        let userStatusEndpoint = "/deviceAppManagement/mobileApps/\(appId)/userStatuses"
+        do {
+            struct UserStatus: Decodable {
+                let installedDeviceCount: Int?
+                let failedDeviceCount: Int?
+                let notInstalledDeviceCount: Int?
+                let userPrincipalName: String?
+            }
+
+            let userStatuses: [UserStatus] = try await apiClient.getAllPagesForModels(
+                userStatusEndpoint,
+                parameters: ["$select": "installedDeviceCount,failedDeviceCount,notInstalledDeviceCount,userPrincipalName"]
+            )
+
+            // Sum up user install counts
+            for status in userStatuses {
+                summary.installedUserCount += status.installedDeviceCount ?? 0
+                summary.failedUserCount += status.failedDeviceCount ?? 0
+                summary.notInstalledUserCount += status.notInstalledDeviceCount ?? 0
+            }
+
+            Logger.shared.debug("Fetched \(userStatuses.count) user statuses for app \(appId)", category: .network)
+        } catch {
+            // If we can't fetch user statuses, log but don't fail
+            Logger.shared.warning("Failed to fetch user statuses for app \(appId): \(error)", category: .network)
+        }
+
         return summary
     }
 

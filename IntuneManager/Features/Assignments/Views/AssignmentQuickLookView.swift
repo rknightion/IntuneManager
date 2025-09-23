@@ -25,7 +25,10 @@ struct AssignmentQuickLookView: View {
             storageSummary = LocalDataStore.shared.summary()
         }
         .onChange(of: assignmentService.assignmentHistory) { _, _ in
-            storageSummary = LocalDataStore.shared.summary()
+            // Delay to avoid state change during view update
+            DispatchQueue.main.async {
+                storageSummary = LocalDataStore.shared.summary()
+            }
         }
     }
 

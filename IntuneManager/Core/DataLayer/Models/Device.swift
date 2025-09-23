@@ -53,10 +53,10 @@ final class Device: Identifiable, Codable {
 
         var displayColor: String {
             switch self {
-            case .compliant: return "green"
-            case .noncompliant: return "red"
-            case .inGracePeriod: return "orange"
-            case .unknown, .conflict, .error, .configManager: return "gray"
+            case .compliant: return "systemGreen"
+            case .noncompliant: return "systemRed"
+            case .inGracePeriod: return "systemOrange"
+            case .unknown, .conflict, .error, .configManager: return "systemGray"
             }
         }
 

@@ -46,15 +46,33 @@ final class AssignmentService: ObservableObject {
             total: assignments.count,
             completed: 0,
             failed: 0,
-            currentOperation: "Preparing assignments..."
+            currentOperation: "Validating assignments..."
         )
 
         Logger.shared.info("Starting bulk assignment: \(assignments.count) operations")
 
-        // Process assignments in batches
-        let batches = assignments.chunked(into: maxConcurrentAssignments)
+        // Validate assignments first (check for existing assignments)
+        Logger.shared.info("Validating assignments for duplicates...")
+        let validatedAssignments = await validateAssignments(assignments)
+
+        // Track already-existing assignments as completed
+        let skippedCount = assignments.count - validatedAssignments.count
+        if skippedCount > 0 {
+            Logger.shared.info("Skipped \(skippedCount) existing assignments")
+            currentProgress?.completed = skippedCount
+            currentProgress?.currentOperation = "Processing new assignments..."
+        }
+
+        // Process only new assignments in batches
+        let batches = validatedAssignments.chunked(into: maxConcurrentAssignments)
         var completedAssignments: [Assignment] = []
         var failedAssignments: [Assignment] = []
+
+        // Include the skipped (already existing) assignments as completed
+        let skippedAssignments = assignments.filter { assignment in
+            assignment.status == .completed && assignment.errorMessage?.contains("already exists") ?? false
+        }
+        completedAssignments.append(contentsOf: skippedAssignments)
 
         for (index, batch) in batches.enumerated() {
             currentProgress?.currentOperation = "Processing batch \(index + 1) of \(batches.count)"
@@ -100,14 +118,22 @@ final class AssignmentService: ObservableObject {
     private func processBatch(_ assignments: [Assignment]) async throws -> (successful: [Assignment], failed: [Assignment]) {
         var successful: [Assignment] = []
         var failed: [Assignment] = []
+        var rateLimitedAssignments: [Assignment] = []
+        var maxRetryAfter: TimeInterval = 0
+
+        // Log rate limit status before batch
+        await apiClient.logRateLimitStatus()
 
         // Create batch requests for Graph API
         let requests = assignments.map { assignment in
             createBatchRequest(for: assignment)
         }
 
-        // Execute batch request
+        // Execute batch request - the API client now handles rate limiting internally
         let responses: [BatchResponse<AppAssignment>] = try await apiClient.batchModels(requests)
+
+        // Log rate limit status after batch
+        await apiClient.logRateLimitStatus()
 
         // Process responses
         for (index, response) in responses.enumerated() {
@@ -119,31 +145,86 @@ final class AssignmentService: ObservableObject {
                 successful.append(assignment)
                 Logger.shared.info("Assignment successful: \(assignment.applicationName) -> \(assignment.groupName)")
             } else {
-                assignment.status = .failed
-                assignment.errorMessage = "HTTP Status: \(response.status)"
+                // Parse error details from response body if available
+                let errorDetail = parseErrorFromResponse(response)
+                assignment.errorMessage = errorDetail.message
 
-                if assignment.retryCount < retryLimit {
-                    // Retry failed assignment
-                    assignment.retryCount += 1
-                    assignment.status = .retrying
-                    Logger.shared.warning("Retrying assignment: \(assignment.applicationName) -> \(assignment.groupName) (attempt \(assignment.retryCount))")
+                // Handle specific HTTP status codes
+                switch response.status {
+                case 409:
+                    // Conflict - assignment already exists
+                    assignment.status = .completed
+                    assignment.errorMessage = "Assignment already exists (skipped)"
+                    successful.append(assignment)
+                    Logger.shared.info("Assignment already exists: \(assignment.applicationName) -> \(assignment.groupName)")
 
-                    // Retry with exponential backoff
-                    try await Task.sleep(nanoseconds: UInt64(pow(2.0, Double(assignment.retryCount)) * 1_000_000_000))
-
-                    do {
-                        let retryResult = try await retrySingleAssignment(assignment)
-                        successful.append(retryResult)
-                    } catch {
-                        assignment.status = .failed
-                        assignment.errorMessage = error.localizedDescription
-                        failed.append(assignment)
+                case 429:
+                    // Rate limited - add to retry list
+                    assignment.status = .pending
+                    rateLimitedAssignments.append(assignment)
+                    if let retryAfter = parseRetryAfter(from: response) {
+                        maxRetryAfter = max(maxRetryAfter, retryAfter)
                     }
-                } else {
+                    Logger.shared.warning("Rate limited: \(assignment.applicationName) -> \(assignment.groupName)")
+
+                case 400:
+                    // Bad request - don't retry
+                    assignment.status = .failed
+                    assignment.errorMessage = "Invalid request: \(errorDetail.message)"
                     failed.append(assignment)
-                    Logger.shared.error("Assignment failed after \(retryLimit) attempts: \(assignment.applicationName) -> \(assignment.groupName)")
+                    Logger.shared.error("Bad request for: \(assignment.applicationName) -> \(assignment.groupName): \(errorDetail.message)")
+
+                case 403:
+                    // Forbidden - insufficient permissions
+                    assignment.status = .failed
+                    assignment.errorMessage = "Insufficient permissions: \(errorDetail.message)"
+                    failed.append(assignment)
+                    Logger.shared.error("Permission denied for: \(assignment.applicationName) -> \(assignment.groupName)")
+
+                case 404:
+                    // Not found - app or group doesn't exist
+                    assignment.status = .failed
+                    assignment.errorMessage = "App or group not found: \(errorDetail.message)"
+                    failed.append(assignment)
+                    Logger.shared.error("Resource not found for: \(assignment.applicationName) -> \(assignment.groupName)")
+
+                default:
+                    // Other errors - retry if under limit
+                    if assignment.retryCount < retryLimit {
+                        assignment.retryCount += 1
+                        assignment.status = .retrying
+                        Logger.shared.warning("Retrying assignment: \(assignment.applicationName) -> \(assignment.groupName) (attempt \(assignment.retryCount))")
+
+                        // Retry with exponential backoff
+                        try await Task.sleep(nanoseconds: UInt64(pow(2.0, Double(assignment.retryCount)) * 1_000_000_000))
+
+                        do {
+                            let retryResult = try await retrySingleAssignment(assignment)
+                            successful.append(retryResult)
+                        } catch {
+                            assignment.status = .failed
+                            assignment.errorMessage = error.localizedDescription
+                            failed.append(assignment)
+                        }
+                    } else {
+                        assignment.status = .failed
+                        failed.append(assignment)
+                        Logger.shared.error("Assignment failed after \(retryLimit) attempts: \(assignment.applicationName) -> \(assignment.groupName)")
+                    }
                 }
             }
+        }
+
+        // Handle rate-limited assignments
+        if !rateLimitedAssignments.isEmpty && maxRetryAfter > 0 {
+            Logger.shared.info("Waiting \(maxRetryAfter) seconds for rate limit to reset...")
+            currentProgress?.currentOperation = "Rate limited - waiting \(Int(maxRetryAfter)) seconds..."
+            try await Task.sleep(nanoseconds: UInt64(maxRetryAfter * 1_000_000_000))
+
+            // Retry rate-limited assignments
+            let retryResults = try await processBatch(rateLimitedAssignments)
+            successful.append(contentsOf: retryResults.successful)
+            failed.append(contentsOf: retryResults.failed)
         }
 
         return (successful, failed)
@@ -151,13 +232,15 @@ final class AssignmentService: ObservableObject {
 
     private func createBatchRequest(for assignment: Assignment) -> BatchRequest {
         let targetType = assignment.targetType
+
+        // Create AppAssignment object with proper structure
         let appAssignment = AppAssignment(
-            id: assignment.id,
+            id: UUID().uuidString,
             intent: AppAssignment.AssignmentIntent(rawValue: assignment.intent.rawValue) ?? .required,
             target: AppAssignment.AssignmentTarget(
                 type: targetType,
                 groupId: targetType.requiresGroupId ? assignment.groupId : nil,
-                groupName: targetType.requiresGroupId ? assignment.groupName : nil,
+                groupName: nil,  // Don't include groupName in the request
                 deviceAndAppManagementAssignmentFilterId: assignment.filter?.filterId,
                 deviceAndAppManagementAssignmentFilterType: assignment.filter?.filterType?.rawValue
             ),
@@ -169,7 +252,8 @@ final class AssignmentService: ObservableObject {
         return BatchRequest(
             method: "POST",
             url: "/deviceAppManagement/mobileApps/\(assignment.applicationId)/assignments",
-            body: appAssignment
+            body: appAssignment,
+            headers: ["Content-Type": "application/json"]
         )
     }
 
@@ -305,6 +389,73 @@ enum AssignmentError: LocalizedError {
         }
     }
 }
+
+    // MARK: - Error Parsing Helpers
+
+    private func parseErrorFromResponse(_ response: BatchResponse<AppAssignment>) -> (message: String, code: String?) {
+        // Try to parse error from response body if it exists
+        // The body might contain detailed error information
+        if response.status == 409 {
+            return ("Assignment already exists for this app and group", "Conflict")
+        } else if response.status == 429 {
+            return ("Too many requests. Please wait and try again.", "TooManyRequests")
+        } else if response.status == 400 {
+            return ("Invalid assignment configuration", "BadRequest")
+        } else if response.status == 403 {
+            return ("You don't have permission to create this assignment", "Forbidden")
+        } else if response.status == 404 {
+            return ("The app or group specified doesn't exist", "NotFound")
+        }
+
+        return ("Assignment failed with status \(response.status)", nil)
+    }
+
+    private func parseRetryAfter(from response: BatchResponse<AppAssignment>) -> TimeInterval? {
+        // Check for Retry-After header in response
+        if let retryAfterString = response.headers?["Retry-After"],
+           let retryAfter = Double(retryAfterString) {
+            return retryAfter
+        }
+        // Default retry after 10 seconds if not specified
+        return 10
+    }
+
+    // MARK: - Pre-flight Validation
+
+    func validateAssignments(_ assignments: [Assignment]) async -> [Assignment] {
+        var validatedAssignments: [Assignment] = []
+
+        for assignment in assignments {
+            // Check if assignment already exists
+            do {
+                let existingAssignments = try await ApplicationService.shared.getApplicationAssignments(appId: assignment.applicationId)
+
+                let alreadyExists = existingAssignments.contains { existing in
+                    // Check if there's already an assignment to the same group with same intent
+                    if let existingGroupId = existing.target.groupId {
+                        return existingGroupId == assignment.groupId &&
+                               existing.intent.rawValue == assignment.intent.rawValue
+                    }
+                    return false
+                }
+
+                if alreadyExists {
+                    assignment.status = .completed
+                    assignment.errorMessage = "Assignment already exists (skipped)"
+                    assignment.completedDate = Date()
+                    Logger.shared.info("Skipping existing assignment: \(assignment.applicationName) -> \(assignment.groupName)")
+                } else {
+                    validatedAssignments.append(assignment)
+                }
+            } catch {
+                // If we can't check, include it for assignment attempt
+                validatedAssignments.append(assignment)
+                Logger.shared.warning("Could not validate assignment: \(assignment.applicationName) -> \(assignment.groupName)")
+            }
+        }
+
+        return validatedAssignments
+    }
 
 // MARK: - Array Extension for Chunking
 

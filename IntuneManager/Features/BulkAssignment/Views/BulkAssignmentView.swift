@@ -46,11 +46,16 @@ struct BulkAssignmentView: View {
                 case .selectApps:
                     ApplicationSelectionView(selectedApps: $viewModel.selectedApplications)
                 case .selectGroups:
-                    GroupSelectionView(selectedGroups: $viewModel.selectedGroups)
+                    GroupSelectionView(
+                        selectedGroups: $viewModel.selectedGroups,
+                        selectedApplications: viewModel.selectedApplications
+                    )
                 case .configureSettings:
                     AssignmentSettingsView(
                         intent: $viewModel.assignmentIntent,
-                        settings: $viewModel.assignmentSettings
+                        settings: $viewModel.assignmentSettings,
+                        targetPlatform: $viewModel.targetPlatform,
+                        availablePlatforms: viewModel.availablePlatforms
                     )
                 case .review:
                     ReviewAssignmentView(viewModel: viewModel)
@@ -70,9 +75,16 @@ struct BulkAssignmentView: View {
 
                 Spacer()
 
-                Text("\(viewModel.totalAssignments) assignments")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                VStack(spacing: 2) {
+                    Text("\(viewModel.totalExistingAssignments) existing assignments")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    if currentStep == .review && viewModel.totalNewAssignments > 0 {
+                        Text("\(viewModel.totalNewAssignments) new to create")
+                            .font(.caption2)
+                            .foregroundColor(.accentColor)
+                    }
+                }
 
                 Spacer()
 
@@ -160,6 +172,8 @@ struct BulkAssignmentView: View {
             showingProgress = false
             resetAssignment()
             Logger.shared.info("Bulk assignment completed", category: .ui)
+            // Don't refresh applications here to avoid SwiftData context issues
+            // The notification posted by the view model will handle updates in other views
         }
     }
 
@@ -239,6 +253,8 @@ struct ApplicationSelectionView: View {
     @State private var selectedFilter: Application.AppType?
     @State private var assignmentFilter: AssignmentFilter = .all
     @State private var sortOrder: SortOrder = .name
+    @State private var platformFilter: Application.DevicePlatform?
+    @State private var showingBulkEdit = false
 
     enum AssignmentFilter: String, CaseIterable {
         case all = "All Apps"
@@ -287,6 +303,11 @@ struct ApplicationSelectionView: View {
             apps = apps.filter { $0.hasAssignments }
         }
 
+        // Apply platform filter
+        if let platform = platformFilter {
+            apps = apps.filter { $0.supportedPlatforms.contains(platform) }
+        }
+
         if !searchText.isEmpty {
             apps = apps.filter { app in
                 app.displayName.localizedCaseInsensitiveContains(searchText) ||
@@ -332,6 +353,13 @@ struct ApplicationSelectionView: View {
                     Text("\(filteredApps.count) apps • \(selectedApps.count) selected")
                         .foregroundColor(.secondary)
 
+                    if !selectedApps.isEmpty {
+                        Button("Edit Selected Assignments") {
+                            showingBulkEdit = true
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
                     Button("Select All") {
                         selectedApps = Set(filteredApps)
                     }
@@ -343,6 +371,17 @@ struct ApplicationSelectionView: View {
                 }
 
                 HStack {
+                    Picker("Platform", selection: $platformFilter) {
+                        Text("All Platforms").tag(Application.DevicePlatform?.none)
+                        Divider()
+                        ForEach(Application.DevicePlatform.allCases.filter { $0 != .unknown }, id: \.self) { platform in
+                            Label(platform.displayName, systemImage: platform.icon)
+                                .tag(Application.DevicePlatform?.some(platform))
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 140)
+
                     Picker("Type", selection: $selectedFilter) {
                         Text("All Types").tag(Application.AppType?.none)
                         Divider()
@@ -397,16 +436,17 @@ struct ApplicationSelectionView: View {
                 .padding(.horizontal)
             }
         }
-        .onAppear {
-            Task {
-                if appService.applications.isEmpty {
-                    do {
-                        _ = try await appService.fetchApplications()
-                    } catch {
-                        Logger.shared.error("Failed to load applications: \(error)")
-                    }
+        .task {
+            if appService.applications.isEmpty {
+                do {
+                    _ = try await appService.fetchApplications()
+                } catch {
+                    Logger.shared.error("Failed to load applications: \(error)")
                 }
             }
+        }
+        .sheet(isPresented: $showingBulkEdit) {
+            AssignmentEditView(applications: Array(selectedApps))
         }
     }
 }
@@ -415,6 +455,8 @@ struct ApplicationRowView: View {
     let application: Application
     let isSelected: Bool
     let onToggle: () -> Void
+    @State private var showingAssignmentDetails = false
+    @State private var showingEditAssignments = false
 
     var body: some View {
         HStack {
@@ -428,7 +470,16 @@ struct ApplicationRowView: View {
                         .font(.system(.body, design: .default))
                         .lineLimit(1)
 
-                    // Assignment indicator badge
+                    // Platform compatibility badges
+                    HStack(spacing: 4) {
+                        ForEach(Array(application.supportedPlatforms.sorted { $0.rawValue < $1.rawValue }), id: \.self) { platform in
+                            Image(systemName: platform.icon)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    // Assignment indicator badge with popover
                     if application.hasAssignments {
                         HStack(spacing: 3) {
                             Image(systemName: "person.2.fill")
@@ -442,6 +493,12 @@ struct ApplicationRowView: View {
                         .background(Color.accentColor.opacity(0.15))
                         .foregroundColor(.accentColor)
                         .cornerRadius(4)
+                        .onHover { hovering in
+                            showingAssignmentDetails = hovering
+                        }
+                        .popover(isPresented: $showingAssignmentDetails) {
+                            AssignmentDetailsPopover(application: application)
+                        }
                     }
                 }
 
@@ -449,6 +506,12 @@ struct ApplicationRowView: View {
                     Label(application.appType.displayName, systemImage: application.appType.icon)
                         .font(.caption)
                         .foregroundColor(.secondary)
+
+                    if !application.supportedPlatforms.isEmpty {
+                        Text("• \(application.supportedPlatformsDescription)")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                    }
 
                     if let publisher = application.publisher {
                         Text("• \(publisher)")
@@ -475,6 +538,17 @@ struct ApplicationRowView: View {
 
             Spacer()
 
+            // Edit Assignments button
+            Button(action: {
+                showingEditAssignments = true
+            }) {
+                Label("Edit", systemImage: "pencil.circle")
+                    .labelStyle(.iconOnly)
+                    .foregroundColor(.accentColor)
+            }
+            .buttonStyle(.plain)
+            .help("Edit assignments for this application")
+
             if let summary = application.installSummary {
                 VStack(alignment: .trailing, spacing: 2) {
                     Text("\(summary.installedDeviceCount) installed")
@@ -494,6 +568,67 @@ struct ApplicationRowView: View {
         .cornerRadius(8)
         .onTapGesture {
             onToggle()
+        }
+        .sheet(isPresented: $showingEditAssignments) {
+            AssignmentEditView(applications: [application])
+        }
+    }
+}
+
+struct AssignmentDetailsPopover: View {
+    let application: Application
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Assigned Groups")
+                .font(.headline)
+                .padding(.bottom, 4)
+
+            if let assignments = application.assignments, !assignments.isEmpty {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(assignments) { assignment in
+                            HStack {
+                                Image(systemName: assignment.intent.icon)
+                                    .foregroundColor(intentColor(for: assignment.intent))
+                                    .font(.caption)
+
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(assignment.target.groupName ?? assignment.target.type.displayName)
+                                        .font(.system(.caption, design: .default))
+                                        .fontWeight(.medium)
+
+                                    Text(assignment.intent.displayName)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Spacer()
+                            }
+                            .padding(4)
+                        }
+                    }
+                }
+                .frame(maxHeight: 300)
+            } else {
+                Text("No assignments")
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .frame(minWidth: 250, maxWidth: 350)
+    }
+
+    func intentColor(for intent: AppAssignment.AssignmentIntent) -> Color {
+        switch intent {
+        case .required:
+            return .red
+        case .available:
+            return .blue
+        case .uninstall:
+            return .orange
+        case .availableWithoutEnrollment:
+            return .purple
         }
     }
 }

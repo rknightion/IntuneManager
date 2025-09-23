@@ -2,10 +2,25 @@ import SwiftUI
 
 struct GroupSelectionView: View {
     @Binding var selectedGroups: Set<DeviceGroup>
+    let selectedApplications: Set<Application> // Pass in selected apps to check compatibility
     @StateObject private var groupService = GroupService.shared
     @State private var searchText = ""
     @State private var showOnlyDynamic = false
     @State private var showOnlySecurity = true
+    @State private var selectedPlatformFilter: Application.DevicePlatform? = nil
+
+    // Compute supported platforms from selected apps
+    private var supportedPlatforms: Set<Application.DevicePlatform> {
+        guard !selectedApplications.isEmpty else { return [] }
+
+        // Find platforms common to ALL selected apps
+        let platformSets = selectedApplications.map { $0.supportedPlatforms }
+        guard let firstSet = platformSets.first else { return [] }
+
+        return platformSets.dropFirst().reduce(firstSet) { result, platforms in
+            result.intersection(platforms)
+        }
+    }
 
     private var availableGroups: [DeviceGroup] {
         let custom = DeviceGroup.builtInAssignmentTargets
@@ -35,8 +50,48 @@ struct GroupSelectionView: View {
         return groups.sorted { $0.displayName < $1.displayName }
     }
 
+    // Check if a group already has assignments for any of the selected applications
+    func checkIfGroupHasAssignments(_ group: DeviceGroup) -> Bool {
+        for app in selectedApplications {
+            if let assignments = app.assignments {
+                for assignment in assignments {
+                    if assignment.target.groupId == group.id {
+                        return true
+                    }
+                }
+            }
+        }
+        return false
+    }
+
     var body: some View {
         VStack {
+            // Platform compatibility warning
+            if !supportedPlatforms.isEmpty {
+                HStack {
+                    Image(systemName: "info.circle.fill")
+                        .foregroundColor(.blue)
+                    Text("Selected apps support: \(supportedPlatforms.map { $0.displayName }.sorted().joined(separator: ", "))")
+                        .font(.caption)
+                    Spacer()
+                    if supportedPlatforms.count > 1 {
+                        Picker("Target Platform", selection: $selectedPlatformFilter) {
+                            Text("All Platforms").tag(Application.DevicePlatform?.none)
+                            ForEach(Array(supportedPlatforms.sorted { $0.rawValue < $1.rawValue }), id: \.self) { platform in
+                                Label(platform.displayName, systemImage: platform.icon)
+                                    .tag(Application.DevicePlatform?.some(platform))
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(width: 150)
+                    }
+                }
+                .padding()
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(8)
+                .padding(.horizontal)
+            }
+
             // Toolbar
             HStack {
                 HStack {
@@ -81,21 +136,20 @@ struct GroupSelectionView: View {
                                 } else {
                                     selectedGroups.insert(group)
                                 }
-                            }
+                            },
+                            hasExistingAssignments: checkIfGroupHasAssignments(group)
                         )
                     }
                 }
                 .padding(.horizontal)
             }
         }
-        .onAppear {
-            Task {
-                if groupService.groups.isEmpty {
-                    do {
-                        _ = try await groupService.fetchGroups()
-                    } catch {
-                        Logger.shared.error("Failed to load groups: \(error)")
-                    }
+        .task {
+            if groupService.groups.isEmpty {
+                do {
+                    _ = try await groupService.fetchGroups()
+                } catch {
+                    Logger.shared.error("Failed to load groups: \(error)")
                 }
             }
         }
@@ -106,6 +160,7 @@ struct GroupRowView: View {
     let group: DeviceGroup
     let isSelected: Bool
     let onToggle: () -> Void
+    var hasExistingAssignments: Bool = false
 
     var body: some View {
         HStack {
@@ -114,9 +169,21 @@ struct GroupRowView: View {
                 .font(.title3)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(group.displayName)
-                    .font(.system(.body, design: .default))
-                    .lineLimit(1)
+                HStack {
+                    Text(group.displayName)
+                        .font(.system(.body, design: .default))
+                        .lineLimit(1)
+
+                    if hasExistingAssignments {
+                        Label("Assigned", systemImage: "checkmark.seal.fill")
+                            .font(.caption2)
+                            .foregroundColor(.green)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.green.opacity(0.15))
+                            .cornerRadius(3)
+                    }
+                }
 
                 HStack {
                     if group.isDynamicGroup {

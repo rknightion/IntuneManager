@@ -2,6 +2,8 @@ import SwiftUI
 
 struct DeviceListView: View {
     @StateObject private var viewModel = DeviceListViewModel()
+    @State private var isSyncing = false
+    @EnvironmentObject var appState: AppState
 
     var body: some View {
         VStack {
@@ -18,7 +20,31 @@ struct DeviceListView: View {
             }
         }
         .navigationTitle("Devices")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: syncDevices) {
+                    if isSyncing {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle())
+                            .scaleEffect(0.8)
+                    } else {
+                        Label("Sync All", systemImage: "arrow.clockwise")
+                    }
+                }
+                .disabled(isSyncing)
+                .help("Sync devices, applications, and groups from Intune")
+            }
+        }
         .task {
+            await viewModel.loadDevices()
+        }
+    }
+
+    private func syncDevices() {
+        Task {
+            isSyncing = true
+            defer { isSyncing = false }
+            await appState.syncAll()
             await viewModel.loadDevices()
         }
     }
@@ -46,7 +72,7 @@ struct DeviceRowView: View {
                 .font(.caption)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Color(device.complianceState.displayColor).opacity(0.2))
+                .background(Color.systemColor(named: device.complianceState.displayColor).opacity(0.2))
                 .cornerRadius(4)
         }
         .padding(.vertical, 4)

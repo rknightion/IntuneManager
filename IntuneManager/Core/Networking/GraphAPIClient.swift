@@ -7,6 +7,7 @@ actor GraphAPIClient {
     private let session: URLSession
     private nonisolated let decoder: JSONDecoder
     private nonisolated let encoder: JSONEncoder
+    private let rateLimiter = RateLimiter.shared
 
     private init() {
         let config = URLSessionConfiguration.default
@@ -76,17 +77,73 @@ actor GraphAPIClient {
     // MARK: - Batch Operations
 
     func batch<T: Decodable & Sendable>(_ requests: [BatchRequest]) async throws -> [BatchResponse<T>] {
-        let batchBody = BatchRequestBody(requests: requests)
-        let batchEndpoint = "/$batch"
+        // Split into rate-limited batches
+        let batches = await rateLimiter.splitIntoBatches(requests, isWriteOperation: true)
+        var allResponses: [BatchResponse<T>] = []
 
-        let request = try await buildRequest(
-            endpoint: batchEndpoint,
-            method: "POST",
-            body: batchBody
-        )
+        for (index, batch) in batches.enumerated() {
+            if index > 0 {
+                // Add delay between batches to avoid rate limits
+                let delaySeconds = 1.0
+                await MainActor.run {
+                    Logger.shared.info("Delaying \(delaySeconds)s between batch \(index) and \(index + 1)", category: .network)
+                }
+                try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+            }
 
-        let batchResponseBody: BatchResponseBody<T> = try await performRequest(request)
-        return batchResponseBody.responses
+            let batchBody = BatchRequestBody(requests: batch)
+            let batchEndpoint = "/$batch"
+
+            let request = try await buildRequest(
+                endpoint: batchEndpoint,
+                method: "POST",
+                body: batchBody
+            )
+
+            let batchResponseBody: BatchResponseBody<T> = try await performRequest(request)
+
+            // Check for individual 429s in the batch
+            let failedRequests = batchResponseBody.responses.filter { $0.status == 429 }
+            if !failedRequests.isEmpty {
+                await MainActor.run {
+                    Logger.shared.warning("Batch contained \(failedRequests.count) rate-limited requests", category: .network)
+                }
+                await rateLimiter.recordRateLimit()
+
+                // Retry failed requests after delay
+                if failedRequests.count < batch.count {
+                    // Some succeeded, keep those
+                    let successfulResponses = batchResponseBody.responses.filter { $0.status != 429 }
+                    allResponses.append(contentsOf: successfulResponses)
+                }
+
+                // Retry the failed requests
+                let failedRequestIds = Set(failedRequests.map { $0.id })
+                let requestsToRetry = batch.filter { failedRequestIds.contains($0.id) }
+
+                if !requestsToRetry.isEmpty {
+                    await MainActor.run {
+                        Logger.shared.info("Retrying \(requestsToRetry.count) rate-limited requests", category: .network)
+                    }
+                    let retryDelay = await rateLimiter.calculateRetryDelay(attemptNumber: 1, retryAfterHeader: nil)
+                    try? await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+
+                    // Retry with smaller batch size
+                    let retryBatchBody = BatchRequestBody(requests: requestsToRetry)
+                    let retryRequest = try await buildRequest(
+                        endpoint: "/$batch",
+                        method: "POST",
+                        body: retryBatchBody
+                    )
+                    let retryResponseBody: BatchResponseBody<T> = try await performRequest(retryRequest)
+                    allResponses.append(contentsOf: retryResponseBody.responses)
+                }
+            } else {
+                allResponses.append(contentsOf: batchResponseBody.responses)
+            }
+        }
+
+        return allResponses
     }
 
     // MARK: - Pagination Support
@@ -99,11 +156,16 @@ actor GraphAPIClient {
         var currentParams = parameters
         var pageCount = 0
 
-        Logger.shared.info("Starting paginated request for: \(endpoint)", category: .network)
+        await MainActor.run {
+            Logger.shared.info("Starting paginated request for: \(endpoint)", category: .network)
+        }
 
         while let link = nextLink {
             pageCount += 1
-            Logger.shared.info("Fetching page \(pageCount) from: \(link)", category: .network)
+            let currentPage = pageCount
+            await MainActor.run {
+                Logger.shared.info("Fetching page \(currentPage) from: \(link)", category: .network)
+            }
 
             let request = try await buildRequest(
                 endpoint: link,
@@ -114,23 +176,38 @@ actor GraphAPIClient {
 
             let response: GraphResponse<T> = try await performRequest(request)
             if let value = response.value {
-                Logger.shared.info("Page \(pageCount) returned \(value.count) items", category: .network)
+                let currentPage = pageCount
+                let itemCount = value.count
+                await MainActor.run {
+                    Logger.shared.info("Page \(currentPage) returned \(itemCount) items", category: .network)
+                }
                 results.append(contentsOf: value)
             } else {
-                Logger.shared.warning("Page \(pageCount) returned no items", category: .network)
+                let currentPage = pageCount
+                await MainActor.run {
+                    Logger.shared.warning("Page \(currentPage) returned no items", category: .network)
+                }
             }
 
             if let next = response.nextLink {
-                Logger.shared.info("Next page link found: \(next)", category: .network)
+                await MainActor.run {
+                    Logger.shared.info("Next page link found: \(next)", category: .network)
+                }
                 nextLink = next
             } else {
-                Logger.shared.info("No more pages - pagination complete", category: .network)
+                await MainActor.run {
+                    Logger.shared.info("No more pages - pagination complete", category: .network)
+                }
                 nextLink = nil
             }
             currentParams = nil // Parameters only needed for first request
         }
 
-        Logger.shared.info("Pagination complete: \(pageCount) pages, \(results.count) total items", category: .network)
+        let totalPages = pageCount
+        let totalItems = results.count
+        await MainActor.run {
+            Logger.shared.info("Pagination complete: \(totalPages) pages, \(totalItems) total items", category: .network)
+        }
         return results
     }
 
@@ -144,11 +221,16 @@ actor GraphAPIClient {
         var currentParams = parameters
         var pageCount = 0
 
-        Logger.shared.info("Starting paginated request for: \(endpoint)", category: .network)
+        await MainActor.run {
+            Logger.shared.info("Starting paginated request for: \(endpoint)", category: .network)
+        }
 
         while let link = nextLink {
             pageCount += 1
-            Logger.shared.info("Fetching page \(pageCount) from: \(link)", category: .network)
+            let currentPage = pageCount
+            await MainActor.run {
+                Logger.shared.info("Fetching page \(currentPage) from: \(link)", category: .network)
+            }
 
             let request = try await buildRequest(
                 endpoint: link,
@@ -159,23 +241,38 @@ actor GraphAPIClient {
 
             let response: GraphModelResponse<T> = try await performModelRequest(request)
             if let value = response.value {
-                Logger.shared.info("Page \(pageCount) returned \(value.count) items", category: .network)
+                let currentPage = pageCount
+                let itemCount = value.count
+                await MainActor.run {
+                    Logger.shared.info("Page \(currentPage) returned \(itemCount) items", category: .network)
+                }
                 results.append(contentsOf: value)
             } else {
-                Logger.shared.warning("Page \(pageCount) returned no items", category: .network)
+                let currentPage = pageCount
+                await MainActor.run {
+                    Logger.shared.warning("Page \(currentPage) returned no items", category: .network)
+                }
             }
 
             if let next = response.nextLink {
-                Logger.shared.info("Next page link found: \(next)", category: .network)
+                await MainActor.run {
+                    Logger.shared.info("Next page link found: \(next)", category: .network)
+                }
                 nextLink = next
             } else {
-                Logger.shared.info("No more pages - pagination complete", category: .network)
+                await MainActor.run {
+                    Logger.shared.info("No more pages - pagination complete", category: .network)
+                }
                 nextLink = nil
             }
             currentParams = nil // Parameters only needed for first request
         }
 
-        Logger.shared.info("Pagination complete: \(pageCount) pages, \(results.count) total items", category: .network)
+        let totalPages = pageCount
+        let totalItems = results.count
+        await MainActor.run {
+            Logger.shared.info("Pagination complete: \(totalPages) pages, \(totalItems) total items", category: .network)
+        }
         return results
     }
 
@@ -220,15 +317,61 @@ actor GraphAPIClient {
 
     @MainActor
     func batchModels<T: Decodable>(_ requests: [BatchRequest]) async throws -> [BatchResponse<T>] {
-        let batchBody = BatchRequestBody(requests: requests)
-        let request = try await buildRequest(
-            endpoint: "/$batch",
-            method: "POST",
-            body: batchBody
-        )
+        // Split into rate-limited batches
+        let batches = await rateLimiter.splitIntoBatches(requests, isWriteOperation: true)
+        var allResponses: [BatchResponse<T>] = []
 
-        let responseBody: BatchResponseBody<T> = try await performModelRequest(request)
-        return responseBody.responses
+        for (index, batch) in batches.enumerated() {
+            if index > 0 {
+                // Add delay between batches to avoid rate limits
+                let delaySeconds = 1.0
+                await MainActor.run {
+                    Logger.shared.info("Delaying \(delaySeconds)s between batch \(index) and \(index + 1)", category: .network)
+                }
+                try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
+            }
+
+            let batchBody = BatchRequestBody(requests: batch)
+            let request = try await buildRequest(
+                endpoint: "/$batch",
+                method: "POST",
+                body: batchBody
+            )
+
+            let responseBody: BatchResponseBody<T> = try await performModelRequest(request)
+
+            // Check for individual 429s in the batch
+            let failedRequests = responseBody.responses.filter { $0.status == 429 }
+            if !failedRequests.isEmpty {
+                await MainActor.run {
+                    Logger.shared.warning("Batch contained \(failedRequests.count) rate-limited requests", category: .network)
+                }
+                await rateLimiter.recordRateLimit()
+
+                // Keep successful responses
+                let successfulResponses = responseBody.responses.filter { $0.status != 429 }
+                allResponses.append(contentsOf: successfulResponses)
+
+                // Retry failed requests after delay
+                let failedRequestIds = Set(failedRequests.map { $0.id })
+                let requestsToRetry = batch.filter { failedRequestIds.contains($0.id) }
+
+                if !requestsToRetry.isEmpty {
+                    await MainActor.run {
+                        Logger.shared.info("Retrying \(requestsToRetry.count) rate-limited requests", category: .network)
+                    }
+                    let retryDelay = await rateLimiter.calculateRetryDelay(attemptNumber: 1, retryAfterHeader: nil)
+                    try? await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+
+                    let retryResponses: [BatchResponse<T>] = try await batchModels(requestsToRetry)
+                    allResponses.append(contentsOf: retryResponses)
+                }
+            } else {
+                allResponses.append(contentsOf: responseBody.responses)
+            }
+        }
+
+        return allResponses
     }
 
     // MARK: - Public Helper Methods for Special Cases
@@ -245,6 +388,22 @@ actor GraphAPIClient {
 
     func performRawRequest(_ request: URLRequest) async throws -> Data {
         return try await performDataRequest(request)
+    }
+
+    /// Get current rate limit status for monitoring
+    func getRateLimitStatus() async -> (total: Int, write: Int, maxTotal: Int, maxWrite: Int) {
+        return await rateLimiter.getRateLimitStatus()
+    }
+
+    /// Log current rate limit status
+    func logRateLimitStatus() async {
+        let status = await getRateLimitStatus()
+        let totalPercentage = Double(status.total) / Double(status.maxTotal) * 100
+        let writePercentage = Double(status.write) / Double(status.maxWrite) * 100
+
+        await MainActor.run {
+            Logger.shared.info("Rate Limit Status - Total: \(status.total)/\(status.maxTotal) (\(String(format: "%.1f", totalPercentage))%), Write: \(status.write)/\(status.maxWrite) (\(String(format: "%.1f", writePercentage))%)", category: .network)
+        }
     }
 
     // MARK: - Private Methods
@@ -315,54 +474,139 @@ actor GraphAPIClient {
         )
     }
 
-    private func performDataRequest(_ request: URLRequest) async throws -> Data {
+    private func performDataRequest(_ request: URLRequest, attemptNumber: Int = 1) async throws -> Data {
+        // Check if this is a write operation
+        let isWriteOperation = ["POST", "PUT", "PATCH", "DELETE"].contains(request.httpMethod ?? "GET")
+
+        // Apply rate limiting delay if needed
+        let delay = await rateLimiter.calculateDelay(isWriteOperation: isWriteOperation)
+        if delay > 0 {
+            await MainActor.run {
+                Logger.shared.info("Rate limit prevention: delaying request by \(String(format: "%.2f", delay)) seconds", category: .network)
+            }
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        }
+
+        // Check if we can make the request
+        if !(await rateLimiter.canMakeRequest(isWriteOperation: isWriteOperation)) {
+            await MainActor.run {
+                Logger.shared.warning("Preemptively throttling request to avoid rate limit", category: .network)
+            }
+            // Wait and retry
+            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+            return try await performDataRequest(request, attemptNumber: attemptNumber)
+        }
+
+        // Record the request
+        await rateLimiter.recordRequest(isWriteOperation: isWriteOperation)
+
         // Log the outgoing request
-        Logger.shared.logNetworkRequest(request)
+        if attemptNumber > 1 {
+            await MainActor.run {
+                Logger.shared.info("→ Retry attempt \(attemptNumber) for \(request.httpMethod ?? "?") \(request.url?.path ?? "")", category: .network)
+            }
+        } else {
+            await MainActor.run {
+                Logger.shared.logNetworkRequest(request)
+            }
+        }
 
         do {
             let (data, response) = try await session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                Logger.shared.error("Invalid response - not HTTP", category: .network)
+                await MainActor.run {
+                    Logger.shared.error("Invalid response - not HTTP", category: .network)
+                }
                 throw GraphAPIError.invalidResponse
             }
 
             // Log the response
-            Logger.shared.info("← Response: \(httpResponse.statusCode) from \(request.url?.path ?? "")", category: .network)
+            await MainActor.run {
+                Logger.shared.info("← Response: \(httpResponse.statusCode) from \(request.url?.path ?? "")", category: .network)
+            }
 
             switch httpResponse.statusCode {
             case 200...299:
+                // Reset rate limit tracking on successful request
+                await rateLimiter.resetRateLimitTracking()
                 return data
 
             case 401:
-                Logger.shared.error("Unauthorized (401) - Token may be expired", category: .network)
+                await MainActor.run {
+                    Logger.shared.error("Unauthorized (401) - Token may be expired", category: .network)
+                }
                 throw GraphAPIError.unauthorized
 
             case 403:
-                Logger.shared.error("Forbidden (403) - Insufficient permissions", category: .network)
+                await MainActor.run {
+                    Logger.shared.error("Forbidden (403) - Insufficient permissions", category: .network)
+                }
                 throw GraphAPIError.forbidden
 
             case 404:
-                Logger.shared.warning("Not Found (404) - Resource doesn't exist", category: .network)
+                await MainActor.run {
+                    Logger.shared.warning("Not Found (404) - Resource doesn't exist", category: .network)
+                }
                 throw GraphAPIError.notFound
 
             case 429:
                 // Rate limiting - extract retry after header
                 let retryAfter = httpResponse.value(forHTTPHeaderField: "Retry-After")
-                Logger.shared.warning("Rate Limited (429) - Retry after: \(retryAfter ?? "unknown")", category: .network)
-                throw GraphAPIError.rateLimited(retryAfter: retryAfter)
+                await MainActor.run {
+                    Logger.shared.warning("Rate Limited (429) - Retry after: \(retryAfter ?? "unknown")", category: .network)
+                }
+
+                // Record the rate limit
+                await rateLimiter.recordRateLimit()
+
+                // Check if we should retry
+                let error = GraphAPIError.rateLimited(retryAfter: retryAfter)
+                if await rateLimiter.shouldRetry(attemptNumber: attemptNumber, error: error) {
+                    let retryDelay = await rateLimiter.calculateRetryDelay(attemptNumber: attemptNumber, retryAfterHeader: retryAfter)
+                    await MainActor.run {
+                        Logger.shared.info("Will retry after \(String(format: "%.2f", retryDelay)) seconds", category: .network)
+                    }
+                    try? await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+                    return try await performDataRequest(request, attemptNumber: attemptNumber + 1)
+                }
+                throw error
 
             default:
                 if let errorResponse = try? decoder.decode(GraphErrorResponse.self, from: data) {
-                    Logger.shared.error("API Error (\(httpResponse.statusCode)): \(errorResponse.error.message) (Code: \(errorResponse.error.code))", category: .network)
+                    await MainActor.run {
+                        Logger.shared.error("API Error (\(httpResponse.statusCode)): \(errorResponse.error.message) (Code: \(errorResponse.error.code))", category: .network)
+                    }
                     throw GraphAPIError.serverError(message: errorResponse.error.message, code: errorResponse.error.code)
                 }
-                Logger.shared.error("HTTP Error: \(httpResponse.statusCode)", category: .network)
+                await MainActor.run {
+                    Logger.shared.error("HTTP Error: \(httpResponse.statusCode)", category: .network)
+                }
                 throw GraphAPIError.httpError(statusCode: httpResponse.statusCode)
             }
         } catch let error as GraphAPIError {
+            // For network errors, consider retrying
+            if case .networkError = error,
+               await rateLimiter.shouldRetry(attemptNumber: attemptNumber, error: error) {
+                let retryDelay = await rateLimiter.calculateRetryDelay(attemptNumber: attemptNumber, retryAfterHeader: nil)
+                await MainActor.run {
+                    Logger.shared.info("Network error, will retry after \(String(format: "%.2f", retryDelay)) seconds", category: .network)
+                }
+                try? await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+                return try await performDataRequest(request, attemptNumber: attemptNumber + 1)
+            }
             throw error
         } catch {
+            // Check if we should retry for other errors
+            let graphError = GraphAPIError.networkError(error)
+            if await rateLimiter.shouldRetry(attemptNumber: attemptNumber, error: graphError) {
+                let retryDelay = await rateLimiter.calculateRetryDelay(attemptNumber: attemptNumber, retryAfterHeader: nil)
+                await MainActor.run {
+                    Logger.shared.info("Error occurred, will retry after \(String(format: "%.2f", retryDelay)) seconds", category: .network)
+                }
+                try? await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+                return try await performDataRequest(request, attemptNumber: attemptNumber + 1)
+            }
             throw GraphAPIError.networkError(error)
         }
     }

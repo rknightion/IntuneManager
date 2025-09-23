@@ -8,6 +8,7 @@ class BulkAssignmentViewModel: ObservableObject {
     @Published var selectedGroups: Set<DeviceGroup> = []
     @Published var assignmentIntent: Assignment.AssignmentIntent = .required
     @Published var assignmentSettings: Assignment.AssignmentSettings?
+    @Published var targetPlatform: Application.DevicePlatform?
     @Published var isProcessing = false
     @Published var progress: AssignmentService.AssignmentProgress?
     @Published var error: Error?
@@ -17,8 +18,21 @@ class BulkAssignmentViewModel: ObservableObject {
     private let assignmentService = AssignmentService.shared
     private var cancellables = Set<AnyCancellable>()
 
-    var totalAssignments: Int {
+    // Count of actual assignments in Intune for selected apps
+    var totalExistingAssignments: Int {
+        selectedApplications.reduce(0) { total, app in
+            total + app.assignmentCount
+        }
+    }
+
+    // Count of new assignments to be created
+    var totalNewAssignments: Int {
         selectedApplications.count * selectedGroups.count
+    }
+
+    // For backwards compatibility - return new assignments count
+    var totalAssignments: Int {
+        totalNewAssignments
     }
 
     var isValid: Bool {
@@ -26,12 +40,72 @@ class BulkAssignmentViewModel: ObservableObject {
     }
 
     var estimatedTime: String {
-        let seconds = totalAssignments * 2 // Rough estimate
+        let seconds = totalNewAssignments * 2 // Rough estimate
         let minutes = seconds / 60
         if minutes < 1 {
             return "< 1 minute"
         } else {
             return "\(minutes) minute\(minutes == 1 ? "" : "s")"
+        }
+    }
+
+    // Get all existing group assignments for the selected applications
+    var existingAssignmentGroups: Set<String> {
+        var groupIds = Set<String>()
+        for app in selectedApplications {
+            if let assignments = app.assignments {
+                for assignment in assignments {
+                    if let groupId = assignment.target.groupId {
+                        groupIds.insert(groupId)
+                    }
+                }
+            }
+        }
+        return groupIds
+    }
+
+    // Check if a group already has assignments for all selected apps
+    func isGroupFullyAssigned(_ group: DeviceGroup) -> Bool {
+        guard !selectedApplications.isEmpty else { return false }
+
+        for app in selectedApplications {
+            let hasAssignment = app.assignments?.contains { assignment in
+                assignment.target.groupId == group.id
+            } ?? false
+
+            if !hasAssignment {
+                return false
+            }
+        }
+        return true
+    }
+
+    // Get assignment details for display
+    func getAssignmentSummaryText() -> String {
+        let existingCount = totalExistingAssignments
+        let newCount = totalNewAssignments
+
+        if existingCount > 0 && newCount > 0 {
+            return "\(existingCount) existing, \(newCount) new to create"
+        } else if existingCount > 0 {
+            return "\(existingCount) existing assignments"
+        } else if newCount > 0 {
+            return "\(newCount) new assignments to create"
+        } else {
+            return "No assignments"
+        }
+    }
+
+    // Compute available platforms from selected applications
+    var availablePlatforms: Set<Application.DevicePlatform> {
+        guard !selectedApplications.isEmpty else { return [] }
+
+        // Get the intersection of all supported platforms
+        let platformSets = selectedApplications.map { $0.supportedPlatforms }
+        guard let firstSet = platformSets.first else { return [] }
+
+        return platformSets.dropFirst().reduce(firstSet) { result, platforms in
+            result.intersection(platforms)
         }
     }
 
@@ -59,9 +133,36 @@ class BulkAssignmentViewModel: ObservableObject {
         isProcessing = true
         defer { isProcessing = false }
 
+        // Create stable copies of the data before any context changes
+        let appDataCopy = selectedApplications.map {
+            (id: $0.id, displayName: $0.displayName, supportedPlatforms: $0.supportedPlatforms)
+        }
+        let groupDataCopy = selectedGroups.map {
+            (id: $0.id, displayName: $0.displayName, isBuiltIn: $0.isBuiltInAssignmentTarget, targetType: $0.assignmentTargetType)
+        }
+
+        // Create simple Application/DeviceGroup structs that won't have SwiftData issues
+        let stableApps = appDataCopy.map { appData in
+            let app = Application(
+                id: appData.id,
+                displayName: appData.displayName,
+                appType: .unknown,
+                createdDateTime: Date(),
+                lastModifiedDateTime: Date()
+            )
+            return app
+        }
+
+        let stableGroups = groupDataCopy.map { groupData in
+            DeviceGroup(
+                id: groupData.id,
+                displayName: groupData.displayName
+            )
+        }
+
         let operation = BulkAssignmentOperation(
-            applications: Array(selectedApplications),
-            groups: Array(selectedGroups),
+            applications: stableApps,
+            groups: stableGroups,
             intent: assignmentIntent,
             settings: assignmentSettings
         )
@@ -70,6 +171,9 @@ class BulkAssignmentViewModel: ObservableObject {
             let assignments = try await assignmentService.performBulkAssignment(operation)
             completedAssignments = assignments
             Logger.shared.info("Bulk assignment completed: \(assignments.count) successful")
+
+            // Notify that assignments have changed
+            NotificationCenter.default.post(name: .assignmentsDidChange, object: nil)
         } catch {
             self.error = error
             Logger.shared.error("Bulk assignment failed: \(error)")
@@ -86,6 +190,7 @@ class BulkAssignmentViewModel: ObservableObject {
         selectedGroups.removeAll()
         assignmentIntent = .required
         assignmentSettings = nil
+        targetPlatform = nil
         completedAssignments.removeAll()
         failedAssignments.removeAll()
         error = nil

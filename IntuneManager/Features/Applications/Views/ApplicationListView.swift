@@ -78,16 +78,20 @@ struct ApplicationListView: View {
             }
         }
         .navigationTitle("Applications")
-        .onAppear {
+        .task {
             Logger.shared.info("ApplicationListView appeared", category: .ui)
+            do {
+                Logger.shared.info("Loading applications list...", category: .ui)
+                _ = try await appService.fetchApplications()
+                Logger.shared.info("Applications list loaded successfully", category: .ui)
+            } catch {
+                Logger.shared.error("Failed to load applications: \(error.localizedDescription)", category: .ui)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .assignmentsDidChange)) { _ in
+            // Refresh when assignments change
             Task {
-                do {
-                    Logger.shared.info("Loading applications list...", category: .ui)
-                    _ = try await appService.fetchApplications()
-                    Logger.shared.info("Applications list loaded successfully", category: .ui)
-                } catch {
-                    Logger.shared.error("Failed to load applications: \(error.localizedDescription)", category: .ui)
-                }
+                _ = try? await appService.fetchApplications(forceRefresh: true)
             }
         }
     }
