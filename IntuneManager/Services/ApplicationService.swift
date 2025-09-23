@@ -252,6 +252,43 @@ final class ApplicationService: ObservableObject {
     func fetchInstallSummary(appId: String) async throws -> Application.InstallSummary {
         var summary = Application.InstallSummary()
 
+        // Try to fetch install summary directly first (newer API)
+        let summaryEndpoint = "/deviceAppManagement/mobileApps/\(appId)/installSummary"
+        do {
+            struct DirectSummary: Decodable {
+                let installedDeviceCount: Int?
+                let failedDeviceCount: Int?
+                let notApplicableDeviceCount: Int?
+                let notInstalledDeviceCount: Int?
+                let pendingInstallDeviceCount: Int?
+                let installedUserCount: Int?
+                let failedUserCount: Int?
+                let notApplicableUserCount: Int?
+                let notInstalledUserCount: Int?
+                let pendingInstallUserCount: Int?
+            }
+
+            let directSummary: DirectSummary = try await apiClient.getModel(summaryEndpoint)
+
+            // Use direct summary if available
+            summary.installedDeviceCount = directSummary.installedDeviceCount ?? 0
+            summary.failedDeviceCount = directSummary.failedDeviceCount ?? 0
+            summary.notApplicableDeviceCount = directSummary.notApplicableDeviceCount ?? 0
+            summary.notInstalledDeviceCount = directSummary.notInstalledDeviceCount ?? 0
+            summary.pendingInstallDeviceCount = directSummary.pendingInstallDeviceCount ?? 0
+            summary.installedUserCount = directSummary.installedUserCount ?? 0
+            summary.failedUserCount = directSummary.failedUserCount ?? 0
+            summary.notApplicableUserCount = directSummary.notApplicableUserCount ?? 0
+            summary.notInstalledUserCount = directSummary.notInstalledUserCount ?? 0
+            summary.pendingInstallUserCount = directSummary.pendingInstallUserCount ?? 0
+
+            Logger.shared.debug("Fetched install summary directly for app \(appId)", category: .network)
+            return summary
+        } catch {
+            Logger.shared.debug("Direct install summary not available, fetching device/user statuses separately", category: .network)
+        }
+
+        // Fallback to fetching device and user statuses separately
         // Fetch device statuses
         let deviceStatusEndpoint = "/deviceAppManagement/mobileApps/\(appId)/deviceStatuses"
         do {
@@ -264,7 +301,10 @@ final class ApplicationService: ObservableObject {
 
             let deviceStatuses: [DeviceStatus] = try await apiClient.getAllPagesForModels(
                 deviceStatusEndpoint,
-                parameters: ["$select": "installState,deviceId,deviceName,userPrincipalName"]
+                parameters: [
+                    "$select": "installState,deviceId,deviceName,userPrincipalName",
+                    "$top": "100"  // Limit to avoid timeouts
+                ]
             )
 
             // Count device install states
@@ -274,12 +314,14 @@ final class ApplicationService: ObservableObject {
                     summary.installedDeviceCount += 1
                 case "failed":
                     summary.failedDeviceCount += 1
-                case "notinstalled", "notapplicable":
+                case "notapplicable":
                     summary.notApplicableDeviceCount += 1
                 case "pending", "pendinginstall":
                     summary.pendingInstallDeviceCount += 1
-                default:
+                case "notinstalled":
                     summary.notInstalledDeviceCount += 1
+                default:
+                    break
                 }
             }
 
@@ -301,7 +343,10 @@ final class ApplicationService: ObservableObject {
 
             let userStatuses: [UserStatus] = try await apiClient.getAllPagesForModels(
                 userStatusEndpoint,
-                parameters: ["$select": "installedDeviceCount,failedDeviceCount,notInstalledDeviceCount,userPrincipalName"]
+                parameters: [
+                    "$select": "installedDeviceCount,failedDeviceCount,notInstalledDeviceCount,userPrincipalName",
+                    "$top": "100"  // Limit to avoid timeouts
+                ]
             )
 
             // Sum up user install counts
