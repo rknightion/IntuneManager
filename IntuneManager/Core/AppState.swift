@@ -9,6 +9,8 @@ class AppState: ObservableObject {
     @Published var error: Error?
     @Published var showingAbout = false
     @Published var preferredColorScheme: ColorScheme? = nil
+    @Published var showingPermissionAlert = false
+    @Published var permissionErrorDetails: PermissionError?
 
     enum Tab: String, CaseIterable {
         case dashboard = "Dashboard"
@@ -32,7 +34,60 @@ class AppState: ObservableObject {
         }
     }
 
-    func syncAll() async {
+    struct PermissionError {
+        let operation: String
+        let resource: String
+        let requiredPermissions: [String]
+        let timestamp: Date = Date()
+
+        var formattedDescription: String {
+            "Failed to \(operation) due to insufficient permissions. Required permissions: \(requiredPermissions.joined(separator: ", "))"
+        }
+    }
+
+    func handlePermissionError(operation: String, resource: String) {
+        // Map common operations to required permissions
+        let requiredPermissions = getRequiredPermissions(for: operation, resource: resource)
+
+        permissionErrorDetails = PermissionError(
+            operation: operation,
+            resource: resource,
+            requiredPermissions: requiredPermissions
+        )
+        showingPermissionAlert = true
+
+        Logger.shared.error("Permission denied for \(operation) on \(resource). Required: \(requiredPermissions.joined(separator: ", "))", category: .auth)
+    }
+
+    private func getRequiredPermissions(for operation: String, resource: String) -> [String] {
+        // Map operations to known Graph API permissions
+        switch resource {
+        case "device", "devices":
+            if operation.contains("sync") {
+                return ["DeviceManagementManagedDevices.PrivilegedOperations.All"]
+            } else if operation.contains("write") || operation.contains("update") {
+                return ["DeviceManagementManagedDevices.ReadWrite.All"]
+            } else {
+                return ["DeviceManagementManagedDevices.Read.All"]
+            }
+        case "application", "applications":
+            if operation.contains("assign") {
+                return ["DeviceManagementApps.ReadWrite.All"]
+            } else {
+                return ["DeviceManagementApps.Read.All"]
+            }
+        case "group", "groups":
+            return ["Group.Read.All", "GroupMember.Read.All"]
+        case "assignment", "assignments":
+            return ["DeviceManagementApps.ReadWrite.All"]
+        case "auditLog", "auditLogs":
+            return ["DeviceManagementApps.Read.All", "AuditLog.Read.All"]
+        default:
+            return ["Unknown permission required for \(resource)"]
+        }
+    }
+
+    func refreshAll() async {
         isLoading = true
         defer { isLoading = false }
 
@@ -43,7 +98,7 @@ class AppState: ObservableObject {
             AssignmentService.shared.activeAssignments.removeAll()
             error = nil
         } catch {
-            Logger.shared.error("Failed to complete full sync: \(error)")
+            Logger.shared.error("Failed to complete full refresh: \(error)")
             self.error = error
         }
     }

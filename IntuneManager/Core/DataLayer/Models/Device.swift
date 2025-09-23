@@ -38,6 +38,52 @@ final class Device: Identifiable, Codable {
     var managedDeviceName: String?
     var partnerReportedThreatState: String?
 
+    // Additional hardware information
+    var physicalMemoryInBytes: Int64?
+    var processorArchitecture: String?
+    var udid: String?
+    var iccid: String?
+    var subscriberCarrier: String?
+    var cellularTechnology: String?
+    var batteryHealthPercentage: Int?
+    var batteryChargeCycles: Int?
+    var batteryLevelPercentage: Double?
+    var ipAddressV4: String?
+    var subnetAddress: String?
+
+    // Management information
+    var managementCertificateExpirationDate: Date?
+    var exchangeAccessState: String?
+    var exchangeAccessStateReason: String?
+    var exchangeLastSuccessfulSyncDateTime: Date?
+    var remoteAssistanceSessionUrl: String?
+    var autopilotEnrolled: Bool?
+    var requireUserEnrollmentApproval: Bool?
+    var lostModeState: String?
+    var activationLockBypassCode: String?
+    var deviceRegistrationState: String?
+    var managementAgent: String?
+    var deviceType: String?
+    var chassisType: String?
+    var joinType: String?
+    var skuFamily: String?
+    var skuNumber: Int?
+
+    // Compliance information
+    var complianceGracePeriodExpirationDateTime: Date?
+    var androidSecurityPatchLevel: String?
+    var securityPatchLevel: String?
+    var easActivated: Bool?
+    var easDeviceId: String?
+    var easActivationDateTime: Date?
+    var aadRegistered: Bool?
+
+    // Security information
+    var windowsActiveMalwareCount: Int?
+    var windowsRemediatedMalwareCount: Int?
+    var bootstrapTokenEscrowed: Bool?
+    var deviceFirmwareConfigurationInterfaceManaged: Bool?
+
     // Relationships
     var installedApps: [InstalledApp]?
     var assignedGroups: [DeviceGroup]?
@@ -178,6 +224,44 @@ final class Device: Identifiable, Codable {
         case jailBroken
         case managedDeviceName
         case partnerReportedThreatState
+        case physicalMemoryInBytes
+        case processorArchitecture
+        case udid
+        case iccid
+        case subscriberCarrier
+        case cellularTechnology
+        case batteryHealthPercentage
+        case batteryChargeCycles
+        case batteryLevelPercentage
+        case ipAddressV4
+        case subnetAddress
+        case managementCertificateExpirationDate
+        case exchangeAccessState
+        case exchangeAccessStateReason
+        case exchangeLastSuccessfulSyncDateTime
+        case remoteAssistanceSessionUrl
+        case autopilotEnrolled
+        case requireUserEnrollmentApproval
+        case lostModeState
+        case activationLockBypassCode
+        case deviceRegistrationState
+        case managementAgent
+        case deviceType
+        case chassisType
+        case joinType
+        case skuFamily
+        case skuNumber
+        case complianceGracePeriodExpirationDateTime
+        case androidSecurityPatchLevel
+        case securityPatchLevel
+        case easActivated
+        case easDeviceId
+        case easActivationDateTime
+        case aadRegistered
+        case windowsActiveMalwareCount
+        case windowsRemediatedMalwareCount
+        case bootstrapTokenEscrowed
+        case deviceFirmwareConfigurationInterfaceManaged
     }
 
     required init(from decoder: Decoder) throws {
@@ -216,6 +300,52 @@ final class Device: Identifiable, Codable {
         jailBroken = try container.decodeIfPresent(String.self, forKey: .jailBroken)
         managedDeviceName = try container.decodeIfPresent(String.self, forKey: .managedDeviceName)
         partnerReportedThreatState = try container.decodeIfPresent(String.self, forKey: .partnerReportedThreatState)
+
+        // Additional hardware information
+        physicalMemoryInBytes = try container.decodeIfPresent(Int64.self, forKey: .physicalMemoryInBytes)
+        processorArchitecture = try container.decodeIfPresent(String.self, forKey: .processorArchitecture)
+        udid = try container.decodeIfPresent(String.self, forKey: .udid)
+        iccid = try container.decodeIfPresent(String.self, forKey: .iccid)
+        subscriberCarrier = try container.decodeIfPresent(String.self, forKey: .subscriberCarrier)
+        cellularTechnology = try container.decodeIfPresent(String.self, forKey: .cellularTechnology)
+        batteryHealthPercentage = try container.decodeIfPresent(Int.self, forKey: .batteryHealthPercentage)
+        batteryChargeCycles = try container.decodeIfPresent(Int.self, forKey: .batteryChargeCycles)
+        batteryLevelPercentage = try container.decodeIfPresent(Double.self, forKey: .batteryLevelPercentage)
+        ipAddressV4 = try container.decodeIfPresent(String.self, forKey: .ipAddressV4)
+        subnetAddress = try container.decodeIfPresent(String.self, forKey: .subnetAddress)
+
+        // Management information
+        managementCertificateExpirationDate = try container.decodeIfPresent(Date.self, forKey: .managementCertificateExpirationDate)
+        exchangeAccessState = try container.decodeIfPresent(String.self, forKey: .exchangeAccessState)
+        exchangeAccessStateReason = try container.decodeIfPresent(String.self, forKey: .exchangeAccessStateReason)
+        exchangeLastSuccessfulSyncDateTime = try container.decodeIfPresent(Date.self, forKey: .exchangeLastSuccessfulSyncDateTime)
+        remoteAssistanceSessionUrl = try container.decodeIfPresent(String.self, forKey: .remoteAssistanceSessionUrl)
+        autopilotEnrolled = try container.decodeIfPresent(Bool.self, forKey: .autopilotEnrolled)
+        requireUserEnrollmentApproval = try container.decodeIfPresent(Bool.self, forKey: .requireUserEnrollmentApproval)
+        lostModeState = try container.decodeIfPresent(String.self, forKey: .lostModeState)
+        activationLockBypassCode = try container.decodeIfPresent(String.self, forKey: .activationLockBypassCode)
+        deviceRegistrationState = try container.decodeIfPresent(String.self, forKey: .deviceRegistrationState)
+        managementAgent = try container.decodeIfPresent(String.self, forKey: .managementAgent)
+        deviceType = try container.decodeIfPresent(String.self, forKey: .deviceType)
+        chassisType = try container.decodeIfPresent(String.self, forKey: .chassisType)
+        joinType = try container.decodeIfPresent(String.self, forKey: .joinType)
+        skuFamily = try container.decodeIfPresent(String.self, forKey: .skuFamily)
+        skuNumber = try container.decodeIfPresent(Int.self, forKey: .skuNumber)
+
+        // Compliance information
+        complianceGracePeriodExpirationDateTime = try container.decodeIfPresent(Date.self, forKey: .complianceGracePeriodExpirationDateTime)
+        androidSecurityPatchLevel = try container.decodeIfPresent(String.self, forKey: .androidSecurityPatchLevel)
+        securityPatchLevel = try container.decodeIfPresent(String.self, forKey: .securityPatchLevel)
+        easActivated = try container.decodeIfPresent(Bool.self, forKey: .easActivated)
+        easDeviceId = try container.decodeIfPresent(String.self, forKey: .easDeviceId)
+        easActivationDateTime = try container.decodeIfPresent(Date.self, forKey: .easActivationDateTime)
+        aadRegistered = try container.decodeIfPresent(Bool.self, forKey: .aadRegistered)
+
+        // Security information
+        windowsActiveMalwareCount = try container.decodeIfPresent(Int.self, forKey: .windowsActiveMalwareCount)
+        windowsRemediatedMalwareCount = try container.decodeIfPresent(Int.self, forKey: .windowsRemediatedMalwareCount)
+        bootstrapTokenEscrowed = try container.decodeIfPresent(Bool.self, forKey: .bootstrapTokenEscrowed)
+        deviceFirmwareConfigurationInterfaceManaged = try container.decodeIfPresent(Bool.self, forKey: .deviceFirmwareConfigurationInterfaceManaged)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -254,6 +384,52 @@ final class Device: Identifiable, Codable {
         try container.encodeIfPresent(jailBroken, forKey: .jailBroken)
         try container.encodeIfPresent(managedDeviceName, forKey: .managedDeviceName)
         try container.encodeIfPresent(partnerReportedThreatState, forKey: .partnerReportedThreatState)
+
+        // Additional hardware information
+        try container.encodeIfPresent(physicalMemoryInBytes, forKey: .physicalMemoryInBytes)
+        try container.encodeIfPresent(processorArchitecture, forKey: .processorArchitecture)
+        try container.encodeIfPresent(udid, forKey: .udid)
+        try container.encodeIfPresent(iccid, forKey: .iccid)
+        try container.encodeIfPresent(subscriberCarrier, forKey: .subscriberCarrier)
+        try container.encodeIfPresent(cellularTechnology, forKey: .cellularTechnology)
+        try container.encodeIfPresent(batteryHealthPercentage, forKey: .batteryHealthPercentage)
+        try container.encodeIfPresent(batteryChargeCycles, forKey: .batteryChargeCycles)
+        try container.encodeIfPresent(batteryLevelPercentage, forKey: .batteryLevelPercentage)
+        try container.encodeIfPresent(ipAddressV4, forKey: .ipAddressV4)
+        try container.encodeIfPresent(subnetAddress, forKey: .subnetAddress)
+
+        // Management information
+        try container.encodeIfPresent(managementCertificateExpirationDate, forKey: .managementCertificateExpirationDate)
+        try container.encodeIfPresent(exchangeAccessState, forKey: .exchangeAccessState)
+        try container.encodeIfPresent(exchangeAccessStateReason, forKey: .exchangeAccessStateReason)
+        try container.encodeIfPresent(exchangeLastSuccessfulSyncDateTime, forKey: .exchangeLastSuccessfulSyncDateTime)
+        try container.encodeIfPresent(remoteAssistanceSessionUrl, forKey: .remoteAssistanceSessionUrl)
+        try container.encodeIfPresent(autopilotEnrolled, forKey: .autopilotEnrolled)
+        try container.encodeIfPresent(requireUserEnrollmentApproval, forKey: .requireUserEnrollmentApproval)
+        try container.encodeIfPresent(lostModeState, forKey: .lostModeState)
+        try container.encodeIfPresent(activationLockBypassCode, forKey: .activationLockBypassCode)
+        try container.encodeIfPresent(deviceRegistrationState, forKey: .deviceRegistrationState)
+        try container.encodeIfPresent(managementAgent, forKey: .managementAgent)
+        try container.encodeIfPresent(deviceType, forKey: .deviceType)
+        try container.encodeIfPresent(chassisType, forKey: .chassisType)
+        try container.encodeIfPresent(joinType, forKey: .joinType)
+        try container.encodeIfPresent(skuFamily, forKey: .skuFamily)
+        try container.encodeIfPresent(skuNumber, forKey: .skuNumber)
+
+        // Compliance information
+        try container.encodeIfPresent(complianceGracePeriodExpirationDateTime, forKey: .complianceGracePeriodExpirationDateTime)
+        try container.encodeIfPresent(androidSecurityPatchLevel, forKey: .androidSecurityPatchLevel)
+        try container.encodeIfPresent(securityPatchLevel, forKey: .securityPatchLevel)
+        try container.encodeIfPresent(easActivated, forKey: .easActivated)
+        try container.encodeIfPresent(easDeviceId, forKey: .easDeviceId)
+        try container.encodeIfPresent(easActivationDateTime, forKey: .easActivationDateTime)
+        try container.encodeIfPresent(aadRegistered, forKey: .aadRegistered)
+
+        // Security information
+        try container.encodeIfPresent(windowsActiveMalwareCount, forKey: .windowsActiveMalwareCount)
+        try container.encodeIfPresent(windowsRemediatedMalwareCount, forKey: .windowsRemediatedMalwareCount)
+        try container.encodeIfPresent(bootstrapTokenEscrowed, forKey: .bootstrapTokenEscrowed)
+        try container.encodeIfPresent(deviceFirmwareConfigurationInterfaceManaged, forKey: .deviceFirmwareConfigurationInterfaceManaged)
     }
 }
 

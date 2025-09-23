@@ -387,7 +387,7 @@ struct GroupSelectorSheet: View {
         .frame(width: 600, height: 500)
         .task {
             if groupService.groups.isEmpty {
-                try? await groupService.fetchGroups()
+                _ = try? await groupService.fetchGroups()
             }
         }
     }

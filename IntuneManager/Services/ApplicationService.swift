@@ -18,6 +18,7 @@ final class ApplicationService: ObservableObject {
 
     private let apiClient = GraphAPIClient.shared
     private let dataStore = LocalDataStore.shared
+    private let cacheManager = CacheManager.shared
 
     private init() {
         applications = dataStore.fetchApplications()
@@ -28,7 +29,8 @@ final class ApplicationService: ObservableObject {
     func fetchApplications(forceRefresh: Bool = false) async throws -> [Application] {
         Logger.shared.info("Fetching applications (forceRefresh: \(forceRefresh))", category: .data)
 
-        if !forceRefresh {
+        // Use CacheManager to determine if we should use cache
+        if cacheManager.canUseCache(for: .applications) && !forceRefresh {
             let cached = dataStore.fetchApplications()
             if !cached.isEmpty {
                 Logger.shared.info("Using cached applications: \(cached.count) items", category: .data)
@@ -78,6 +80,7 @@ final class ApplicationService: ObservableObject {
             self.lastSync = Date()
 
             dataStore.replaceApplications(with: filteredApps)
+            cacheManager.updateMetadata(for: .applications, recordCount: filteredApps.count)
             Logger.shared.info("Stored \(filteredApps.count) applications in cache", category: .data)
 
             return filteredApps

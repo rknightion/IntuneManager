@@ -1,20 +1,22 @@
 import Foundation
 import SwiftData
 
+typealias StringArray = [String]
+
 @Model
 final class DeviceGroup: Identifiable, Codable {
     @Attribute(.unique) var id: String
     var displayName: String
     var groupDescription: String?
     var createdDateTime: Date?
-    var groupTypes: [String]?
+    var groupTypes: StringArray?
     var membershipRule: String?
     var membershipRuleProcessingState: MembershipRuleProcessingState?
     var securityEnabled: Bool
     var mailEnabled: Bool
     var mailNickname: String?
     var onPremisesSyncEnabled: Bool?
-    var proxyAddresses: [String]?
+    var proxyAddresses: StringArray?
     var visibility: String?
     var allowExternalSenders: Bool?
     var autoSubscribeNewMembers: Bool?
@@ -27,8 +29,8 @@ final class DeviceGroup: Identifiable, Codable {
     var userCount: Int?
 
     // Relationships
-    var assignedApplications: [Application]?
-    var members: [GroupMember]?
+    @Transient var assignedApplications: [Application]?
+    @Transient var members: [GroupMember]?
 
     enum MembershipRuleProcessingState: String, Codable {
         case on = "On"

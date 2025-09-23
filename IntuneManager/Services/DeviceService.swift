@@ -19,6 +19,7 @@ final class DeviceService: ObservableObject {
 
     private let apiClient = GraphAPIClient.shared
     private let dataStore = LocalDataStore.shared
+    private let cacheManager = CacheManager.shared
 
     private init() {
         devices = dataStore.fetchDevices()
@@ -27,10 +28,12 @@ final class DeviceService: ObservableObject {
     // MARK: - Public Methods
 
     func fetchDevices(forceRefresh: Bool = false) async throws -> [Device] {
-        if !forceRefresh {
+        // Use CacheManager to determine if we should use cache
+        if cacheManager.canUseCache(for: .devices) && !forceRefresh {
             let cached = dataStore.fetchDevices()
             if !cached.isEmpty {
                 devices = cached
+                Logger.shared.debug("Using cached devices (\(cached.count) items)", category: .data)
                 return cached
             }
         }
@@ -41,7 +44,7 @@ final class DeviceService: ObservableObject {
         do {
             let endpoint = "/deviceManagement/managedDevices"
             let parameters = [
-                "$select": "id,deviceName,model,manufacturer,operatingSystem,osVersion,serialNumber,enrolledDateTime,lastSyncDateTime,complianceState,managementState,managedDeviceOwnerType,userPrincipalName,userDisplayName,isEncrypted,isSupervised",
+                "$select": "id,deviceName,model,manufacturer,operatingSystem,osVersion,serialNumber,enrolledDateTime,lastSyncDateTime,complianceState,managementState,managedDeviceOwnerType,userPrincipalName,userDisplayName,userId,emailAddress,isEncrypted,isSupervised,azureADDeviceId,azureADRegistered,deviceCategory,deviceEnrollmentType,phoneNumber,notes,ethernetMacAddress,wiFiMacAddress,freeStorageSpaceInBytes,totalStorageSpaceInBytes,jailBroken,managedDeviceName,partnerReportedThreatState,imei,meid,udid,iccid,subscriberCarrier,physicalMemoryInBytes,processorArchitecture,managementCertificateExpirationDate,exchangeAccessState,exchangeAccessStateReason,exchangeLastSuccessfulSyncDateTime,remoteAssistanceSessionUrl,autopilotEnrolled,requireUserEnrollmentApproval,lostModeState,activationLockBypassCode,deviceRegistrationState,managementAgent,deviceType,chassisType,joinType,skuFamily,skuNumber,complianceGracePeriodExpirationDateTime,androidSecurityPatchLevel,easActivated,easDeviceId,easActivationDateTime,aadRegistered,windowsActiveMalwareCount,windowsRemediatedMalwareCount,bootstrapTokenEscrowed,deviceFirmwareConfigurationInterfaceManaged",
                 "$orderby": "deviceName"
                 // Removed filter to get ALL device types including Windows, Android, etc.
             ]
@@ -52,6 +55,7 @@ final class DeviceService: ObservableObject {
             self.lastSync = Date()
 
             dataStore.replaceDevices(with: fetchedDevices)
+            cacheManager.updateMetadata(for: .devices, recordCount: fetchedDevices.count)
 
             Logger.shared.info("Fetched \(fetchedDevices.count) devices from Graph API")
 
@@ -108,7 +112,8 @@ final class DeviceService: ObservableObject {
     func syncDevice(_ device: Device) async throws {
         let endpoint = "/deviceManagement/managedDevices/\(device.id)/syncDevice"
 
-        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: EmptyBody(), headers: nil)
+        let headers = ["Content-Type": "application/json"]
+        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: EmptyBody(), headers: headers)
 
         Logger.shared.info("Sync initiated for device: \(device.deviceName)")
 
@@ -119,7 +124,8 @@ final class DeviceService: ObservableObject {
     func retireDevice(_ device: Device) async throws {
         let endpoint = "/deviceManagement/managedDevices/\(device.id)/retire"
 
-        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: EmptyBody(), headers: nil)
+        let headers = ["Content-Type": "application/json"]
+        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: EmptyBody(), headers: headers)
 
         Logger.shared.info("Retire initiated for device: \(device.deviceName)")
     }
@@ -137,7 +143,8 @@ final class DeviceService: ObservableObject {
     func shutdownDevice(_ device: Device) async throws {
         let endpoint = "/deviceManagement/managedDevices/\(device.id)/shutDown"
 
-        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: EmptyBody(), headers: nil)
+        let headers = ["Content-Type": "application/json"]
+        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: EmptyBody(), headers: headers)
 
         Logger.shared.info("Shutdown initiated for device: \(device.deviceName)")
     }
@@ -145,7 +152,8 @@ final class DeviceService: ObservableObject {
     func restartDevice(_ device: Device) async throws {
         let endpoint = "/deviceManagement/managedDevices/\(device.id)/rebootNow"
 
-        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: EmptyBody(), headers: nil)
+        let headers = ["Content-Type": "application/json"]
+        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: EmptyBody(), headers: headers)
 
         Logger.shared.info("Restart initiated for device: \(device.deviceName)")
     }
@@ -157,7 +165,8 @@ final class DeviceService: ObservableObject {
             BatchRequest(
                 method: "POST",
                 url: "/deviceManagement/managedDevices/\(device.id)/syncDevice",
-                body: EmptyBody()
+                body: EmptyBody(),
+                headers: ["Content-Type": "application/json"]
             )
         }
 

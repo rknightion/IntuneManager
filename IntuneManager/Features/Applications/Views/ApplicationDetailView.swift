@@ -41,8 +41,8 @@ final class ApplicationDetailViewModel: ObservableObject {
             if let summary = fresh.installSummary {
                 installSummary = summary
                 Logger.shared.debug("Install summary included in response", category: .ui)
-            } else {
-                // Fetch install summary from device and user statuses
+            } else if fresh.hasAssignments {
+                // Only fetch install summary if app has assignments
                 Logger.shared.debug("Fetching install summary from statuses", category: .ui)
                 do {
                     installSummary = try await appService.fetchInstallSummary(appId: fresh.id)
@@ -50,6 +50,10 @@ final class ApplicationDetailViewModel: ObservableObject {
                     Logger.shared.warning("Could not fetch install summary: \(error)", category: .ui)
                     installSummary = nil
                 }
+            } else {
+                // No assignments, no install summary needed
+                Logger.shared.debug("App has no assignments, skipping install summary fetch", category: .ui)
+                installSummary = nil
             }
         } catch {
             Logger.shared.error("Failed to load app details: \(error.localizedDescription)", category: .ui)
@@ -173,9 +177,9 @@ struct ApplicationDetailView: View {
                 }
             } else if viewModel.errorMessage != nil {
                 // Only show error message if there was an actual error fetching data
-                Text("Unable to load assignment data.")
+                Text("No assignments configured for this app.")
                     .font(.caption)
-                    .foregroundColor(.red)
+                    .foregroundColor(.secondary)
             } else {
                 // Show 0 assignments when data loaded successfully but no assignments exist
                 HStack {
@@ -239,11 +243,11 @@ struct ApplicationDetailView: View {
                         .foregroundColor(.secondary)
                 }
             } else if viewModel.errorMessage != nil {
-                Text("Unable to fetch install metrics from Graph API.")
+                Text("No install data available. Assign this app to groups to see install metrics.")
                     .font(.caption)
-                    .foregroundColor(.red)
+                    .foregroundColor(.secondary)
             } else {
-                Text("Install metrics not available. Tap refresh to retry.")
+                Text("Install metrics will appear after assignment deployment.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

@@ -25,7 +25,8 @@ struct IntuneManagerApp: App {
                 for: Device.self,
                      Application.self,
                      DeviceGroup.self,
-                     Assignment.self
+                     Assignment.self,
+                     CacheMetadata.self
             )
         } catch {
             fatalError("Failed to create model container: \(error)")
@@ -71,7 +72,7 @@ struct IntuneManagerApp: App {
             CommandMenu("View") {
                 Button("Refresh") {
                     Task {
-                        await appState.syncAll()
+                        await appState.refreshAll()
                     }
                 }
                 .keyboardShortcut("R", modifiers: .command)
@@ -259,6 +260,7 @@ private struct RootScene: View {
         .animation(.easeInOut(duration: 0.3), value: showingSplash)
         .task {
             LocalDataStore.shared.configure(with: modelContext)
+            CacheManager.shared.configure(with: modelContext)
             DeviceService.shared.hydrateFromStore()
             ApplicationService.shared.hydrateFromStore()
             GroupService.shared.hydrateFromStore()

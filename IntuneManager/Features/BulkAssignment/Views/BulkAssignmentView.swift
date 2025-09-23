@@ -76,6 +76,11 @@ struct BulkAssignmentView: View {
                 Spacer()
 
                 VStack(spacing: 2) {
+                    if currentStep == .selectApps && !viewModel.selectedApplications.isEmpty {
+                        Text("\(viewModel.selectedApplications.count) apps selected")
+                            .font(.caption)
+                            .foregroundColor(.accentColor)
+                    }
                     Text("\(viewModel.totalExistingAssignments) existing assignments")
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -411,6 +416,9 @@ struct ApplicationSelectionView: View {
                         Label("\(appService.applications.filter { $0.hasAssignments }.count) assigned", systemImage: "person.2.square.stack")
                             .font(.caption)
                             .foregroundColor(.green)
+                        Text("(\(appService.applications.count) total)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                 }
             }

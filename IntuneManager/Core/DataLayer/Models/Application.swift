@@ -7,7 +7,7 @@ final class Application: Identifiable, Codable, Hashable {
     var displayName: String
     var appDescription: String?
     var publisher: String?
-    var largeIcon: Data?
+    var largeIcon: MimeContent?
     var createdDateTime: Date
     var lastModifiedDateTime: Date
     var isFeatured: Bool
@@ -233,7 +233,7 @@ final class Application: Identifiable, Codable, Hashable {
                 return "globe"
             case .androidStoreApp, .androidManagedStoreApp:
                 return "phone"
-            case .windowsMobileMSI, .winAppX, .win32LobApp, .microsoftStoreForBusinessApp, .windowsUniversalAppX, .winGetApp, .win32CatalogApp, .microsoftDefenderForEndpoint:
+            case .windowsMobileMSI, .winAppX, .win32LobApp, .microsoftStoreForBusinessApp, .windowsUniversalAppX, .winGetApp, .win32CatalogApp:
                 return "pc"
             case .microsoftEdgeApp, .windowsWebApp:
                 return "network"
@@ -455,7 +455,7 @@ final class Application: Identifiable, Codable, Hashable {
         displayName = try container.decode(String.self, forKey: .displayName)
         appDescription = try container.decodeIfPresent(String.self, forKey: .description)
         publisher = try container.decodeIfPresent(String.self, forKey: .publisher)
-        largeIcon = try container.decodeIfPresent(Data.self, forKey: .largeIcon)
+        largeIcon = try container.decodeIfPresent(MimeContent.self, forKey: .largeIcon)
         createdDateTime = try container.decode(Date.self, forKey: .createdDateTime)
         lastModifiedDateTime = try container.decode(Date.self, forKey: .lastModifiedDateTime)
         isFeatured = try container.decodeIfPresent(Bool.self, forKey: .isFeatured) ?? false
@@ -579,6 +579,16 @@ final class Application: Identifiable, Codable, Hashable {
 }
 
 // MARK: - App Assignment
+struct MimeContent: Codable, Sendable {
+    let type: String?
+    let value: String? // Base64 encoded string
+
+    var decodedData: Data? {
+        guard let value = value else { return nil }
+        return Data(base64Encoded: value)
+    }
+}
+
 struct AppAssignment: Codable, Identifiable, Sendable {
     let id: String
     let intent: AssignmentIntent

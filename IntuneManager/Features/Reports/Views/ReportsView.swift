@@ -201,6 +201,7 @@ struct ReportSectionButton: View {
 struct IntuneAssignmentStatsSection: View {
     let stats: IntuneAssignmentStats?
     let isLoading: Bool
+    @State private var expandedIntent: Assignment.AssignmentIntent?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -244,21 +245,79 @@ struct IntuneAssignmentStatsSection: View {
                 if !stats.assignmentsByIntent.isEmpty {
                     Divider()
 
-                    Text("Assignments by Intent")
+                    Text("Assignments by Intent (click to expand)")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .padding(.top, 8)
 
                     ForEach(Array(stats.assignmentsByIntent.keys.sorted(by: { $0.rawValue < $1.rawValue })), id: \.self) { intent in
-                        HStack {
-                            Label(intent.displayName, systemImage: intent.icon)
-                                .font(.subheadline)
-                            Spacer()
-                            Text("\(stats.assignmentsByIntent[intent] ?? 0)")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
+                        VStack(spacing: 8) {
+                            Button(action: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    if expandedIntent == intent {
+                                        expandedIntent = nil
+                                    } else {
+                                        expandedIntent = intent
+                                    }
+                                }
+                            }) {
+                                HStack {
+                                    Label(intent.displayName, systemImage: intent.icon)
+                                        .font(.subheadline)
+                                    Spacer()
+                                    Text("\(stats.assignmentsByIntent[intent] ?? 0)")
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                    Image(systemName: expandedIntent == intent ? "chevron.up" : "chevron.down")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .padding(.vertical, 4)
+
+                            if expandedIntent == intent, let apps = stats.appsByIntent[intent], !apps.isEmpty {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    ForEach(apps) { app in
+                                        HStack(alignment: .top, spacing: 8) {
+                                            Image(systemName: app.appType.icon)
+                                                .font(.caption)
+                                                .foregroundColor(.accentColor)
+                                                .frame(width: 16)
+
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(app.appName)
+                                                    .font(.caption)
+                                                    .fontWeight(.medium)
+
+                                                Text("Assigned to: \(app.groupNames.joined(separator: ", "))")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.secondary)
+                                                    .lineLimit(2)
+                                            }
+
+                                            Spacer()
+                                        }
+                                        .padding(.leading, 20)
+                                        .padding(.vertical, 2)
+
+                                        if app.id != apps.last?.id {
+                                            Divider()
+                                                .padding(.leading, 36)
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 4)
+                                .padding(.horizontal, 8)
+                                .background(Color.gray.opacity(0.03))
+                                .cornerRadius(6)
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .top).combined(with: .opacity),
+                                    removal: .move(edge: .top).combined(with: .opacity)
+                                ))
+                            }
                         }
-                        .padding(.vertical, 4)
                     }
                 }
             } else {

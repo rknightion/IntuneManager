@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var isSigningOut = false
     @State private var signOutError: String?
     @State private var showingError = false
+    @State private var showingCacheStatus = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -149,6 +150,30 @@ struct SettingsView: View {
                             .font(.headline)
                             .foregroundColor(.primary)
 
+                        // Cache Status Button
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Cache Status")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                    Text("Monitor and manage cached data")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding()
+                            .background(Color.blue.opacity(0.05))
+                            .cornerRadius(8)
+                            .onTapGesture {
+                                showingCacheStatus = true
+                            }
+                        }
+
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Clear All Data")
                                 .font(.subheadline)
@@ -248,6 +273,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showingConfiguration) {
             ConfigurationView()
+        }
+        .sheet(isPresented: $showingCacheStatus) {
+            CacheStatusView()
         }
         .overlay {
             if isSigningOut {

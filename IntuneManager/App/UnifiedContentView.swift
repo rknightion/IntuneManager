@@ -62,13 +62,43 @@ struct UnifiedContentView: View {
         if UIDevice.current.userInterfaceIdiom == .pad {
             // iPad uses split view like macOS
             splitViewLayout
+                .alert("Permission Required", isPresented: $appState.showingPermissionAlert) {
+                    Button("OK", role: .cancel) {}
+                    Button("View Settings") {
+                        appState.selectedTab = .settings
+                    }
+                } message: {
+                    if let details = appState.permissionErrorDetails {
+                        Text(details.formattedDescription)
+                    }
+                }
         } else {
             // iPhone uses tab bar
             tabBarLayout
+                .alert("Permission Required", isPresented: $appState.showingPermissionAlert) {
+                    Button("OK", role: .cancel) {}
+                    Button("View Settings") {
+                        appState.selectedTab = .settings
+                    }
+                } message: {
+                    if let details = appState.permissionErrorDetails {
+                        Text(details.formattedDescription)
+                    }
+                }
         }
         #else
         // macOS uses split view
         splitViewLayout
+            .alert("Permission Required", isPresented: $appState.showingPermissionAlert) {
+                Button("OK", role: .cancel) {}
+                Button("View Settings") {
+                    appState.selectedTab = .settings
+                }
+            } message: {
+                if let details = appState.permissionErrorDetails {
+                    Text(details.formattedDescription)
+                }
+            }
         #endif
     }
 
@@ -299,8 +329,8 @@ struct UnifiedSidebarView: View {
     private func refresh() {
         Logger.shared.info("User initiated refresh all", category: .ui)
         Task {
-            await appState.syncAll()
-            Logger.shared.info("Refresh all completed", category: .sync)
+            await appState.refreshAll()
+            Logger.shared.info("Refresh all completed", category: .ui)
         }
     }
 

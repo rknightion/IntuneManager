@@ -7,6 +7,7 @@ struct DashboardView: View {
     @StateObject private var groupService = GroupService.shared
     @StateObject private var assignmentService = AssignmentService.shared
     @State private var selectedTimeRange: TimeRange = .week
+    @State private var intuneStats: IntuneAssignmentStats?
 
     enum TimeRange: String, CaseIterable {
         case day = "24 Hours"
@@ -33,7 +34,7 @@ struct DashboardView: View {
                     deviceCount: deviceService.devices.count,
                     appCount: appService.applications.count,
                     groupCount: groupService.groups.count,
-                    assignmentStats: assignmentService.getAssignmentStatistics()
+                    intuneStats: intuneStats
                 )
 
                 // Charts
@@ -64,6 +65,13 @@ struct DashboardView: View {
             }
             group.addTask {
                 _ = try? await self.groupService.fetchGroups()
+            }
+            group.addTask {
+                if let stats = try? await self.assignmentService.fetchIntuneAssignmentStatistics() {
+                    await MainActor.run {
+                        self.intuneStats = stats
+                    }
+                }
             }
         }
     }
@@ -105,7 +113,7 @@ struct StatsSection: View {
     let deviceCount: Int
     let appCount: Int
     let groupCount: Int
-    let assignmentStats: AssignmentStatistics
+    let intuneStats: IntuneAssignmentStats?
 
     var body: some View {
         HStack(spacing: 16) {
@@ -124,16 +132,16 @@ struct StatsSection: View {
             )
 
             StatCard(
-                title: "Groups",
-                value: "\(groupCount)",
-                icon: "person.3",
+                title: "Assignments",
+                value: "\(intuneStats?.totalAssignments ?? 0)",
+                icon: "link.circle",
                 color: .orange
             )
 
             StatCard(
-                title: "Success Rate",
-                value: String(format: "%.1f%%", assignmentStats.successRate),
-                icon: "checkmark.circle",
+                title: "Apps Deployed",
+                value: "\(intuneStats?.totalAppsWithAssignments ?? 0)",
+                icon: "app.badge.checkmark",
                 color: .purple
             )
         }

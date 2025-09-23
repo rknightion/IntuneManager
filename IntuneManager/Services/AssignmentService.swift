@@ -350,8 +350,7 @@ final class AssignmentService: ObservableObject {
             total: total,
             completed: completed,
             failed: failed,
-            pending: pending,
-            successRate: total > 0 ? Double(completed) / Double(total) * 100 : 0
+            pending: pending
         )
     }
 
@@ -364,6 +363,7 @@ final class AssignmentService: ObservableObject {
 
         var totalAssignments = 0
         var appAssignmentCounts: [String: Int] = [:]
+        var appsByIntent: [Assignment.AssignmentIntent: [AppIntentDetail]] = [:]
 
         // Count assignments across all apps
         for app in applications {
@@ -373,22 +373,46 @@ final class AssignmentService: ObservableObject {
             }
         }
 
-        // Group assignments by intent type
+        // Group assignments by intent type and collect app details
         var intentCounts: [Assignment.AssignmentIntent: Int] = [:]
         for app in applications {
             if let assignments = app.assignments {
+                // Group assignments by intent for this app
+                var intentGroups: [Assignment.AssignmentIntent: [String]] = [:]
+
                 for assignment in assignments {
                     let intent = Assignment.AssignmentIntent(rawValue: assignment.intent.rawValue) ?? .available
                     intentCounts[intent, default: 0] += 1
+
+                    // Collect group names for this intent
+                    let groupName = assignment.target.groupName ?? "All Users/Devices"
+                    intentGroups[intent, default: []].append(groupName)
+                }
+
+                // Create AppIntentDetail for each intent this app has
+                for (intent, groups) in intentGroups {
+                    let appDetail = AppIntentDetail(
+                        id: app.id,
+                        appName: app.displayName,
+                        appType: app.appType,
+                        groupNames: Array(Set(groups)).sorted() // Remove duplicates and sort
+                    )
+                    appsByIntent[intent, default: []].append(appDetail)
                 }
             }
+        }
+
+        // Sort apps by name within each intent
+        for intent in appsByIntent.keys {
+            appsByIntent[intent]?.sort { $0.appName < $1.appName }
         }
 
         return IntuneAssignmentStats(
             totalAssignments: totalAssignments,
             assignmentsByIntent: intentCounts,
             totalAppsWithAssignments: appAssignmentCounts.values.filter { $0 > 0 }.count,
-            totalApps: applications.count
+            totalApps: applications.count,
+            appsByIntent: appsByIntent
         )
     }
 
@@ -407,7 +431,6 @@ struct AssignmentStatistics {
     let completed: Int
     let failed: Int
     let pending: Int
-    let successRate: Double
 }
 
 struct IntuneAssignmentStats {
@@ -415,6 +438,14 @@ struct IntuneAssignmentStats {
     let assignmentsByIntent: [Assignment.AssignmentIntent: Int]
     let totalAppsWithAssignments: Int
     let totalApps: Int
+    let appsByIntent: [Assignment.AssignmentIntent: [AppIntentDetail]]
+}
+
+struct AppIntentDetail: Identifiable {
+    let id: String
+    let appName: String
+    let appType: Application.AppType
+    let groupNames: [String]
 }
 
 enum AssignmentError: LocalizedError {

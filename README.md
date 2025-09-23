@@ -84,6 +84,39 @@ IntuneManager/
 Make sure your bundle identifier matches what's registered in Azure AD for the redirect URI:
 - Redirect URI format: `msauth.{your-bundle-id}://auth`
 
+### Required Microsoft Graph API Permissions
+
+The application requires the following Graph API permissions to function properly:
+
+#### Device Management
+- **DeviceManagementManagedDevices.Read.All** - Read device information
+- **DeviceManagementManagedDevices.ReadWrite.All** - Update device information
+- **DeviceManagementManagedDevices.PrivilegedOperations.All** - Perform device sync, wipe, restart operations
+
+#### Application Management
+- **DeviceManagementApps.Read.All** - Read application information
+- **DeviceManagementApps.ReadWrite.All** - Manage application assignments
+
+#### Groups & Users
+- **Group.Read.All** - Read group information
+- **GroupMember.Read.All** - Read group membership
+- **User.Read.All** - Read user profiles
+
+#### Audit & Reports
+- **AuditLog.Read.All** - Read audit logs and activity reports
+
+#### Core Permissions (automatically included)
+- **User.Read** - Sign in and read user profile
+- **offline_access** - Maintain access to data
+
+Configure these permissions in Azure AD:
+1. Go to Azure Portal → App registrations
+2. Select your application
+3. Navigate to API permissions
+4. Add permissions → Microsoft Graph → Delegated permissions
+5. Select all required permissions listed above
+6. Grant admin consent if required by your organization
+
 ## Building & Running
 
 ### iOS

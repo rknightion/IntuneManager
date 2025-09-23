@@ -29,6 +29,7 @@ final class GroupService: ObservableObject {
 
     private let apiClient = GraphAPIClient.shared
     private let dataStore = LocalDataStore.shared
+    private let cacheManager = CacheManager.shared
 
     private init() {
         groups = dataStore.fetchGroups()
@@ -39,7 +40,8 @@ final class GroupService: ObservableObject {
     func fetchGroups(forceRefresh: Bool = false) async throws -> [DeviceGroup] {
         Logger.shared.info("Fetching groups (forceRefresh: \(forceRefresh))", category: .data)
 
-        if !forceRefresh {
+        // Use CacheManager to determine if we should use cache
+        if cacheManager.canUseCache(for: .groups) && !forceRefresh {
             let cached = dataStore.fetchGroups()
             if !cached.isEmpty {
                 Logger.shared.info("Using cached groups: \(cached.count) items", category: .data)
@@ -83,6 +85,7 @@ final class GroupService: ObservableObject {
             await fetchMemberCounts(for: filteredGroups)
 
             dataStore.replaceGroups(with: filteredGroups)
+            cacheManager.updateMetadata(for: .groups, recordCount: filteredGroups.count)
             Logger.shared.info("Stored \(filteredGroups.count) groups in cache", category: .data)
 
             return filteredGroups

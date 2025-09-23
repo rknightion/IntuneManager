@@ -638,8 +638,8 @@ actor GraphAPIClient {
 // MARK: - Supporting Types
 
 struct GraphResponse<T: Decodable & Sendable>: Decodable, Sendable {
-    nonisolated let value: [T]?
-    nonisolated let nextLink: String?
+    let value: [T]?
+    let nextLink: String?
 
     enum CodingKeys: String, CodingKey {
         case value
@@ -648,8 +648,8 @@ struct GraphResponse<T: Decodable & Sendable>: Decodable, Sendable {
 }
 
 struct GraphModelResponse<T: Decodable>: Decodable {
-    nonisolated let value: [T]?
-    nonisolated let nextLink: String?
+    let value: [T]?
+    let nextLink: String?
 
     enum CodingKeys: String, CodingKey {
         case value
@@ -658,28 +658,28 @@ struct GraphModelResponse<T: Decodable>: Decodable {
 }
 
 struct GraphErrorResponse: Decodable, Sendable {
-    nonisolated let error: GraphError
+    let error: GraphError
 
     struct GraphError: Decodable, Sendable {
-        nonisolated let code: String
-        nonisolated let message: String
-        nonisolated let innerError: InnerError?
+        let code: String
+        let message: String
+        let innerError: InnerError?
 
         struct InnerError: Decodable, Sendable {
-            nonisolated let requestId: String?
-            nonisolated let date: String?
+            let requestId: String?
+            let date: String?
         }
     }
 }
 
 struct BatchRequest: Encodable, Sendable {
-    nonisolated let id: String
-    nonisolated let method: String
-    nonisolated let url: String
-    nonisolated let body: Data?
-    nonisolated let headers: [String: String]?
+    let id: String
+    let method: String
+    let url: String
+    let body: Data?
+    let headers: [String: String]?
 
-    nonisolated init(id: String = UUID().uuidString,
+    init(id: String = UUID().uuidString,
          method: String,
          url: String,
          body: Encodable? = nil,
@@ -697,24 +697,24 @@ struct BatchRequest: Encodable, Sendable {
 }
 
 struct BatchRequestBody: Encodable, Sendable {
-    nonisolated let requests: [BatchRequest]
+    let requests: [BatchRequest]
 }
 
 struct BatchResponse<T: Decodable>: Decodable {
-    nonisolated let id: String
-    nonisolated let status: Int
-    nonisolated let body: T?
-    nonisolated let headers: [String: String]?
+    let id: String
+    let status: Int
+    let body: T?
+    let headers: [String: String]?
 }
 
 struct BatchResponseBody<T: Decodable>: Decodable {
-    nonisolated let responses: [BatchResponse<T>]
+    let responses: [BatchResponse<T>]
 }
 
 struct EmptyBody: Encodable, Sendable {}
 
 struct EmptyResponse: Decodable, Sendable {
-    nonisolated init() {}
+    init() {}
 }
 
 extension BatchResponse: Sendable where T: Sendable {}
