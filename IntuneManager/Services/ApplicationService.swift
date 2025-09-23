@@ -102,8 +102,29 @@ final class ApplicationService: ObservableObject {
         let endpoint = "/deviceAppManagement/mobileApps/\(id)"
         let parameters = ["$expand": "assignments"]
 
-        let app: Application = try await apiClient.getModel(endpoint, parameters: parameters)
-        return app
+        do {
+            let app: Application = try await apiClient.getModel(endpoint, parameters: parameters)
+            Logger.shared.debug("Successfully fetched application: \(app.displayName)", category: .data)
+            return app
+        } catch let decodingError as DecodingError {
+            // Log detailed decoding error for debugging
+            switch decodingError {
+            case .keyNotFound(let key, let context):
+                Logger.shared.error("Missing key '\(key.stringValue)' at: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))", category: .data)
+            case .typeMismatch(let type, let context):
+                Logger.shared.error("Type mismatch for type '\(type)' at: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))", category: .data)
+            case .valueNotFound(let type, let context):
+                Logger.shared.error("Value not found for type '\(type)' at: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))", category: .data)
+            case .dataCorrupted(let context):
+                Logger.shared.error("Data corrupted at: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))", category: .data)
+            @unknown default:
+                Logger.shared.error("Unknown decoding error: \(decodingError)", category: .data)
+            }
+            throw decodingError
+        } catch {
+            Logger.shared.error("Failed to fetch application details: \(error.localizedDescription)", category: .data)
+            throw error
+        }
     }
 
     func searchApplications(query: String) -> [Application] {
