@@ -2,7 +2,6 @@
 
 ## Read Me First
 - Follow any direct instructions within this file as you edit. Ensure this file and any relevant CLAUDE.md files in sub directories is kept up to date as the project evolves with any significant architecture changes or new best practices introduced but do not update this file for every minor change only significant ones that would be useful for a future LLMs context
-- Work transparently: call out assumptions, and prefer incremental changes with clear reasoning.
 - Use context7 MCP server when searching for library documentation. Use context7 library ID 'microsoftgraph/microsoft-graph-docs-contrib' for all information about the microsoft graph API. Search there first for any required information before doing generic web searches but also you should verify context obtained from context7 with web searches where you are not confident of a result
 
 ## Non-Negotiable Rules
@@ -31,7 +30,8 @@
 Data flows from the Microsoft Graph through `GraphAPIClient` → rate-limited batch helpers → Services → SwiftData `LocalDataStore` → environment-bound view models and SwiftUI views. Logging runs through `Logger.shared` so new work should surface key events there rather than `print`.
 
 ## Multi-Platform Best Practices
-- Maintain feature parity: when updating a feature view, confirm it renders acceptably on macOS, iPad, and iPhone. Use `platformGlassBackground`, `PlatformNavigation`, and other cross-platform modifiers instead of ad-hoc device checks when possible.
+- Maintain feature parity: when updating a feature view, it should render acceptably on macOS, iPad, and iPhone. Use `platformGlassBackground`, `PlatformNavigation`, and other cross-platform modifiers instead of ad-hoc device checks when possible.
+- While we want compatability of our app for iOS and iPadOS the main target audience is MacOS and that should be prioritised where possible.
 - Keep platform-specific code behind `#if os(...)` guards and isolate it in `CrossPlatform` helpers to avoid scattering conditionals.
 - Respect concurrency annotations: UI-facing models stay `@MainActor`; background Graph work happens inside services actors or async functions with explicit `Sendable` models.
 - Reuse `AppState.Tab` to surface new sections; update sidebar/tab registration and provide consistent icons and labels.
