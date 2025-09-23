@@ -101,7 +101,7 @@ final class AuditLog: Codable {
 final class AuditActor: Codable {
     var type: String?
     var auditActorType: String?
-    var userPermissions: [String]?
+    var userPermissionsData: Data?
     var applicationId: String?
     var applicationDisplayName: String?
     var userPrincipalName: String?
@@ -131,6 +131,17 @@ final class AuditActor: Codable {
         self.userId = userId
     }
 
+    // Computed property for array access
+    var userPermissions: [String]? {
+        get {
+            guard let data = userPermissionsData else { return nil }
+            return try? JSONDecoder().decode([String].self, from: data)
+        }
+        set {
+            userPermissionsData = try? JSONEncoder().encode(newValue)
+        }
+    }
+
     // Codable conformance
     enum CodingKeys: String, CodingKey {
         case type
@@ -148,7 +159,12 @@ final class AuditActor: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.type = try container.decodeIfPresent(String.self, forKey: .type)
         self.auditActorType = try container.decodeIfPresent(String.self, forKey: .auditActorType)
-        self.userPermissions = try container.decodeIfPresent([String].self, forKey: .userPermissions)
+
+        // Decode array and convert to Data for storage
+        if let permissions = try container.decodeIfPresent([String].self, forKey: .userPermissions) {
+            self.userPermissionsData = try? JSONEncoder().encode(permissions)
+        }
+
         self.applicationId = try container.decodeIfPresent(String.self, forKey: .applicationId)
         self.applicationDisplayName = try container.decodeIfPresent(String.self, forKey: .applicationDisplayName)
         self.userPrincipalName = try container.decodeIfPresent(String.self, forKey: .userPrincipalName)

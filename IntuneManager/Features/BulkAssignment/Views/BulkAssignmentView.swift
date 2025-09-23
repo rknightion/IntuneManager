@@ -51,12 +51,12 @@ struct BulkAssignmentView: View {
                         selectedApplications: viewModel.selectedApplications
                     )
                 case .configureSettings:
-                    AssignmentSettingsView(
-                        intent: $viewModel.assignmentIntent,
-                        settings: $viewModel.assignmentSettings,
-                        targetPlatform: $viewModel.targetPlatform,
-                        availablePlatforms: viewModel.availablePlatforms
+                    GroupAssignmentSettingsView(
+                        groupSettings: $viewModel.groupAssignmentSettings,
+                        selectedApplications: viewModel.selectedApplications,
+                        selectedGroups: viewModel.selectedGroups
                     )
+                    .frame(maxWidth: 1200)
                 case .review:
                     ReviewAssignmentView(viewModel: viewModel)
                 }

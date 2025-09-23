@@ -151,7 +151,7 @@ struct ApplicationListView: View {
                             clearFilters: clearFilters
                         )
                         .padding()
-                        .background(Color(NSColor.controlBackgroundColor))
+                        .background(Theme.Colors.secondaryBackground)
                         .border(Color.secondary.opacity(0.2), width: 0.5)
                     }
 
@@ -174,7 +174,7 @@ struct ApplicationListView: View {
                         }
                     }
                     .padding(.horizontal)
-                    .padding(.bottom, 8)
+                    .padding(.vertical, 8)
 
                     List(filteredApplications) { app in
                         NavigationLink(destination: ApplicationDetailView(application: app)) {
@@ -244,7 +244,8 @@ struct ApplicationFiltersView: View {
     let clearFilters: () -> Void
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        VStack(alignment: .leading, spacing: 12) {
+            // First row: Assignment filter and main filters
             HStack(spacing: 12) {
                 // Assignment Filter
                 Picker("Assignment", selection: $assignmentFilter) {
@@ -255,6 +256,11 @@ struct ApplicationFiltersView: View {
                 .pickerStyle(.segmented)
                 .fixedSize()
 
+                Spacer()
+            }
+
+            // Second row: Filter chips that can wrap
+            FlowLayout(spacing: 8) {
                 // App Type Filter
                 Menu {
                     Button("Any", action: { selectedAppType = nil })

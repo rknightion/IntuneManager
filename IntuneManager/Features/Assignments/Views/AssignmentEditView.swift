@@ -55,7 +55,7 @@ struct AssignmentEditView: View {
                         .padding(.horizontal)
                 }
             }
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(Theme.Colors.secondaryBackground)
 
             Divider()
 
@@ -91,7 +91,7 @@ struct AssignmentEditView: View {
                                 }
                             }
                             .padding()
-                            .background(Color(NSColor.controlBackgroundColor))
+                            .background(Theme.Colors.secondaryBackground)
                             .cornerRadius(8)
                         }
 
@@ -129,7 +129,7 @@ struct AssignmentEditView: View {
                             }
                         }
                         .padding()
-                        .background(Color(NSColor.controlBackgroundColor))
+                        .background(Theme.Colors.secondaryBackground)
                         .cornerRadius(8)
 
                         // Summary

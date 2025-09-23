@@ -16,7 +16,7 @@ struct DeviceListView: View {
                 if showFilters {
                     DeviceFiltersView(viewModel: viewModel)
                         .padding()
-                        .background(Color(NSColor.controlBackgroundColor))
+                        .background(Theme.Colors.secondaryBackground)
                         .border(Color.secondary.opacity(0.2), width: 0.5)
                 }
 

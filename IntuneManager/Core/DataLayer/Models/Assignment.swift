@@ -21,6 +21,7 @@ final class Assignment: Identifiable, Codable {
 
     // Additional metadata
     var settings: AssignmentSettings?
+    var graphSettings: AppAssignmentSettings?  // Full settings for Graph API
     var filter: AssignmentFilter?
     var scheduledDate: Date?
     var createdBy: String?
@@ -278,6 +279,7 @@ struct BulkAssignmentOperation: Identifiable {
     let groups: [DeviceGroup]
     let intent: Assignment.AssignmentIntent
     let settings: Assignment.AssignmentSettings?
+    let groupSettings: [GroupAssignmentSettings]?  // Per-group settings
     let scheduledDate: Date?
     var totalOperations: Int {
         applications.count * groups.count
@@ -287,11 +289,13 @@ struct BulkAssignmentOperation: Identifiable {
          groups: [DeviceGroup],
          intent: Assignment.AssignmentIntent,
          settings: Assignment.AssignmentSettings? = nil,
+         groupSettings: [GroupAssignmentSettings]? = nil,
          scheduledDate: Date? = nil) {
         self.applications = applications
         self.groups = groups
         self.intent = intent
         self.settings = settings
+        self.groupSettings = groupSettings
         self.scheduledDate = scheduledDate
     }
 
@@ -309,7 +313,23 @@ struct BulkAssignmentOperation: Identifiable {
                     intent: intent
                 )
                 assignment.batchId = id
-                assignment.settings = settings
+
+                // Use per-group settings if available, otherwise use global settings
+                if let groupSetting = groupSettings?.first(where: { $0.groupId == group.id }) {
+                    // Store the app assignment settings in the Assignment's settings property
+                    assignment.settings = Assignment.AssignmentSettings(
+                        notificationEnabled: true,
+                        restartSettings: nil,
+                        installTimeSettings: nil,
+                        uninstallOnDeviceRemoval: groupSetting.settings.iosVppSettings?.uninstallOnDeviceRemoval,
+                        vpnConfigurationId: groupSetting.settings.iosVppSettings?.vpnConfigurationId
+                    )
+                    // Store the full settings for Graph API use
+                    assignment.graphSettings = groupSetting.settings
+                } else {
+                    assignment.settings = settings
+                }
+
                 assignment.scheduledDate = scheduledDate
                 assignments.append(assignment)
             }

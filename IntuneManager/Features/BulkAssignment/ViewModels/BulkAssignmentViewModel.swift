@@ -8,6 +8,7 @@ class BulkAssignmentViewModel: ObservableObject {
     @Published var selectedGroups: Set<DeviceGroup> = []
     @Published var assignmentIntent: Assignment.AssignmentIntent = .required
     @Published var assignmentSettings: Assignment.AssignmentSettings?
+    @Published var groupAssignmentSettings: [GroupAssignmentSettings] = []
     @Published var targetPlatform: Application.DevicePlatform?
     @Published var isProcessing = false
     @Published var progress: AssignmentService.AssignmentProgress?
@@ -125,6 +126,43 @@ class BulkAssignmentViewModel: ObservableObject {
         assignmentService.$isProcessing
             .receive(on: DispatchQueue.main)
             .assign(to: &$isProcessing)
+
+        // Initialize group settings when groups are selected
+        $selectedGroups
+            .sink { [weak self] groups in
+                self?.updateGroupSettings(for: groups)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func updateGroupSettings(for groups: Set<DeviceGroup>) {
+        // Remove settings for deselected groups
+        groupAssignmentSettings.removeAll { setting in
+            !groups.contains { $0.id == setting.groupId }
+        }
+
+        // Add settings for new groups
+        let existingGroupIds = Set(groupAssignmentSettings.map { $0.groupId })
+        for group in groups {
+            if !existingGroupIds.contains(group.id) {
+                let appType = primaryAppType
+                let newSettings = GroupAssignmentSettings(
+                    groupId: group.id,
+                    groupName: group.displayName,
+                    appType: appType,
+                    intent: assignmentIntent
+                )
+                groupAssignmentSettings.append(newSettings)
+            }
+        }
+    }
+
+    // Determine the primary app type from selected applications
+    var primaryAppType: Application.AppType {
+        guard !selectedApplications.isEmpty else { return .unknown }
+        let appTypes = selectedApplications.map { $0.appType }
+        let typeCount = Dictionary(grouping: appTypes, by: { $0 }).mapValues { $0.count }
+        return typeCount.max(by: { $0.value < $1.value })?.key ?? .unknown
     }
 
     func executeAssignment() async {
@@ -164,7 +202,8 @@ class BulkAssignmentViewModel: ObservableObject {
             applications: stableApps,
             groups: stableGroups,
             intent: assignmentIntent,
-            settings: assignmentSettings
+            settings: assignmentSettings,
+            groupSettings: groupAssignmentSettings
         )
 
         do {
@@ -190,6 +229,7 @@ class BulkAssignmentViewModel: ObservableObject {
         selectedGroups.removeAll()
         assignmentIntent = .required
         assignmentSettings = nil
+        groupAssignmentSettings.removeAll()
         targetPlatform = nil
         completedAssignments.removeAll()
         failedAssignments.removeAll()

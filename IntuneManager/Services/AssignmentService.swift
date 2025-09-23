@@ -1,6 +1,39 @@
 import Foundation
 import Combine
 
+// Flexible assignment request struct for Graph API
+struct FlexibleAppAssignment: Encodable {
+    let id: String
+    let intent: String
+    let target: Target
+    let settings: AnyCodable?
+    let source: String?
+    let sourceId: String?
+
+    struct Target: Encodable {
+        let odataType: String
+        let groupId: String?
+        let deviceAndAppManagementAssignmentFilterId: String?
+        let deviceAndAppManagementAssignmentFilterType: String?
+
+        enum CodingKeys: String, CodingKey {
+            case odataType = "@odata.type"
+            case groupId
+            case deviceAndAppManagementAssignmentFilterId
+            case deviceAndAppManagementAssignmentFilterType
+        }
+    }
+}
+
+// Helper to encode any Encodable as AnyCodable
+struct AnyCodable: Encodable {
+    let value: Encodable
+
+    func encode(to encoder: Encoder) throws {
+        try value.encode(to: encoder)
+    }
+}
+
 @MainActor
 final class AssignmentService: ObservableObject {
     static let shared = AssignmentService()
@@ -124,9 +157,11 @@ final class AssignmentService: ObservableObject {
         // Log rate limit status before batch
         await apiClient.logRateLimitStatus()
 
-        // Create batch requests for Graph API
-        let requests = assignments.map { assignment in
-            createBatchRequest(for: assignment)
+        // Create batch requests for Graph API with proper settings
+        var requests: [BatchRequest] = []
+        for assignment in assignments {
+            let request = createBatchRequest(for: assignment)
+            requests.append(request)
         }
 
         // Execute batch request - the API client now handles rate limiting internally
@@ -233,18 +268,33 @@ final class AssignmentService: ObservableObject {
     private func createBatchRequest(for assignment: Assignment) -> BatchRequest {
         let targetType = assignment.targetType
 
-        // Create AppAssignment object with proper structure
-        let appAssignment = AppAssignment(
+        // Prepare the settings based on app type
+        var settingsValue: Encodable?
+        if let graphSettings = assignment.graphSettings {
+            if let iosVppSettings = graphSettings.iosVppSettings {
+                settingsValue = iosVppSettings
+            } else if let iosLobSettings = graphSettings.iosLobSettings {
+                settingsValue = iosLobSettings
+            } else if let macosVppSettings = graphSettings.macosVppSettings {
+                settingsValue = macosVppSettings
+            } else if let macosDmgSettings = graphSettings.macosDmgSettings {
+                settingsValue = macosDmgSettings
+            } else if let windowsSettings = graphSettings.windowsSettings {
+                settingsValue = windowsSettings
+            }
+        }
+
+        // Create flexible assignment with proper settings
+        let flexibleAssignment = FlexibleAppAssignment(
             id: UUID().uuidString,
-            intent: AppAssignment.AssignmentIntent(rawValue: assignment.intent.rawValue) ?? .required,
-            target: AppAssignment.AssignmentTarget(
-                type: targetType,
+            intent: assignment.intent.rawValue,
+            target: FlexibleAppAssignment.Target(
+                odataType: "#microsoft.graph.\(targetType.rawValue)AssignmentTarget",
                 groupId: targetType.requiresGroupId ? assignment.groupId : nil,
-                groupName: nil,  // Don't include groupName in the request
                 deviceAndAppManagementAssignmentFilterId: assignment.filter?.filterId,
                 deviceAndAppManagementAssignmentFilterType: assignment.filter?.filterType?.rawValue
             ),
-            settings: nil,
+            settings: settingsValue != nil ? AnyCodable(value: settingsValue!) : nil,
             source: "IntuneManager",
             sourceId: assignment.batchId
         )
@@ -252,7 +302,7 @@ final class AssignmentService: ObservableObject {
         return BatchRequest(
             method: "POST",
             url: "/deviceAppManagement/mobileApps/\(assignment.applicationId)/assignments",
-            body: appAssignment,
+            body: flexibleAssignment,
             headers: ["Content-Type": "application/json"]
         )
     }

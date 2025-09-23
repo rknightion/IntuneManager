@@ -1,22 +1,20 @@
 import Foundation
 import SwiftData
 
-typealias StringArray = [String]
-
 @Model
 final class DeviceGroup: Identifiable, Codable {
     @Attribute(.unique) var id: String
     var displayName: String
     var groupDescription: String?
     var createdDateTime: Date?
-    var groupTypes: StringArray?
+    var groupTypesData: Data?
     var membershipRule: String?
     var membershipRuleProcessingState: MembershipRuleProcessingState?
     var securityEnabled: Bool
     var mailEnabled: Bool
     var mailNickname: String?
     var onPremisesSyncEnabled: Bool?
-    var proxyAddresses: StringArray?
+    var proxyAddressesData: Data?
     var visibility: String?
     var allowExternalSenders: Bool?
     var autoSubscribeNewMembers: Bool?
@@ -80,6 +78,27 @@ final class DeviceGroup: Identifiable, Codable {
         self.mailEnabled = mailEnabled
     }
 
+    // Computed properties for array access
+    var groupTypes: [String]? {
+        get {
+            guard let data = groupTypesData else { return nil }
+            return try? JSONDecoder().decode([String].self, from: data)
+        }
+        set {
+            groupTypesData = try? JSONEncoder().encode(newValue)
+        }
+    }
+
+    var proxyAddresses: [String]? {
+        get {
+            guard let data = proxyAddressesData else { return nil }
+            return try? JSONDecoder().decode([String].self, from: data)
+        }
+        set {
+            proxyAddressesData = try? JSONEncoder().encode(newValue)
+        }
+    }
+
     var isDynamicGroup: Bool {
         return membershipRule != nil && !membershipRule!.isEmpty
     }
@@ -130,14 +149,24 @@ final class DeviceGroup: Identifiable, Codable {
         displayName = try container.decode(String.self, forKey: .displayName)
         groupDescription = try container.decodeIfPresent(String.self, forKey: .description)
         createdDateTime = try container.decodeIfPresent(Date.self, forKey: .createdDateTime)
-        groupTypes = try container.decodeIfPresent([String].self, forKey: .groupTypes)
+
+        // Decode arrays and convert to Data for storage
+        if let types = try container.decodeIfPresent([String].self, forKey: .groupTypes) {
+            groupTypesData = try? JSONEncoder().encode(types)
+        }
+
         membershipRule = try container.decodeIfPresent(String.self, forKey: .membershipRule)
         membershipRuleProcessingState = try container.decodeIfPresent(MembershipRuleProcessingState.self, forKey: .membershipRuleProcessingState)
         securityEnabled = try container.decodeIfPresent(Bool.self, forKey: .securityEnabled) ?? false
         mailEnabled = try container.decodeIfPresent(Bool.self, forKey: .mailEnabled) ?? false
         mailNickname = try container.decodeIfPresent(String.self, forKey: .mailNickname)
         onPremisesSyncEnabled = try container.decodeIfPresent(Bool.self, forKey: .onPremisesSyncEnabled)
-        proxyAddresses = try container.decodeIfPresent([String].self, forKey: .proxyAddresses)
+
+        // Decode arrays and convert to Data for storage
+        if let addresses = try container.decodeIfPresent([String].self, forKey: .proxyAddresses) {
+            proxyAddressesData = try? JSONEncoder().encode(addresses)
+        }
+
         visibility = try container.decodeIfPresent(String.self, forKey: .visibility)
         allowExternalSenders = try container.decodeIfPresent(Bool.self, forKey: .allowExternalSenders)
         autoSubscribeNewMembers = try container.decodeIfPresent(Bool.self, forKey: .autoSubscribeNewMembers)
