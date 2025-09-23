@@ -355,6 +355,43 @@ final class AssignmentService: ObservableObject {
         )
     }
 
+    // Fetch actual assignment statistics from Intune API
+    func fetchIntuneAssignmentStatistics() async throws -> IntuneAssignmentStats {
+        Logger.shared.info("Fetching assignment statistics from Intune API", category: .network)
+
+        // Get all mobile apps to count their assignments
+        let applications = try await appService.fetchApplications(forceRefresh: false)
+
+        var totalAssignments = 0
+        var appAssignmentCounts: [String: Int] = [:]
+
+        // Count assignments across all apps
+        for app in applications {
+            if let assignments = app.assignments {
+                totalAssignments += assignments.count
+                appAssignmentCounts[app.id] = assignments.count
+            }
+        }
+
+        // Group assignments by intent type
+        var intentCounts: [Assignment.AssignmentIntent: Int] = [:]
+        for app in applications {
+            if let assignments = app.assignments {
+                for assignment in assignments {
+                    let intent = Assignment.AssignmentIntent(rawValue: assignment.intent.rawValue) ?? .available
+                    intentCounts[intent, default: 0] += 1
+                }
+            }
+        }
+
+        return IntuneAssignmentStats(
+            totalAssignments: totalAssignments,
+            assignmentsByIntent: intentCounts,
+            totalAppsWithAssignments: appAssignmentCounts.values.filter { $0 > 0 }.count,
+            totalApps: applications.count
+        )
+    }
+
     // MARK: - Private Methods
 
     private func persistAssignmentHistory() {
@@ -371,6 +408,13 @@ struct AssignmentStatistics {
     let failed: Int
     let pending: Int
     let successRate: Double
+}
+
+struct IntuneAssignmentStats {
+    let totalAssignments: Int
+    let assignmentsByIntent: [Assignment.AssignmentIntent: Int]
+    let totalAppsWithAssignments: Int
+    let totalApps: Int
 }
 
 enum AssignmentError: LocalizedError {
