@@ -299,12 +299,18 @@ struct ApplicationDetailView: View {
         return formatter.string(fromByteCount: bytes)
     }
 
-    private func summaryRow(label: String, value: Int) -> some View {
+    private func summaryRow(label: String, value: Int, color: Color = .primary) -> some View {
         HStack {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
             Text(label)
+                .font(.subheadline)
             Spacer()
             Text("\(value)")
-                .bold()
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(value > 0 ? color : .secondary)
         }
     }
 }
