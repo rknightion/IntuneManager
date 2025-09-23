@@ -171,26 +171,79 @@ struct ApplicationDetailView: View {
                     }
                     .padding(.vertical, 4)
                 }
-            } else {
-                Text("No assignment data returned for this application.")
+            } else if viewModel.errorMessage != nil {
+                // Only show error message if there was an actual error fetching data
+                Text("Unable to load assignment data.")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.red)
+            } else {
+                // Show 0 assignments when data loaded successfully but no assignments exist
+                HStack {
+                    Image(systemName: "info.circle")
+                        .foregroundColor(.secondary)
+                    Text("0 assignments")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
             }
         }
     }
 
     private var installSummarySection: some View {
         Section("Install Summary") {
-            if let summary = viewModel.installSummary {
-                summaryRow(label: "Devices Installed", value: summary.installedDeviceCount)
-                summaryRow(label: "Devices Pending", value: summary.pendingInstallDeviceCount)
-                summaryRow(label: "Devices Failed", value: summary.failedDeviceCount)
-                summaryRow(label: "Devices Not Applicable", value: summary.notApplicableDeviceCount)
-                summaryRow(label: "Users Installed", value: summary.installedUserCount)
-                summaryRow(label: "Users Pending", value: summary.pendingInstallUserCount)
-                summaryRow(label: "Users Failed", value: summary.failedUserCount)
+            if viewModel.isLoading {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("Loading install metrics...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.vertical, 8)
+            } else if let summary = viewModel.installSummary {
+                // Device metrics
+                if summary.installedDeviceCount > 0 || summary.pendingInstallDeviceCount > 0 ||
+                   summary.failedDeviceCount > 0 || summary.notApplicableDeviceCount > 0 {
+                    Text("Device Status")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 4)
+
+                    summaryRow(label: "Installed", value: summary.installedDeviceCount, color: .green)
+                    summaryRow(label: "Pending", value: summary.pendingInstallDeviceCount, color: .orange)
+                    summaryRow(label: "Failed", value: summary.failedDeviceCount, color: .red)
+                    summaryRow(label: "Not Applicable", value: summary.notApplicableDeviceCount, color: .gray)
+                }
+
+                // User metrics
+                if summary.installedUserCount > 0 || summary.pendingInstallUserCount > 0 ||
+                   summary.failedUserCount > 0 {
+                    Divider()
+                    Text("User Status")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 4)
+
+                    summaryRow(label: "Installed", value: summary.installedUserCount, color: .green)
+                    summaryRow(label: "Pending", value: summary.pendingInstallUserCount, color: .orange)
+                    summaryRow(label: "Failed", value: summary.failedUserCount, color: .red)
+                }
+
+                // Show message if no install data
+                if summary.installedDeviceCount == 0 && summary.pendingInstallDeviceCount == 0 &&
+                   summary.failedDeviceCount == 0 && summary.notApplicableDeviceCount == 0 &&
+                   summary.installedUserCount == 0 && summary.pendingInstallUserCount == 0 &&
+                   summary.failedUserCount == 0 {
+                    Text("No installation data available yet.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } else if viewModel.errorMessage != nil {
+                Text("Unable to fetch install metrics from Graph API.")
+                    .font(.caption)
+                    .foregroundColor(.red)
             } else {
-                Text("Install metrics were not available from Graph.")
+                Text("Install metrics not available. Tap refresh to retry.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
