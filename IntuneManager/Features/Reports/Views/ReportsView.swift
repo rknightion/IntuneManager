@@ -52,7 +52,7 @@ struct ReportsView: View {
             case .assignmentStatistics: return "View assignment metrics from Intune"
             case .deviceCompliance: return "Monitor device compliance states"
             case .topDeployedApps: return "See most deployed applications"
-            case .recentActivity: return "Track recent assignment operations"
+            case .recentActivity: return "View Intune audit logs from last 72 hours"
             }
         }
     }
@@ -120,7 +120,7 @@ struct ReportsView: View {
                         case .topDeployedApps:
                             ApplicationDeploymentSection(applications: appService.applications)
                         case .recentActivity:
-                            RecentActivitySection(assignments: assignmentService.assignmentHistory)
+                            RecentActivityView()
                         }
                     }
                     .transition(.asymmetric(
@@ -275,82 +275,6 @@ struct IntuneAssignmentStatsSection: View {
     }
 }
 
-struct RecentActivitySection: View {
-    let assignments: [Assignment]
-
-    var recentAssignments: [Assignment] {
-        assignments.sorted { $0.createdDate > $1.createdDate }
-            .prefix(10)
-            .map { $0 }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Recent Activity")
-                    .font(.headline)
-                Spacer()
-                if !assignments.isEmpty {
-                    Text("\(assignments.count) total")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            if recentAssignments.isEmpty {
-                Text("No recent activity")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 20)
-            } else {
-                ForEach(recentAssignments) { assignment in
-                    HStack {
-                        Image(systemName: assignment.status.icon)
-                            .foregroundColor(Color.systemColor(named: assignment.status.color))
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("\(assignment.applicationName) → \(assignment.groupName)")
-                                .font(.subheadline)
-                                .lineLimit(1)
-
-                            HStack {
-                                Text(assignment.createdDate.formatted(.relative(presentation: .named)))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-
-                                Text("•")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-
-                                Label(assignment.intent.displayName, systemImage: assignment.intent.icon)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-
-                        Spacer()
-
-                        Text(assignment.status.displayName)
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(Color.systemColor(named: assignment.status.color).opacity(0.2))
-                            .cornerRadius(4)
-                    }
-                    .padding(.vertical, 4)
-
-                    if assignment.id != recentAssignments.last?.id {
-                        Divider()
-                    }
-                }
-            }
-        }
-        .padding()
-        .background(Color.gray.opacity(0.05))
-        .cornerRadius(12)
-    }
-}
 
 struct ComplianceOverviewSection: View {
     let devices: [Device]
