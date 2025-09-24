@@ -3,12 +3,36 @@ import Combine
 
 // Flexible assignment request struct for Graph API
 struct FlexibleAppAssignment: Encodable {
+    let odataType: String = "#microsoft.graph.mobileAppAssignment"
     let id: String
     let intent: String
     let target: Target
-    let settings: AnyCodable?
+    let settings: Encodable?
     let source: String?
     let sourceId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case odataType = "@odata.type"
+        case id
+        case intent
+        case target
+        case settings
+        case source
+        case sourceId
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(odataType, forKey: .odataType)
+        try container.encode(id, forKey: .id)
+        try container.encode(intent, forKey: .intent)
+        try container.encode(target, forKey: .target)
+        if let settings = settings {
+            try settings.encode(to: container.superEncoder(forKey: .settings))
+        }
+        // Don't encode source and sourceId at all if they're nil
+        // Graph API doesn't expect these fields for the /assign endpoint
+    }
 
     struct Target: Encodable {
         let odataType: String
@@ -22,15 +46,21 @@ struct FlexibleAppAssignment: Encodable {
             case deviceAndAppManagementAssignmentFilterId
             case deviceAndAppManagementAssignmentFilterType
         }
-    }
-}
 
-// Helper to encode any Encodable as AnyCodable
-struct AnyCodable: Encodable {
-    let value: Encodable
-
-    func encode(to encoder: Encoder) throws {
-        try value.encode(to: encoder)
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(odataType, forKey: .odataType)
+            // Only encode non-nil values - Graph API doesn't like explicit nulls
+            if let groupId = groupId {
+                try container.encode(groupId, forKey: .groupId)
+            }
+            if let filterId = deviceAndAppManagementAssignmentFilterId {
+                try container.encode(filterId, forKey: .deviceAndAppManagementAssignmentFilterId)
+            }
+            if let filterType = deviceAndAppManagementAssignmentFilterType {
+                try container.encode(filterType, forKey: .deviceAndAppManagementAssignmentFilterType)
+            }
+        }
     }
 }
 
@@ -148,6 +178,13 @@ final class AssignmentService: ObservableObject {
 
     // MARK: - Batch Processing
 
+    // We use the Microsoft Graph batch API for assignments because:
+    // 1. It reduces network round trips (up to 20 assignments per request vs 1)
+    // 2. For hundreds of apps, this means ~5-10 batch requests instead of hundreds of individual calls
+    // 3. Better performance and less overhead
+    // 4. Batch requests still respect rate limits but are more efficient
+    // The complexity is worth it for bulk operations like this
+
     private func processBatch(_ assignments: [Assignment]) async throws -> (successful: [Assignment], failed: [Assignment]) {
         var successful: [Assignment] = []
         var failed: [Assignment] = []
@@ -165,7 +202,9 @@ final class AssignmentService: ObservableObject {
         }
 
         // Execute batch request - the API client now handles rate limiting internally
-        let responses: [BatchResponse<AppAssignment>] = try await apiClient.batchModels(requests)
+        // The /assign endpoint returns 204 No Content, so we use EmptyResponse
+        struct AssignActionResponse: Decodable, Sendable {}
+        let responses: [BatchResponse<AssignActionResponse>] = try await apiClient.batchModels(requests)
 
         // Log rate limit status after batch
         await apiClient.logRateLimitStatus()
@@ -175,6 +214,7 @@ final class AssignmentService: ObservableObject {
             let assignment = assignments[index]
 
             if response.status >= 200 && response.status < 300 {
+                // Success - includes 204 No Content which is expected for /assign endpoint
                 assignment.status = .completed
                 assignment.completedDate = Date()
                 successful.append(assignment)
@@ -289,20 +329,40 @@ final class AssignmentService: ObservableObject {
             id: UUID().uuidString,
             intent: assignment.intent.rawValue,
             target: FlexibleAppAssignment.Target(
-                odataType: "#microsoft.graph.\(targetType.rawValue)AssignmentTarget",
+                odataType: targetType.rawValue,  // targetType.rawValue already includes the full type string
                 groupId: targetType.requiresGroupId ? assignment.groupId : nil,
-                deviceAndAppManagementAssignmentFilterId: assignment.filter?.filterId,
-                deviceAndAppManagementAssignmentFilterType: assignment.filter?.filterType?.rawValue
+                deviceAndAppManagementAssignmentFilterId: nil,  // Set to nil for now
+                deviceAndAppManagementAssignmentFilterType: nil  // Set to nil for now
             ),
-            settings: settingsValue != nil ? AnyCodable(value: settingsValue!) : nil,
-            source: "IntuneManager",
-            sourceId: assignment.batchId
+            settings: settingsValue,
+            source: nil,  // Remove source field - might not be valid for /assign endpoint
+            sourceId: nil  // Remove sourceId field - might not be valid for /assign endpoint
         )
+
+        // Wrap the assignment in the required format for the /assign action endpoint
+        struct AssignRequest: Encodable {
+            let mobileAppAssignments: [FlexibleAppAssignment]
+        }
+
+        let requestBody = AssignRequest(mobileAppAssignments: [flexibleAssignment])
+
+        // Debug logging - capture and log the JSON being sent
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let jsonData = try encoder.encode(requestBody)
+            if let jsonString = String(data: jsonData, encoding: .utf8) {
+                Logger.shared.debug("Assignment JSON for \(assignment.applicationName) -> \(assignment.groupName):")
+                Logger.shared.debug("\(jsonString)")
+            }
+        } catch {
+            Logger.shared.error("Failed to encode assignment JSON for debugging: \(error)")
+        }
 
         return BatchRequest(
             method: "POST",
-            url: "/deviceAppManagement/mobileApps/\(assignment.applicationId)/assignments",
-            body: flexibleAssignment,
+            url: "/deviceAppManagement/mobileApps/\(assignment.applicationId)/assign",
+            body: requestBody,
             headers: ["Content-Type": "application/json"]
         )
     }
@@ -517,7 +577,7 @@ enum AssignmentError: LocalizedError {
 
     // MARK: - Error Parsing Helpers
 
-    private func parseErrorFromResponse(_ response: BatchResponse<AppAssignment>) -> (message: String, code: String?) {
+    private func parseErrorFromResponse<T>(_ response: BatchResponse<T>) -> (message: String, code: String?) {
         // Try to parse error from response body if it exists
         // The body might contain detailed error information
         if response.status == 409 {
@@ -535,7 +595,7 @@ enum AssignmentError: LocalizedError {
         return ("Assignment failed with status \(response.status)", nil)
     }
 
-    private func parseRetryAfter(from response: BatchResponse<AppAssignment>) -> TimeInterval? {
+    private func parseRetryAfter<T>(from response: BatchResponse<T>) -> TimeInterval? {
         // Check for Retry-After header in response
         if let retryAfterString = response.headers?["Retry-After"],
            let retryAfter = Double(retryAfterString) {
