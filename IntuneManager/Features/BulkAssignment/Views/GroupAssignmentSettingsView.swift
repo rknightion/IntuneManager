@@ -436,40 +436,116 @@ struct EmptyGroupSettingsView: View {
     }
 }
 
-// MARK: - Documentation Web View
-struct DocumentationWebView: View {
-    let url: URL
+// MARK: - Help Text View
+struct HelpTextView: View {
+    let title: String
+    let description: String
+    let helpUrl: String?
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         VStack(spacing: 0) {
+            // Header
             HStack {
-                Label("Microsoft Documentation", systemImage: "book")
+                Label(title, systemImage: "questionmark.circle.fill")
                     .font(.headline)
                 Spacer()
-                Button("Done") {
-                    // Dismissing is handled by the sheet
+                Button(action: {
+                    dismiss()
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
                 }
-                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.plain)
+                .keyboardShortcut(.escape)
             }
             .padding()
 
             Divider()
 
-            // WebView would go here - placeholder for now
-            VStack {
-                Text("Opening: \(url.absoluteString)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            // Help content
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Main description
+                    Text(description)
+                        .font(.body)
+                        .foregroundColor(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    // Additional context
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Key Points", systemImage: "info.circle.fill")
+                            .font(.subheadline)
+                            .foregroundColor(.accentColor)
+
+                        // Break down the description into bullet points if it's long
+                        if description.count > 150 {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(extractKeyPoints(from: description), id: \.self) { point in
+                                    HStack(alignment: .top, spacing: 8) {
+                                        Text("•")
+                                            .foregroundColor(.secondary)
+                                        Text(point)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                }
+                            }
+                            .padding(.leading)
+                        }
+                    }
                     .padding()
+                    .background(Color.accentColor.opacity(0.05))
+                    .cornerRadius(8)
 
-                Spacer()
+                    // Learn more button
+                    if let urlString = helpUrl, let url = URL(string: urlString) {
+                        Divider()
 
-                Text("Documentation would be displayed here")
-                    .foregroundColor(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Want to learn more?")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
 
-                Spacer()
+                            Button(action: {
+                                openURL(url)
+                                dismiss()
+                            }) {
+                                Label("View Microsoft Documentation", systemImage: "arrow.up.right.square")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.link)
+                        }
+                    }
+                }
+                .padding()
             }
         }
-        .frame(width: 800, height: 600)
+        .frame(width: 500, height: 400)
+    }
+
+    private func extractKeyPoints(from text: String) -> [String] {
+        // Extract key points from the description
+        var points: [String] = []
+
+        // Split by common delimiters
+        let sentences = text.components(separatedBy: ". ")
+        for sentence in sentences where !sentence.isEmpty {
+            let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.count > 20 && trimmed.count < 150 {
+                points.append(trimmed + (sentence.hasSuffix(".") ? "" : "."))
+            }
+        }
+
+        // If we got too many points, limit to 3-4 most important
+        if points.count > 4 {
+            points = Array(points.prefix(4))
+        }
+
+        return points
     }
 }

@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - iOS VPP Settings Section
 struct IOSVppSettingsSection: View {
     @Binding var settings: IOSVppAppAssignmentSettings
-    let onShowDocumentation: (URL) -> Void
+    let onShowHelp: (String, String, String?) -> Void
     @State private var hoveredSetting: String?
 
     var body: some View {
@@ -33,7 +33,7 @@ struct IOSVppSettingsSection: View {
                 description: AssignmentSettingDescription.iosVppDescriptions["vpnConfiguration"]?.description ?? "",
                 hoveredSetting: $hoveredSetting,
                 settingKey: "vpnConfiguration",
-                onShowDocumentation: onShowDocumentation
+                onShowHelp: onShowHelp
             ) {
                 // TODO: Implement VPN profile picker once VPN profiles are loaded
                 Menu {
@@ -66,7 +66,7 @@ struct IOSVppSettingsSection: View {
                     isOn: $settings.preventAutoAppUpdate,
                     hoveredSetting: $hoveredSetting,
                     settingKey: "preventAutoAppUpdate",
-                    onShowDocumentation: onShowDocumentation
+                    onShowHelp: onShowHelp
                 )
 
                 ToggleSettingRow(
@@ -75,7 +75,7 @@ struct IOSVppSettingsSection: View {
                     isOn: $settings.uninstallOnDeviceRemoval,
                     hoveredSetting: $hoveredSetting,
                     settingKey: "uninstallOnDeviceRemoval",
-                    onShowDocumentation: onShowDocumentation
+                    onShowHelp: onShowHelp
                 )
 
                 ToggleSettingRow(
@@ -84,7 +84,7 @@ struct IOSVppSettingsSection: View {
                     isOn: $settings.isRemovable,
                     hoveredSetting: $hoveredSetting,
                     settingKey: "isRemovable",
-                    onShowDocumentation: onShowDocumentation
+                    onShowHelp: onShowHelp
                 )
 
                 ToggleSettingRow(
@@ -93,7 +93,7 @@ struct IOSVppSettingsSection: View {
                     isOn: $settings.preventManagedAppBackup,
                     hoveredSetting: $hoveredSetting,
                     settingKey: "preventManagedAppBackup",
-                    onShowDocumentation: onShowDocumentation
+                    onShowHelp: onShowHelp
                 )
             }
         }
@@ -103,7 +103,7 @@ struct IOSVppSettingsSection: View {
 // MARK: - iOS LOB Settings Section
 struct IOSLobSettingsSection: View {
     @Binding var settings: IOSLobAppAssignmentSettings
-    let onShowDocumentation: (URL) -> Void
+    let onShowHelp: (String, String, String?) -> Void
     @State private var hoveredSetting: String?
 
     var body: some View {
@@ -117,7 +117,7 @@ struct IOSLobSettingsSection: View {
                 description: "Automatically connect to VPN when this app launches",
                 hoveredSetting: $hoveredSetting,
                 settingKey: "vpnConfiguration",
-                onShowDocumentation: onShowDocumentation
+                onShowHelp: onShowHelp
             ) {
                 Menu {
                     Button("None") {
@@ -146,7 +146,7 @@ struct IOSLobSettingsSection: View {
                     isOn: $settings.uninstallOnDeviceRemoval,
                     hoveredSetting: $hoveredSetting,
                     settingKey: "uninstallOnDeviceRemoval",
-                    onShowDocumentation: onShowDocumentation
+                    onShowHelp: onShowHelp
                 )
 
                 ToggleSettingRow(
@@ -155,7 +155,7 @@ struct IOSLobSettingsSection: View {
                     isOn: $settings.isRemovable,
                     hoveredSetting: $hoveredSetting,
                     settingKey: "isRemovable",
-                    onShowDocumentation: onShowDocumentation
+                    onShowHelp: onShowHelp
                 )
 
                 ToggleSettingRow(
@@ -164,7 +164,7 @@ struct IOSLobSettingsSection: View {
                     isOn: $settings.preventManagedAppBackup,
                     hoveredSetting: $hoveredSetting,
                     settingKey: "preventManagedAppBackup",
-                    onShowDocumentation: onShowDocumentation
+                    onShowHelp: onShowHelp
                 )
             }
         }
@@ -174,7 +174,7 @@ struct IOSLobSettingsSection: View {
 // MARK: - macOS VPP Settings Section
 struct MacOSVppSettingsSection: View {
     @Binding var settings: MacOSVppAppAssignmentSettings
-    let onShowDocumentation: (URL) -> Void
+    let onShowHelp: (String, String, String?) -> Void
     @State private var hoveredSetting: String?
 
     var body: some View {
@@ -206,7 +206,7 @@ struct MacOSVppSettingsSection: View {
                     isOn: $settings.preventAutoAppUpdate,
                     hoveredSetting: $hoveredSetting,
                     settingKey: "preventAutoAppUpdate",
-                    onShowDocumentation: onShowDocumentation
+                    onShowHelp: onShowHelp
                 )
 
                 ToggleSettingRow(
@@ -215,7 +215,7 @@ struct MacOSVppSettingsSection: View {
                     isOn: $settings.uninstallOnDeviceRemoval,
                     hoveredSetting: $hoveredSetting,
                     settingKey: "uninstallOnDeviceRemoval",
-                    onShowDocumentation: onShowDocumentation
+                    onShowHelp: onShowHelp
                 )
             }
         }
@@ -225,7 +225,7 @@ struct MacOSVppSettingsSection: View {
 // MARK: - macOS DMG Settings Section
 struct MacOSDmgSettingsSection: View {
     @Binding var settings: MacOSDmgAppAssignmentSettings
-    let onShowDocumentation: (URL) -> Void
+    let onShowHelp: (String, String, String?) -> Void
     @State private var hoveredSetting: String?
 
     var body: some View {
@@ -239,7 +239,7 @@ struct MacOSDmgSettingsSection: View {
                 description: AssignmentSettingDescription.macosDescriptions["minimumOperatingSystem"]?.description ?? "",
                 hoveredSetting: $hoveredSetting,
                 settingKey: "minimumOperatingSystem",
-                onShowDocumentation: onShowDocumentation
+                onShowHelp: onShowHelp
             ) {
                 TextField("e.g., 10.15", text: Binding(
                     get: { settings.minimumOperatingSystem ?? "" },
@@ -256,7 +256,7 @@ struct MacOSDmgSettingsSection: View {
                 isOn: $settings.ignoreVersionDetection,
                 hoveredSetting: $hoveredSetting,
                 settingKey: "ignoreVersionDetection",
-                onShowDocumentation: onShowDocumentation
+                onShowHelp: onShowHelp
             )
 
             // Detection Rules - placeholder for now
@@ -284,7 +284,7 @@ struct MacOSDmgSettingsSection: View {
 // MARK: - Windows Settings Section
 struct WindowsSettingsSection: View {
     @Binding var settings: WindowsAppAssignmentSettings
-    let onShowDocumentation: (URL) -> Void
+    let onShowHelp: (String, String, String?) -> Void
     @State private var hoveredSetting: String?
 
     var body: some View {
@@ -298,7 +298,7 @@ struct WindowsSettingsSection: View {
                 description: "Control the priority of app downloads",
                 hoveredSetting: $hoveredSetting,
                 settingKey: "deliveryOptimization",
-                onShowDocumentation: onShowDocumentation
+                onShowHelp: onShowHelp
             ) {
                 Picker("", selection: $settings.deliveryOptimizationPriority) {
                     ForEach(WindowsAppAssignmentSettings.DeliveryOptimizationPriority.allCases, id: \.self) { priority in
@@ -314,7 +314,7 @@ struct WindowsSettingsSection: View {
                 description: "Control which notifications users see during app installation",
                 hoveredSetting: $hoveredSetting,
                 settingKey: "notifications",
-                onShowDocumentation: onShowDocumentation
+                onShowHelp: onShowHelp
             ) {
                 Picker("", selection: $settings.notifications) {
                     ForEach(WindowsAppAssignmentSettings.NotificationSetting.allCases, id: \.self) { notification in
@@ -420,10 +420,10 @@ struct AssignmentFiltersSection: View {
         .sheet(isPresented: $showingFilterPicker) {
             // TODO: Implement filter picker
             VStack {
-                Text("Filter Picker")
+                Text("Assignment Filters")
                     .font(.headline)
                     .padding()
-                Text("Filter selection would appear here")
+                Text("Coming soon")
                     .foregroundColor(.secondary)
                 Spacer()
             }
@@ -470,7 +470,7 @@ struct SettingRow<Content: View>: View {
     let description: String
     @Binding var hoveredSetting: String?
     let settingKey: String
-    let onShowDocumentation: (URL) -> Void
+    let onShowHelp: (String, String, String?) -> Void
     let content: () -> Content
 
     var body: some View {
@@ -482,9 +482,13 @@ struct SettingRow<Content: View>: View {
                         .fontWeight(.medium)
 
                     Button(action: {
-                        if let urlString = AssignmentSettingDescription.iosVppDescriptions[settingKey]?.helpUrl,
-                           let url = URL(string: urlString) {
-                            onShowDocumentation(url)
+                        // Try iOS descriptions first, then macOS, then Windows
+                        let description = AssignmentSettingDescription.iosVppDescriptions[settingKey]
+                            ?? AssignmentSettingDescription.macosDescriptions[settingKey]
+                            ?? AssignmentSettingDescription.windowsDescriptions[settingKey]
+
+                        if let desc = description {
+                            onShowHelp(desc.title, desc.description, desc.helpUrl)
                         }
                     }) {
                         Image(systemName: "questionmark.circle")
@@ -521,7 +525,7 @@ struct ToggleSettingRow: View {
     @Binding var isOn: Bool
     @Binding var hoveredSetting: String?
     let settingKey: String
-    let onShowDocumentation: (URL) -> Void
+    let onShowHelp: (String, String, String?) -> Void
 
     var body: some View {
         SettingRow(
@@ -529,7 +533,7 @@ struct ToggleSettingRow: View {
             description: description,
             hoveredSetting: $hoveredSetting,
             settingKey: settingKey,
-            onShowDocumentation: onShowDocumentation
+            onShowHelp: onShowHelp
         ) {
             HStack {
                 Picker("", selection: $isOn) {
