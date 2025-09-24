@@ -32,7 +32,7 @@ struct GroupAssignmentSettingsView: View {
             GroupListSidebar(
                 groups: selectedGroups,
                 selectedGroupId: $selectedGroupId,
-                groupSettings: groupSettings
+                groupSettings: $groupSettings
             )
             .frame(width: 250)
             .frame(maxHeight: .infinity)
@@ -80,7 +80,7 @@ struct GroupAssignmentSettingsView: View {
             GroupListSidebar(
                 groups: selectedGroups,
                 selectedGroupId: $selectedGroupId,
-                groupSettings: groupSettings
+                groupSettings: $groupSettings
             )
         } detail: {
             // Settings Panel
@@ -118,7 +118,7 @@ struct GroupAssignmentSettingsView: View {
 struct GroupListSidebar: View {
     let groups: Set<DeviceGroup>
     @Binding var selectedGroupId: String?
-    let groupSettings: [GroupAssignmentSettings]
+    @Binding var groupSettings: [GroupAssignmentSettings]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -147,8 +147,12 @@ struct GroupListSidebar: View {
                             group: group,
                             isSelected: selectedGroupId == group.id,
                             hasCustomSettings: hasCustomSettings(for: group.id),
+                            assignmentMode: getAssignmentMode(for: group.id),
                             onSelect: {
                                 selectedGroupId = group.id
+                            },
+                            onModeChange: { newMode in
+                                updateAssignmentMode(for: group.id, mode: newMode)
                             }
                         )
                     }
@@ -169,13 +173,25 @@ struct GroupListSidebar: View {
                settings.settings.iosVppSettings?.preventAutoAppUpdate ?? false ||
                settings.settings.iosVppSettings?.vpnConfigurationId != nil
     }
+
+    func getAssignmentMode(for groupId: String) -> GroupAssignmentSettings.AssignmentMode? {
+        return groupSettings.first(where: { $0.groupId == groupId })?.assignmentMode
+    }
+
+    func updateAssignmentMode(for groupId: String, mode: GroupAssignmentSettings.AssignmentMode) {
+        if let index = groupSettings.firstIndex(where: { $0.groupId == groupId }) {
+            groupSettings[index].assignmentMode = mode
+        }
+    }
 }
 
 struct GroupSettingsRowView: View {
     let group: DeviceGroup
     let isSelected: Bool
     let hasCustomSettings: Bool
+    let assignmentMode: GroupAssignmentSettings.AssignmentMode?
     let onSelect: () -> Void
+    let onModeChange: ((GroupAssignmentSettings.AssignmentMode) -> Void)?
 
     var body: some View {
         HStack {
@@ -196,6 +212,32 @@ struct GroupSettingsRowView: View {
             }
 
             Spacer()
+
+            // Assignment Mode (Include/Exclude) for non-built-in groups
+            if !group.isBuiltInAssignmentTarget, let mode = assignmentMode, let onModeChange = onModeChange {
+                Menu {
+                    ForEach(GroupAssignmentSettings.AssignmentMode.allCases, id: \.self) { modeOption in
+                        Button(action: {
+                            onModeChange(modeOption)
+                        }) {
+                            Label(modeOption.displayName, systemImage: modeOption.icon)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: mode.icon)
+                            .font(.caption)
+                        Text(mode.displayName)
+                            .font(.caption)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(mode == .exclude ? Color.red.opacity(0.2) : Color.green.opacity(0.2))
+                    .foregroundColor(mode == .exclude ? .red : .green)
+                    .cornerRadius(4)
+                }
+                .buttonStyle(.plain)
+            }
 
             if hasCustomSettings {
                 Image(systemName: "gearshape.fill")
