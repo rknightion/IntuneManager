@@ -17,14 +17,35 @@ struct IOSVppSettingsSection: View {
                 description: AssignmentSettingDescription.iosVppDescriptions["useDeviceLicensing"]?.description ?? "",
                 hoveredSetting: $hoveredSetting,
                 settingKey: "useDeviceLicensing",
-                onShowDocumentation: onShowDocumentation
+                onShowHelp: onShowHelp
             ) {
-                Picker("", selection: $settings.useDeviceLicensing) {
-                    Text("User licensing").tag(false)
-                    Text("Device licensing").tag(true)
+                HStack(spacing: 8) {
+                    Button(action: { settings.useDeviceLicensing = false }) {
+                        Label {
+                            Text("User")
+                                .font(.caption)
+                        } icon: {
+                            Image(systemName: "person.fill")
+                                .font(.caption2)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(settings.useDeviceLicensing == false ? .accentColor : .secondary)
+
+                    Button(action: { settings.useDeviceLicensing = true }) {
+                        Label {
+                            Text("Device")
+                                .font(.caption)
+                        } icon: {
+                            Image(systemName: "desktopcomputer")
+                                .font(.caption2)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(settings.useDeviceLicensing == true ? .accentColor : .secondary)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
             }
 
             // VPN Configuration
@@ -188,14 +209,35 @@ struct MacOSVppSettingsSection: View {
                 description: "Choose between user-based or device-based licensing",
                 hoveredSetting: $hoveredSetting,
                 settingKey: "useDeviceLicensing",
-                onShowDocumentation: onShowDocumentation
+                onShowHelp: onShowHelp
             ) {
-                Picker("", selection: $settings.useDeviceLicensing) {
-                    Text("User licensing").tag(false)
-                    Text("Device licensing").tag(true)
+                HStack(spacing: 8) {
+                    Button(action: { settings.useDeviceLicensing = false }) {
+                        Label {
+                            Text("User")
+                                .font(.caption)
+                        } icon: {
+                            Image(systemName: "person.fill")
+                                .font(.caption2)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(settings.useDeviceLicensing == false ? .accentColor : .secondary)
+
+                    Button(action: { settings.useDeviceLicensing = true }) {
+                        Label {
+                            Text("Device")
+                                .font(.caption)
+                        } icon: {
+                            Image(systemName: "desktopcomputer")
+                                .font(.caption2)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(settings.useDeviceLicensing == true ? .accentColor : .secondary)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
             }
 
             // Boolean Settings
