@@ -76,10 +76,14 @@ final class ApplicationService: ObservableObject {
 
             Logger.shared.info("Total apps available: \(filteredApps.count)", category: .data)
 
-            self.applications = filteredApps
+            // Update the data store first to maintain context consistency
+            dataStore.replaceApplications(with: filteredApps)
+
+            // Now update the in-memory collection with fresh data from the store
+            // This ensures we're working with models attached to the current context
+            self.applications = dataStore.fetchApplications()
             self.lastSync = Date()
 
-            dataStore.replaceApplications(with: filteredApps)
             cacheManager.updateMetadata(for: .applications, recordCount: filteredApps.count)
             Logger.shared.info("Stored \(filteredApps.count) applications in cache", category: .data)
 

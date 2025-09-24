@@ -9,8 +9,28 @@ struct AssignmentEditView: View {
     let applications: [Application]
     @StateObject private var viewModel = AssignmentEditViewModel()
     @Environment(\.dismiss) private var dismiss
-    @State private var showingDeleteConfirmation = false
-    @State private var assignmentToDelete: AppAssignment?
+    @State private var showingSaveConfirmation = false
+    @State private var showingBulkIntentMenu = false
+    @State private var selectedBulkIntent: AppAssignment.AssignmentIntent = .required
+    @State private var assignmentSearchText = ""
+    @State private var expandedApps: Set<String> = []
+    @State private var showingCopyAssignments = false
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
+
+    var filteredAssignments: [AssignmentWithApp] {
+        if assignmentSearchText.isEmpty {
+            return viewModel.currentAssignmentsWithApp
+        }
+        return viewModel.currentAssignmentsWithApp.filter { item in
+            item.appName.localizedCaseInsensitiveContains(assignmentSearchText) ||
+            (item.assignment.target.groupName?.localizedCaseInsensitiveContains(assignmentSearchText) ?? false)
+        }
+    }
+
+    var assignmentsByApp: [String: [AssignmentWithApp]] {
+        Dictionary(grouping: filteredAssignments) { $0.appName }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -38,11 +58,7 @@ struct AssignmentEditView: View {
                         .buttonStyle(.bordered)
 
                         Button("Save Changes") {
-                            Task {
-                                await viewModel.saveChanges()
-                                // Always dismiss after save to avoid stale context issues
-                                dismiss()
-                            }
+                            showingSaveConfirmation = true
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(!viewModel.hasChanges || viewModel.isSaving)
@@ -64,30 +80,172 @@ struct AssignmentEditView: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         // Current Assignments Section
-                        if !viewModel.currentAssignments.isEmpty {
+                        if !viewModel.currentAssignmentsWithApp.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Label("Current Assignments", systemImage: "person.2.square.stack")
-                                        .font(.headline)
+                                // Header with search and actions
+                                VStack(spacing: 12) {
+                                    HStack {
+                                        Label("Current Assignments", systemImage: "person.2.square.stack")
+                                            .font(.headline)
 
-                                    Spacer()
+                                        Spacer()
 
-                                    Text("\(viewModel.currentAssignments.count) assignments")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                                        Text("\(filteredAssignments.count) of \(viewModel.currentAssignmentsWithApp.count) shown")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+
+                                    // Search bar
+                                    HStack {
+                                        Image(systemName: "magnifyingglass")
+                                            .foregroundColor(.secondary)
+                                        TextField("Search groups or apps...", text: $assignmentSearchText)
+                                            .textFieldStyle(.plain)
+                                        if !assignmentSearchText.isEmpty {
+                                            Button(action: { assignmentSearchText = "" }) {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                    .padding(6)
+                                    .background(Color.gray.opacity(0.1))
+                                    .cornerRadius(6)
+
+                                    // Bulk actions bar
+                                    HStack {
+                                        if !viewModel.selectedAssignments.isEmpty {
+                                            Text("\(viewModel.selectedAssignments.count) selected")
+                                                .font(.caption)
+                                                .foregroundColor(.accentColor)
+
+                                            Button("Change Intent") {
+                                                showingBulkIntentMenu = true
+                                            }
+                                            .buttonStyle(.bordered)
+                                            .popover(isPresented: $showingBulkIntentMenu) {
+                                                VStack(alignment: .leading, spacing: 8) {
+                                                    Text("Set Intent for Selected")
+                                                        .font(.headline)
+                                                        .padding(.bottom, 4)
+
+                                                    ForEach(AppAssignment.AssignmentIntent.allCases, id: \.self) { intent in
+                                                        Button(action: {
+                                                            viewModel.bulkUpdateIntent(intent)
+                                                            showingBulkIntentMenu = false
+                                                        }) {
+                                                            Label(intent.displayName, systemImage: intent.icon)
+                                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                        }
+                                                        .buttonStyle(.plain)
+                                                        .padding(4)
+                                                    }
+                                                }
+                                                .padding()
+                                                .frame(width: 200)
+                                            }
+
+                                            Button("Delete Selected") {
+                                                viewModel.bulkDelete()
+                                            }
+                                            .buttonStyle(.bordered)
+                                            .foregroundColor(.red)
+                                        }
+
+                                        Spacer()
+
+                                        // Quick actions
+                                        if applications.count > 1 {
+                                            Button(action: {
+                                                if expandedApps.count == applications.count {
+                                                    expandedApps.removeAll()
+                                                } else {
+                                                    expandedApps = Set(applications.map { $0.displayName })
+                                                }
+                                            }) {
+                                                Label(expandedApps.isEmpty ? "Expand All" : "Collapse All",
+                                                      systemImage: expandedApps.isEmpty ? "chevron.down.square" : "chevron.up.square")
+                                            }
+                                            .buttonStyle(.bordered)
+                                        }
+
+                                        if viewModel.currentAssignmentsWithApp.count > 0 {
+                                            Button("Delete All") {
+                                                viewModel.markAllAssignmentsForDeletion()
+                                            }
+                                            .buttonStyle(.bordered)
+                                            .foregroundColor(.red)
+                                        }
+                                    }
                                 }
 
-                                ForEach(viewModel.currentAssignments) { assignment in
-                                    CurrentAssignmentRow(
-                                        assignment: assignment,
-                                        onDelete: {
-                                            assignmentToDelete = assignment
-                                            showingDeleteConfirmation = true
-                                        },
-                                        onEditIntent: { newIntent in
-                                            viewModel.updateAssignmentIntent(assignment, intent: newIntent)
+                                // Assignments list
+                                if applications.count > 1 {
+                                    // Group by app for multiple apps
+                                    ForEach(assignmentsByApp.keys.sorted(), id: \.self) { appName in
+                                        DisclosureGroup(
+                                            isExpanded: Binding(
+                                                get: { expandedApps.contains(appName) },
+                                                set: { isExpanded in
+                                                    if isExpanded {
+                                                        expandedApps.insert(appName)
+                                                    } else {
+                                                        expandedApps.remove(appName)
+                                                    }
+                                                }
+                                            )
+                                        ) {
+                                            ForEach(assignmentsByApp[appName] ?? []) { item in
+                                                CurrentAssignmentRow(
+                                                    assignmentWithApp: item,
+                                                    isPendingDeletion: viewModel.isMarkedForDeletion(item),
+                                                    isPendingUpdate: viewModel.hasPendingUpdate(item),
+                                                    isSelected: viewModel.selectedAssignments.contains(item.id),
+                                                    showAppName: false,
+                                                    onToggleSelection: {
+                                                        viewModel.toggleSelection(item)
+                                                    },
+                                                    onToggleDelete: {
+                                                        viewModel.toggleAssignmentDeletion(item)
+                                                    },
+                                                    onEditIntent: { newIntent in
+                                                        viewModel.updateAssignmentIntent(item, intent: newIntent)
+                                                    }
+                                                )
+                                            }
+                                        } label: {
+                                            HStack {
+                                                Label(appName, systemImage: "app.badge")
+                                                    .font(.system(.body, weight: .medium))
+                                                Spacer()
+                                                Text("\(assignmentsByApp[appName]?.count ?? 0) assignments")
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            .padding(.vertical, 4)
                                         }
-                                    )
+                                    }
+                                } else {
+                                    // Flat list for single app
+                                    ForEach(filteredAssignments) { item in
+                                        CurrentAssignmentRow(
+                                            assignmentWithApp: item,
+                                            isPendingDeletion: viewModel.isMarkedForDeletion(item),
+                                            isPendingUpdate: viewModel.hasPendingUpdate(item),
+                                            isSelected: viewModel.selectedAssignments.contains(item.id),
+                                            showAppName: false,
+                                            onToggleSelection: {
+                                                viewModel.toggleSelection(item)
+                                            },
+                                            onToggleDelete: {
+                                                viewModel.toggleAssignmentDeletion(item)
+                                            },
+                                            onEditIntent: { newIntent in
+                                                viewModel.updateAssignmentIntent(item, intent: newIntent)
+                                            }
+                                        )
+                                    }
                                 }
                             }
                             .padding()
@@ -103,6 +261,11 @@ struct AssignmentEditView: View {
 
                                 Spacer()
 
+                                Button("Copy from App") {
+                                    showingCopyAssignments = true
+                                }
+                                .buttonStyle(.bordered)
+
                                 Button("Add Groups") {
                                     viewModel.showingGroupSelector = true
                                 }
@@ -113,6 +276,7 @@ struct AssignmentEditView: View {
                                 ForEach(viewModel.pendingAssignments) { pending in
                                     PendingAssignmentRow(
                                         assignment: pending,
+                                        applicationNames: viewModel.applicationNames,
                                         onRemove: {
                                             viewModel.removePendingAssignment(pending)
                                         },
@@ -150,7 +314,7 @@ struct AssignmentEditView: View {
                                             .foregroundColor(.orange)
                                     }
                                     if viewModel.pendingAssignments.count > 0 {
-                                        Label("\(viewModel.pendingAssignments.count) assignments to add",
+                                        Label("\(viewModel.pendingAssignments.count * applications.count) assignments to add",
                                               systemImage: "plus.circle.fill")
                                             .foregroundColor(.green)
                                     }
@@ -169,56 +333,133 @@ struct AssignmentEditView: View {
         .frame(minWidth: 800, minHeight: 600)
         .onAppear {
             viewModel.loadAssignments(for: applications)
+            // Start with all apps expanded for better UX
+            if applications.count > 1 {
+                expandedApps = Set(applications.map { $0.displayName })
+            }
         }
         .sheet(isPresented: $viewModel.showingGroupSelector) {
             GroupSelectorSheet(
                 selectedGroups: $viewModel.selectedGroupsForNewAssignment,
-                existingGroups: viewModel.currentAssignmentGroups
+                existingGroups: viewModel.currentAssignmentGroups,
+                onAddGroups: {
+                    viewModel.addPendingAssignments()
+                }
             )
         }
-        .alert("Remove Assignment?", isPresented: $showingDeleteConfirmation) {
+        .alert("Confirm Changes", isPresented: $showingSaveConfirmation) {
             Button("Cancel", role: .cancel) { }
-            Button("Remove", role: .destructive) {
-                if let assignment = assignmentToDelete {
-                    viewModel.markAssignmentForDeletion(assignment)
+            Button("Save Changes", role: .destructive) {
+                Task {
+                    let errorSummary = await viewModel.saveChanges()
+                    if let error = errorSummary {
+                        errorMessage = error
+                        showingErrorAlert = true
+                    } else {
+                        dismiss()
+                    }
                 }
             }
         } message: {
-            if let assignment = assignmentToDelete {
-                Text("Remove assignment to \(assignment.target.groupName ?? "this group")?")
+            Text(viewModel.confirmationMessage)
+        }
+        .alert("Assignment Errors", isPresented: $showingErrorAlert) {
+            Button("OK", role: .cancel) { }
+            if errorMessage.contains("CRITICAL") {
+                Button("Open Intune", role: .none) {
+                    if let url = URL(string: "https://intune.microsoft.com") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
             }
+        } message: {
+            Text(errorMessage)
+        }
+        .sheet(isPresented: $showingCopyAssignments) {
+            CopyAssignmentsSheet(
+                isPresented: $showingCopyAssignments,
+                targetApplications: applications,
+                onCopyAssignments: { copyableAssignments in
+                    viewModel.addCopiedAssignments(copyableAssignments)
+                }
+            )
         }
     }
 }
 
 struct CurrentAssignmentRow: View {
-    let assignment: AppAssignment
-    let onDelete: () -> Void
+    let assignmentWithApp: AssignmentWithApp
+    let isPendingDeletion: Bool
+    let isPendingUpdate: Bool
+    let isSelected: Bool
+    let showAppName: Bool
+    let onToggleSelection: () -> Void
+    let onToggleDelete: () -> Void
     let onEditIntent: (AppAssignment.AssignmentIntent) -> Void
     @State private var selectedIntent: AppAssignment.AssignmentIntent
 
-    init(assignment: AppAssignment, onDelete: @escaping () -> Void, onEditIntent: @escaping (AppAssignment.AssignmentIntent) -> Void) {
-        self.assignment = assignment
-        self.onDelete = onDelete
+    init(assignmentWithApp: AssignmentWithApp,
+         isPendingDeletion: Bool,
+         isPendingUpdate: Bool,
+         isSelected: Bool = false,
+         showAppName: Bool = true,
+         onToggleSelection: @escaping () -> Void = {},
+         onToggleDelete: @escaping () -> Void,
+         onEditIntent: @escaping (AppAssignment.AssignmentIntent) -> Void) {
+        self.assignmentWithApp = assignmentWithApp
+        self.isPendingDeletion = isPendingDeletion
+        self.isPendingUpdate = isPendingUpdate
+        self.isSelected = isSelected
+        self.showAppName = showAppName
+        self.onToggleSelection = onToggleSelection
+        self.onToggleDelete = onToggleDelete
         self.onEditIntent = onEditIntent
-        self._selectedIntent = State(initialValue: assignment.intent)
+        self._selectedIntent = State(initialValue: assignmentWithApp.assignment.intent)
+    }
+
+    var backgroundColor: Color {
+        if isPendingDeletion {
+            return Color.red.opacity(0.1)
+        } else if isPendingUpdate {
+            return Color.yellow.opacity(0.1)
+        } else if isSelected {
+            return Color.accentColor.opacity(0.1)
+        } else {
+            return Color.gray.opacity(0.05)
+        }
     }
 
     var body: some View {
         HStack {
+            // Selection checkbox
+            Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                .foregroundColor(isSelected ? .accentColor : .secondary)
+                .font(.system(size: 16))
+                .onTapGesture {
+                    onToggleSelection()
+                }
+
             Image(systemName: "person.2.fill")
-                .foregroundColor(.accentColor)
+                .foregroundColor(isPendingDeletion ? .red : .accentColor)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(assignment.target.groupName ?? assignment.target.type.displayName)
+                Text(assignmentWithApp.assignment.target.groupName ?? assignmentWithApp.assignment.target.type.displayName)
                     .fontWeight(.medium)
+                    .strikethrough(isPendingDeletion)
+                    .foregroundColor(isPendingDeletion ? .secondary : .primary)
 
                 HStack {
-                    Text(assignment.target.type.displayName)
+                    Text(assignmentWithApp.assignment.target.type.displayName)
                         .font(.caption)
                         .foregroundColor(.secondary)
 
-                    if let groupId = assignment.target.groupId {
+                    if showAppName {
+                        Text("• \(assignmentWithApp.appName)")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                    }
+
+                    if let groupId = assignmentWithApp.assignment.target.groupId {
                         Text("• \(groupId.prefix(8))...")
                             .font(.caption2)
                             .foregroundColor(.secondary)
@@ -228,7 +469,11 @@ struct CurrentAssignmentRow: View {
 
             Spacer()
 
-            Picker("Intent", selection: $selectedIntent) {
+            Text("Intent")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Picker("", selection: $selectedIntent) {
                 ForEach(AppAssignment.AssignmentIntent.allCases, id: \.self) { intent in
                     Label(intent.displayName, systemImage: intent.icon)
                         .tag(intent)
@@ -236,46 +481,94 @@ struct CurrentAssignmentRow: View {
                 }
             }
             .pickerStyle(.menu)
-            .frame(width: 180)
+            .frame(width: 140)
+            .disabled(isPendingDeletion)
             .help("Assignment intent determines how the app will be deployed to devices")
             .onChange(of: selectedIntent) { _, newValue in
                 onEditIntent(newValue)
             }
 
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-                    .foregroundColor(.red)
+            Button(action: onToggleDelete) {
+                Image(systemName: isPendingDeletion ? "arrow.uturn.backward" : "trash")
+                    .foregroundColor(isPendingDeletion ? .orange : .red)
             }
             .buttonStyle(.plain)
+            .help(isPendingDeletion ? "Undo deletion" : "Mark for deletion")
         }
         .padding(8)
-        .background(Color.gray.opacity(0.05))
+        .background(backgroundColor)
         .cornerRadius(6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(isPendingDeletion ? Color.red.opacity(0.3) :
+                       isPendingUpdate ? Color.yellow.opacity(0.3) :
+                       isSelected ? Color.accentColor.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
     }
 }
 
 struct PendingAssignmentRow: View {
     let assignment: PendingAssignment
+    let applicationNames: [String]
     let onRemove: () -> Void
     let onEditIntent: (AppAssignment.AssignmentIntent) -> Void
+    @State private var selectedIntent: AppAssignment.AssignmentIntent
+
+    init(assignment: PendingAssignment,
+         applicationNames: [String],
+         onRemove: @escaping () -> Void,
+         onEditIntent: @escaping (AppAssignment.AssignmentIntent) -> Void) {
+        self.assignment = assignment
+        self.applicationNames = applicationNames
+        self.onRemove = onRemove
+        self.onEditIntent = onEditIntent
+        self._selectedIntent = State(initialValue: assignment.intent)
+    }
 
     var body: some View {
         HStack {
-            Image(systemName: "plus.circle.fill")
+            Image(systemName: assignment.isCopied ? "doc.on.doc.fill" : "plus.circle.fill")
                 .foregroundColor(.green)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(assignment.group.displayName)
                     .fontWeight(.medium)
 
-                Text("New assignment")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                HStack {
+                    if assignment.isCopied {
+                        Label("Copied", systemImage: "doc.on.doc")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                        if assignment.copySettings {
+                            Text("• with settings")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                        }
+                    } else {
+                        Text("New assignment")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    if applicationNames.count > 1 {
+                        Text("• \(applicationNames.count) apps")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                    } else if let appName = applicationNames.first {
+                        Text("• \(appName)")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                    }
+                }
             }
 
             Spacer()
 
-            Picker("Intent", selection: .constant(assignment.intent)) {
+            Text("Intent")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Picker("", selection: $selectedIntent) {
                 ForEach(AppAssignment.AssignmentIntent.allCases, id: \.self) { intent in
                     Label(intent.displayName, systemImage: intent.icon)
                         .tag(intent)
@@ -283,8 +576,8 @@ struct PendingAssignmentRow: View {
                 }
             }
             .pickerStyle(.menu)
-            .frame(width: 180)
-            .onChange(of: assignment.intent) { _, newValue in
+            .frame(width: 140)
+            .onChange(of: selectedIntent) { _, newValue in
                 onEditIntent(newValue)
             }
             .help("Assignment intent determines how the app will be deployed to devices")
@@ -298,12 +591,17 @@ struct PendingAssignmentRow: View {
         .padding(8)
         .background(Color.green.opacity(0.05))
         .cornerRadius(6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.green.opacity(0.3), lineWidth: 1)
+        )
     }
 }
 
 struct GroupSelectorSheet: View {
     @Binding var selectedGroups: Set<DeviceGroup>
     let existingGroups: Set<DeviceGroup>
+    let onAddGroups: () -> Void
     @Environment(\.dismiss) private var dismiss
     @StateObject private var groupService = GroupService.shared
     @State private var searchText = ""
@@ -330,6 +628,7 @@ struct GroupSelectorSheet: View {
                 .buttonStyle(.bordered)
 
                 Button("Add Selected") {
+                    onAddGroups()
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
@@ -393,12 +692,38 @@ struct GroupSelectorSheet: View {
     }
 }
 
+// MARK: - View Model
+
+struct AssignmentWithApp: Identifiable {
+    let id: String
+    let assignment: AppAssignment
+    let appId: String
+    let appName: String
+}
+
+struct PendingAssignment: Identifiable {
+    let id = UUID()
+    let group: DeviceGroup
+    var intent: AppAssignment.AssignmentIntent
+    var copySettings: Bool = false
+    var sourceAssignmentId: String? = nil
+
+    var isCopied: Bool {
+        sourceAssignmentId != nil
+    }
+}
+
 @MainActor
 class AssignmentEditViewModel: ObservableObject {
-    @Published var currentAssignments: [AppAssignment] = []
+    // IMPORTANT: All assignment tracking is session-only. Assignment IDs come from Intune's API
+    // and are only used temporarily during editing. Intune is always the source of truth.
+    // Composite keys (appId_assignmentId) allow independent editing of the same group across different apps.
+    @Published var currentAssignmentsWithApp: [AssignmentWithApp] = []
     @Published var pendingAssignments: [PendingAssignment] = []
+    // Use composite keys (appId_assignmentId) for app-specific tracking during this edit session
     @Published var assignmentsToDelete: Set<String> = []
     @Published var assignmentsToUpdate: [String: AppAssignment.AssignmentIntent] = [:]
+    @Published var selectedAssignments: Set<String> = []
     @Published var isLoading = false
     @Published var isSaving = false
     @Published var showingGroupSelector = false
@@ -406,9 +731,12 @@ class AssignmentEditViewModel: ObservableObject {
 
     private let assignmentService = AssignmentService.shared
     private let apiClient = GraphAPIClient.shared
-    // Store just the app IDs to avoid SwiftData context issues
     private var applicationIds: [String] = []
     private var applicationData: [(id: String, displayName: String)] = []
+
+    var applicationNames: [String] {
+        applicationData.map { $0.displayName }
+    }
 
     var hasChanges: Bool {
         !assignmentsToDelete.isEmpty ||
@@ -416,10 +744,40 @@ class AssignmentEditViewModel: ObservableObject {
         !pendingAssignments.isEmpty
     }
 
+    // Helper to create composite key for tracking
+    private func compositeKey(appId: String, assignmentId: String) -> String {
+        "\(appId)_\(assignmentId)"
+    }
+
+    var confirmationMessage: String {
+        var messages: [String] = []
+
+        // Count actual deletions (composite keys already include app-specific info)
+        if assignmentsToDelete.count > 0 {
+            messages.append("\(assignmentsToDelete.count) assignment(s) will be removed")
+        }
+
+        // Count actual updates (composite keys already include app-specific info)
+        if assignmentsToUpdate.count > 0 {
+            messages.append("\(assignmentsToUpdate.count) assignment(s) will be updated")
+        }
+
+        if pendingAssignments.count > 0 {
+            let totalNew = pendingAssignments.count * applicationIds.count
+            messages.append("\(totalNew) new assignment(s) will be created")
+        }
+
+        if messages.isEmpty {
+            return "No changes to save"
+        }
+
+        return messages.joined(separator: "\n") + "\n\nThis action cannot be undone."
+    }
+
     var currentAssignmentGroups: Set<DeviceGroup> {
-        Set(currentAssignments.compactMap { assignment in
-            if let groupId = assignment.target.groupId,
-               let groupName = assignment.target.groupName {
+        Set(currentAssignmentsWithApp.compactMap { item in
+            if let groupId = item.assignment.target.groupId,
+               let groupName = item.assignment.target.groupName {
                 return DeviceGroup(
                     id: groupId,
                     displayName: groupName
@@ -430,40 +788,140 @@ class AssignmentEditViewModel: ObservableObject {
     }
 
     func loadAssignments(for applications: [Application]) {
-        // Store IDs and data upfront to avoid SwiftData context issues
-        self.applicationIds = applications.map { $0.id }
-        self.applicationData = applications.map { (id: $0.id, displayName: $0.displayName) }
+        // Extract all data synchronously before any async operations to avoid SwiftData context issues
+        var appData: [(id: String, displayName: String, assignments: [AppAssignment])] = []
+
+        for app in applications {
+            // Force immediate evaluation of the lazy assignments relationship
+            let assignmentsCopy: [AppAssignment]
+            if let assignments = app.assignments {
+                // Create a copy of assignments array to avoid lazy loading issues
+                assignmentsCopy = Array(assignments)
+            } else {
+                assignmentsCopy = []
+            }
+
+            appData.append((
+                id: app.id,
+                displayName: app.displayName,
+                assignments: assignmentsCopy
+            ))
+        }
+
+        // Store extracted data
+        self.applicationIds = appData.map { $0.id }
+        self.applicationData = appData.map { (id: $0.id, displayName: $0.displayName) }
+
         isLoading = true
 
         Task {
             defer { isLoading = false }
 
-            // Copy all assignment data upfront before any context changes
-            var allAssignments: [AppAssignment] = []
-            for app in applications {
-                // Safely access assignments and copy the data
-                if let assignments = app.assignments {
-                    // Force evaluation of the lazy relationship now
-                    let assignmentsCopy = assignments.map { $0 }
-                    allAssignments.append(contentsOf: assignmentsCopy)
+            var allAssignmentsWithApp: [AssignmentWithApp] = []
+
+            // Work only with the extracted data, not the original Application objects
+            for data in appData {
+                let assignmentsCopy = data.assignments.map { assignment in
+                    AssignmentWithApp(
+                        id: "\(data.id)_\(assignment.id)",
+                        assignment: assignment,
+                        appId: data.id,
+                        appName: data.displayName
+                    )
                 }
+                allAssignmentsWithApp.append(contentsOf: assignmentsCopy)
             }
 
-            currentAssignments = allAssignments.sorted {
-                ($0.target.groupName ?? "") < ($1.target.groupName ?? "")
+            currentAssignmentsWithApp = allAssignmentsWithApp.sorted {
+                if $0.appName != $1.appName {
+                    return $0.appName < $1.appName
+                }
+                return ($0.assignment.target.groupName ?? "") < ($1.assignment.target.groupName ?? "")
             }
         }
     }
 
-    func markAssignmentForDeletion(_ assignment: AppAssignment) {
-        assignmentsToDelete.insert(assignment.id)
+    // Helper methods to check status using composite keys
+    func isMarkedForDeletion(_ item: AssignmentWithApp) -> Bool {
+        let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+        return assignmentsToDelete.contains(key)
     }
 
-    func updateAssignmentIntent(_ assignment: AppAssignment, intent: AppAssignment.AssignmentIntent) {
-        if intent != assignment.intent {
-            assignmentsToUpdate[assignment.id] = intent
+    func hasPendingUpdate(_ item: AssignmentWithApp) -> Bool {
+        let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+        return assignmentsToUpdate[key] != nil
+    }
+
+    func toggleSelection(_ item: AssignmentWithApp) {
+        if selectedAssignments.contains(item.id) {
+            selectedAssignments.remove(item.id)
         } else {
-            assignmentsToUpdate.removeValue(forKey: assignment.id)
+            selectedAssignments.insert(item.id)
+        }
+    }
+
+    func bulkUpdateIntent(_ intent: AppAssignment.AssignmentIntent) {
+        for itemId in selectedAssignments {
+            if let item = currentAssignmentsWithApp.first(where: { $0.id == itemId }) {
+                let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+                // Skip if marked for deletion
+                if !assignmentsToDelete.contains(key) {
+                    if intent != item.assignment.intent {
+                        assignmentsToUpdate[key] = intent
+                    } else {
+                        assignmentsToUpdate.removeValue(forKey: key)
+                    }
+                }
+            }
+        }
+        // Clear selection after bulk action
+        selectedAssignments.removeAll()
+    }
+
+    func bulkDelete() {
+        for itemId in selectedAssignments {
+            if let item = currentAssignmentsWithApp.first(where: { $0.id == itemId }) {
+                let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+                assignmentsToDelete.insert(key)
+                assignmentsToUpdate.removeValue(forKey: key)
+            }
+        }
+        // Clear selection after bulk action
+        selectedAssignments.removeAll()
+    }
+
+    func toggleAssignmentDeletion(_ item: AssignmentWithApp) {
+        let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+        if assignmentsToDelete.contains(key) {
+            assignmentsToDelete.remove(key)
+        } else {
+            assignmentsToDelete.insert(key)
+            // If marking for deletion, remove any pending updates
+            assignmentsToUpdate.removeValue(forKey: key)
+        }
+    }
+
+    func markAllAssignmentsForDeletion() {
+        for item in currentAssignmentsWithApp {
+            let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+            assignmentsToDelete.insert(key)
+            assignmentsToUpdate.removeValue(forKey: key)
+        }
+        // Clear selection when doing a bulk delete all
+        selectedAssignments.removeAll()
+    }
+
+    func updateAssignmentIntent(_ item: AssignmentWithApp, intent: AppAssignment.AssignmentIntent) {
+        let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+        // Don't allow updates on items marked for deletion
+        if assignmentsToDelete.contains(key) {
+            return
+        }
+
+        if intent != item.assignment.intent {
+            assignmentsToUpdate[key] = intent
+        } else {
+            assignmentsToUpdate.removeValue(forKey: key)
         }
     }
 
@@ -477,46 +935,215 @@ class AssignmentEditViewModel: ObservableObject {
         }
     }
 
-    func saveChanges() async {
+    func addPendingAssignments() {
+        for group in selectedGroupsForNewAssignment {
+            // Check if this group already has an assignment (not deleted) for any app
+            let hasExisting = currentAssignmentsWithApp.contains { item in
+                if item.assignment.target.groupId != group.id {
+                    return false
+                }
+                let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+                return !assignmentsToDelete.contains(key)
+            }
+
+            // Check if already in pending
+            let hasPending = pendingAssignments.contains { $0.group.id == group.id }
+
+            if !hasExisting && !hasPending {
+                pendingAssignments.append(PendingAssignment(
+                    group: group,
+                    intent: .required
+                ))
+            }
+        }
+        selectedGroupsForNewAssignment.removeAll()
+    }
+
+    func addCopiedAssignments(_ copyableAssignments: [CopyableAssignment]) {
+        for copyable in copyableAssignments {
+            let assignment = copyable.assignment
+
+            // Create a DeviceGroup from the assignment target
+            guard let groupId = assignment.target.groupId,
+                  let groupName = assignment.target.groupName else {
+                continue
+            }
+
+            let group = DeviceGroup(
+                id: groupId,
+                displayName: groupName
+            )
+
+            // Check if this group already has an assignment (not deleted) for any app
+            let hasExisting = currentAssignmentsWithApp.contains { item in
+                if item.assignment.target.groupId != groupId {
+                    return false
+                }
+                let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+                return !assignmentsToDelete.contains(key)
+            }
+
+            // Check if already in pending
+            let hasPending = pendingAssignments.contains { $0.group.id == groupId }
+
+            if !hasExisting && !hasPending {
+                let intent = copyable.copyIntent ? assignment.intent : .required
+                pendingAssignments.append(PendingAssignment(
+                    group: group,
+                    intent: intent,
+                    copySettings: copyable.copySettings,
+                    sourceAssignmentId: assignment.id
+                ))
+            }
+        }
+    }
+
+    func saveChanges() async -> String? {
         isSaving = true
         defer { isSaving = false }
 
-        // Work with IDs only to avoid SwiftData context issues
-        for appId in applicationIds {
-            // Delete assignments marked for deletion
-            for assignmentId in assignmentsToDelete {
-                if let assignment = currentAssignments.first(where: { $0.id == assignmentId }) {
-                    do {
-                        try await deleteAssignment(assignment, fromAppId: appId)
-                    } catch {
-                        Logger.shared.error("Failed to delete assignment: \(error)")
-                    }
-                }
-            }
+        var deleteErrors: [(app: String, group: String, error: String)] = []
+        var updateErrors: [(app: String, group: String, error: String, wasDeleted: Bool)] = []
+        var createErrors: [(app: String, group: String, error: String)] = []
 
-            // Update assignments with changed intents
-            for (assignmentId, newIntent) in assignmentsToUpdate {
-                if let assignment = currentAssignments.first(where: { $0.id == assignmentId }) {
-                    do {
-                        try await updateAssignment(assignment, newIntent: newIntent, forAppId: appId)
-                    } catch {
-                        Logger.shared.error("Failed to update assignment: \(error)")
-                    }
-                }
-            }
+        // PHASE 1: Process all deletions first (including those for updates)
+        var deletedForUpdate: [(item: AssignmentWithApp, newIntent: AppAssignment.AssignmentIntent)] = []
 
-            // Create new assignments
-            for pending in pendingAssignments {
+        for item in currentAssignmentsWithApp {
+            let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+            let groupName = item.assignment.target.groupName ?? item.assignment.target.type.displayName
+
+            if assignmentsToDelete.contains(key) {
+                // Simple deletion
                 do {
-                    try await createAssignment(pending, forAppId: appId)
+                    try await deleteAssignment(item.assignment, fromAppId: item.appId)
+                    Logger.shared.info("Deleted assignment for \(item.appName) - \(groupName)")
                 } catch {
-                    Logger.shared.error("Failed to create assignment: \(error)")
+                    deleteErrors.append((app: item.appName, group: groupName, error: error.localizedDescription))
+                    Logger.shared.error("Failed to delete assignment for \(item.appName): \(error)")
+                }
+            } else if let newIntent = assignmentsToUpdate[key] {
+                // Delete for update (will recreate later)
+                do {
+                    try await deleteAssignment(item.assignment, fromAppId: item.appId)
+                    deletedForUpdate.append((item: item, newIntent: newIntent))
+                    Logger.shared.info("Deleted assignment for update: \(item.appName) - \(groupName)")
+                } catch {
+                    updateErrors.append((
+                        app: item.appName,
+                        group: groupName,
+                        error: error.localizedDescription,
+                        wasDeleted: false
+                    ))
+                    Logger.shared.error("Failed to delete assignment for update in \(item.appName): \(error)")
                 }
             }
         }
 
-        // Post notification that assignments have changed so other views can refresh if needed
+        // PHASE 2: Recreate assignments that were deleted for updates
+        for (item, newIntent) in deletedForUpdate {
+            let groupName = item.assignment.target.groupName ?? item.assignment.target.type.displayName
+
+            do {
+                // Create new assignment with updated intent
+                // For built-in targets, use the special IDs
+                let groupId: String
+                switch item.assignment.target.type {
+                case .allDevices:
+                    groupId = DeviceGroup.allDevicesGroupID
+                case .allUsers:
+                    groupId = DeviceGroup.allUsersGroupID
+                case .group:
+                    groupId = item.assignment.target.groupId ?? ""
+                default:
+                    groupId = item.assignment.target.groupId ?? ""
+                }
+
+                let pending = PendingAssignment(
+                    group: DeviceGroup(
+                        id: groupId,
+                        displayName: groupName
+                    ),
+                    intent: newIntent
+                )
+                try await createAssignment(pending, forAppId: item.appId)
+                Logger.shared.info("Recreated assignment with new intent for \(item.appName) - \(groupName)")
+            } catch {
+                // This is critical - the assignment was deleted but couldn't be recreated
+                updateErrors.append((
+                    app: item.appName,
+                    group: groupName,
+                    error: "Assignment was deleted but recreation failed: \(error.localizedDescription)",
+                    wasDeleted: true
+                ))
+                Logger.shared.error("CRITICAL: Failed to recreate assignment for \(item.appName) - \(groupName): \(error)")
+            }
+        }
+
+        // PHASE 3: Create new assignments
+        for appId in applicationIds {
+            let appName = applicationData.first(where: { $0.id == appId })?.displayName ?? appId
+
+            for pending in pendingAssignments {
+                do {
+                    try await createAssignment(pending, forAppId: appId)
+                    Logger.shared.info("Created new assignment for \(appName) - \(pending.group.displayName)")
+                } catch {
+                    createErrors.append((
+                        app: appName,
+                        group: pending.group.displayName,
+                        error: error.localizedDescription
+                    ))
+                    Logger.shared.error("Failed to create assignment for \(appName): \(error)")
+                }
+            }
+        }
+
+        // Report errors to user
+        if !deleteErrors.isEmpty || !updateErrors.isEmpty || !createErrors.isEmpty {
+            var errorSummary = "Assignment operation completed with errors:\n\n"
+
+            if !deleteErrors.isEmpty {
+                errorSummary += "❌ Failed Deletions:\n"
+                for error in deleteErrors {
+                    errorSummary += "• \(error.app) - \(error.group)\n"
+                }
+                errorSummary += "\n"
+            }
+
+            let criticalUpdates = updateErrors.filter { $0.wasDeleted }
+            let failedUpdates = updateErrors.filter { !$0.wasDeleted }
+
+            if !criticalUpdates.isEmpty {
+                errorSummary += "⚠️ CRITICAL - Assignments in inconsistent state (deleted but not recreated):\n"
+                for error in criticalUpdates {
+                    errorSummary += "• \(error.app) - \(error.group)\n"
+                }
+                errorSummary += "Please manually check these assignments in Intune!\n\n"
+            }
+
+            if !failedUpdates.isEmpty {
+                errorSummary += "❌ Failed Updates:\n"
+                for error in failedUpdates {
+                    errorSummary += "• \(error.app) - \(error.group)\n"
+                }
+                errorSummary += "\n"
+            }
+
+            if !createErrors.isEmpty {
+                errorSummary += "❌ Failed Creations:\n"
+                for error in createErrors {
+                    errorSummary += "• \(error.app) - \(error.group)\n"
+                }
+            }
+
+            Logger.shared.error(errorSummary)
+            NotificationCenter.default.post(name: .assignmentsDidChange, object: nil)
+            return errorSummary
+        }
+
         NotificationCenter.default.post(name: .assignmentsDidChange, object: nil)
+        return nil
     }
 
     private func deleteAssignment(_ assignment: AppAssignment, fromAppId appId: String) async throws {
@@ -524,39 +1151,6 @@ class AssignmentEditViewModel: ObservableObject {
         try await apiClient.delete(endpoint)
     }
 
-    private func updateAssignment(_ assignment: AppAssignment, newIntent: AppAssignment.AssignmentIntent, forAppId appId: String) async throws {
-        let endpoint = "/deviceAppManagement/mobileApps/\(appId)/assignments/\(assignment.id)"
-
-        struct UpdateRequest: Encodable {
-            let intent: String
-            let target: TargetRequest
-
-            enum CodingKeys: String, CodingKey {
-                case intent
-                case target
-            }
-
-            struct TargetRequest: Encodable {
-                let type: String
-                let groupId: String?
-
-                enum CodingKeys: String, CodingKey {
-                    case type = "@odata.type"
-                    case groupId
-                }
-            }
-        }
-
-        let updateRequest = UpdateRequest(
-            intent: newIntent.rawValue,
-            target: UpdateRequest.TargetRequest(
-                type: assignment.target.type.rawValue,
-                groupId: assignment.target.groupId
-            )
-        )
-
-        let _: EmptyResponse = try await apiClient.patchModel(endpoint, body: updateRequest)
-    }
 
     private func createAssignment(_ pending: PendingAssignment, forAppId appId: String) async throws {
         let endpoint = "/deviceAppManagement/mobileApps/\(appId)/assignments"
@@ -567,29 +1161,36 @@ class AssignmentEditViewModel: ObservableObject {
 
             struct TargetRequest: Encodable {
                 let type: String
-                let groupId: String
+                let groupId: String?
 
                 enum CodingKeys: String, CodingKey {
                     case type = "@odata.type"
                     case groupId
                 }
+
+                func encode(to encoder: Encoder) throws {
+                    var container = encoder.container(keyedBy: CodingKeys.self)
+                    try container.encode(type, forKey: .type)
+                    // Only encode groupId if it's present and not a built-in target
+                    if let groupId = groupId {
+                        try container.encode(groupId, forKey: .groupId)
+                    }
+                }
             }
         }
+
+        // Determine the target type based on the group
+        let targetType = pending.group.assignmentTargetType
 
         let createRequest = CreateRequest(
             intent: pending.intent.rawValue,
             target: CreateRequest.TargetRequest(
-                type: AppAssignment.AssignmentTarget.TargetType.group.rawValue,
-                groupId: pending.group.id
+                type: targetType.rawValue,
+                // Only include groupId for regular groups, not built-in targets
+                groupId: targetType.requiresGroupId ? pending.group.id : nil
             )
         )
 
         let _: EmptyResponse = try await apiClient.postModel(endpoint, body: createRequest)
     }
-}
-
-struct PendingAssignment: Identifiable {
-    let id = UUID()
-    let group: DeviceGroup
-    var intent: AppAssignment.AssignmentIntent
 }

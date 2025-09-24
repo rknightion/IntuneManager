@@ -77,14 +77,18 @@ final class GroupService: ObservableObject {
 
             Logger.shared.info("Filtered to \(filteredGroups.count) assignable groups", category: .data)
 
-            self.groups = filteredGroups
-            self.lastSync = Date()
-
             // Fetch member counts for each group asynchronously
             Logger.shared.info("Fetching member counts for groups...", category: .data)
             await fetchMemberCounts(for: filteredGroups)
 
+            // Update the data store first to maintain context consistency
             dataStore.replaceGroups(with: filteredGroups)
+
+            // Now update the in-memory collection with fresh data from the store
+            // This ensures we're working with models attached to the current context
+            self.groups = dataStore.fetchGroups()
+            self.lastSync = Date()
+
             cacheManager.updateMetadata(for: .groups, recordCount: filteredGroups.count)
             Logger.shared.info("Stored \(filteredGroups.count) groups in cache", category: .data)
 

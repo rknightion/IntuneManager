@@ -51,10 +51,14 @@ final class DeviceService: ObservableObject {
 
             let fetchedDevices: [Device] = try await apiClient.getAllPagesForModels(endpoint, parameters: parameters)
 
-            self.devices = fetchedDevices
+            // Update the data store first to maintain context consistency
+            dataStore.replaceDevices(with: fetchedDevices)
+
+            // Now update the in-memory collection with fresh data from the store
+            // This ensures we're working with models attached to the current context
+            self.devices = dataStore.fetchDevices()
             self.lastSync = Date()
 
-            dataStore.replaceDevices(with: fetchedDevices)
             cacheManager.updateMetadata(for: .devices, recordCount: fetchedDevices.count)
 
             Logger.shared.info("Fetched \(fetchedDevices.count) devices from Graph API")

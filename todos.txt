@@ -1,0 +1,7 @@
+
+  3. Copy assignments between apps - If a user wants to replicate assignment settings from one app to another, there's no easy way to do this currently.
+  6. Batch intent selection for new assignments - When adding multiple groups, setting a default intent for all would be faster than changing each one.
+  7. Assignment conflict detection - Warning when assigning conflicting intents to the same group.
+  8. Quick actions - Common patterns like "Assign to all user groups" or "Copy from another app"
+  9. Undo/redo stack - More comprehensive undo beyond just deletion marks.
+  10. Export/import assignments - For backup or sharing configurations.
