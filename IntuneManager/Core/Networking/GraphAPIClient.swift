@@ -672,11 +672,32 @@ struct GraphErrorResponse: Decodable, Sendable {
     }
 }
 
+// Helper struct to wrap Encodable as a Codable type for batch requests
+struct AnyCodable: Codable, Sendable {
+    private let value: any Encodable & Sendable
+
+    init(_ value: any Encodable & Sendable) {
+        self.value = value
+    }
+
+    func encode(to encoder: Encoder) throws {
+        try value.encode(to: encoder)
+    }
+
+    init(from decoder: Decoder) throws {
+        // We don't need to decode this - it's only for encoding
+        throw DecodingError.dataCorrupted(DecodingError.Context(
+            codingPath: decoder.codingPath,
+            debugDescription: "AnyCodable is only for encoding"
+        ))
+    }
+}
+
 struct BatchRequest: Encodable, Sendable {
     let id: String
     let method: String
     let url: String
-    let body: Data?
+    let body: AnyCodable?
     let headers: [String: String]?
 
     init(id: String = UUID().uuidString,
@@ -688,7 +709,7 @@ struct BatchRequest: Encodable, Sendable {
         self.method = method
         self.url = url
         if let body = body {
-            self.body = try? JSONEncoder().encode(body)
+            self.body = AnyCodable(body)
         } else {
             self.body = nil
         }
