@@ -408,6 +408,7 @@ struct AssignmentEditView: View {
 
 struct CurrentAssignmentRow: View {
     let assignmentWithApp: AssignmentWithApp
+    let appType: Application.AppType
     let isPendingDeletion: Bool
     let isPendingUpdate: Bool
     let isSelected: Bool
@@ -416,8 +417,10 @@ struct CurrentAssignmentRow: View {
     let onToggleDelete: () -> Void
     let onEditIntent: (AppAssignment.AssignmentIntent) -> Void
     @State private var selectedIntent: AppAssignment.AssignmentIntent
+    @State private var showingInvalidIntentWarning = false
 
     init(assignmentWithApp: AssignmentWithApp,
+         appType: Application.AppType,
          isPendingDeletion: Bool,
          isPendingUpdate: Bool,
          isSelected: Bool = false,
@@ -426,6 +429,7 @@ struct CurrentAssignmentRow: View {
          onToggleDelete: @escaping () -> Void,
          onEditIntent: @escaping (AppAssignment.AssignmentIntent) -> Void) {
         self.assignmentWithApp = assignmentWithApp
+        self.appType = appType
         self.isPendingDeletion = isPendingDeletion
         self.isPendingUpdate = isPendingUpdate
         self.isSelected = isSelected
@@ -434,6 +438,12 @@ struct CurrentAssignmentRow: View {
         self.onToggleDelete = onToggleDelete
         self.onEditIntent = onEditIntent
         self._selectedIntent = State(initialValue: assignmentWithApp.assignment.intent)
+    }
+
+    // Get valid intents for this app type and target
+    var validIntents: [AppAssignment.AssignmentIntent] {
+        let targetType = assignmentWithApp.assignment.target.type
+        return AssignmentIntentValidator.validIntents(for: appType, targetType: targetType)
     }
 
     var backgroundColor: Color {
@@ -493,7 +503,7 @@ struct CurrentAssignmentRow: View {
                 .foregroundColor(.secondary)
 
             Picker("", selection: $selectedIntent) {
-                ForEach(AppAssignment.AssignmentIntent.allCases, id: \.self) { intent in
+                ForEach(validIntents, id: \.self) { intent in
                     Label(intent.displayName, systemImage: intent.icon)
                         .tag(intent)
                         .help(intent.detailedDescription)
@@ -501,10 +511,27 @@ struct CurrentAssignmentRow: View {
             }
             .pickerStyle(.menu)
             .frame(width: 140)
-            .disabled(isPendingDeletion)
-            .help("Assignment intent determines how the app will be deployed to devices")
+            .disabled(isPendingDeletion || validIntents.isEmpty)
+            .help(validIntents.isEmpty ? "No valid intents available for this app type and target" : "Assignment intent determines how the app will be deployed to devices")
             .onChange(of: selectedIntent) { _, newValue in
-                onEditIntent(newValue)
+                if validIntents.contains(newValue) {
+                    onEditIntent(newValue)
+                } else {
+                    // Reset to a valid intent if current selection is invalid
+                    if let firstValid = validIntents.first {
+                        selectedIntent = firstValid
+                        onEditIntent(firstValid)
+                    }
+                }
+            }
+            .onAppear {
+                // Validate current intent on appear and adjust if needed
+                if !validIntents.contains(selectedIntent) {
+                    if let firstValid = validIntents.first {
+                        selectedIntent = firstValid
+                        // Don't trigger onEditIntent here to avoid marking unchanged assignments as updated
+                    }
+                }
             }
 
             Button(action: onToggleDelete) {
@@ -529,19 +556,39 @@ struct CurrentAssignmentRow: View {
 struct PendingAssignmentRow: View {
     let assignment: PendingAssignment
     let applicationNames: [String]
+    let applicationTypes: [Application.AppType]
     let onRemove: () -> Void
     let onEditIntent: (AppAssignment.AssignmentIntent) -> Void
     @State private var selectedIntent: AppAssignment.AssignmentIntent
+    @State private var showingInvalidIntentAlert = false
+    @State private var invalidIntentMessage = ""
 
     init(assignment: PendingAssignment,
          applicationNames: [String],
+         applicationTypes: [Application.AppType],
          onRemove: @escaping () -> Void,
          onEditIntent: @escaping (AppAssignment.AssignmentIntent) -> Void) {
         self.assignment = assignment
         self.applicationNames = applicationNames
+        self.applicationTypes = applicationTypes
         self.onRemove = onRemove
         self.onEditIntent = onEditIntent
         self._selectedIntent = State(initialValue: assignment.intent)
+    }
+
+    // Get valid intents for this combination of app types and target
+    var validIntents: [AppAssignment.AssignmentIntent] {
+        let targetType = assignment.group.assignmentTargetType
+
+        // Find the most restrictive set of intents across all app types
+        var commonIntents = Set(AppAssignment.AssignmentIntent.allCases)
+
+        for appType in applicationTypes {
+            let validForApp = AssignmentIntentValidator.validIntents(for: appType, targetType: targetType)
+            commonIntents = commonIntents.intersection(validForApp)
+        }
+
+        return Array(commonIntents).sorted { $0.rawValue < $1.rawValue }
     }
 
     var body: some View {
@@ -588,7 +635,7 @@ struct PendingAssignmentRow: View {
                 .foregroundColor(.secondary)
 
             Picker("", selection: $selectedIntent) {
-                ForEach(AppAssignment.AssignmentIntent.allCases, id: \.self) { intent in
+                ForEach(validIntents, id: \.self) { intent in
                     Label(intent.displayName, systemImage: intent.icon)
                         .tag(intent)
                         .help(intent.detailedDescription)
@@ -597,9 +644,28 @@ struct PendingAssignmentRow: View {
             .pickerStyle(.menu)
             .frame(width: 140)
             .onChange(of: selectedIntent) { _, newValue in
-                onEditIntent(newValue)
+                // Double-check the intent is valid before applying
+                if validIntents.contains(newValue) {
+                    onEditIntent(newValue)
+                } else {
+                    // Show error if somehow an invalid intent was selected
+                    if let firstAppType = applicationTypes.first {
+                        invalidIntentMessage = AssignmentIntentValidator.validationMessage(
+                            for: newValue,
+                            appType: firstAppType,
+                            targetType: assignment.group.assignmentTargetType
+                        ) ?? "This intent is not supported for the selected apps and target"
+                        showingInvalidIntentAlert = true
+                    }
+                    // Reset to a valid intent
+                    if let firstValid = validIntents.first {
+                        selectedIntent = firstValid
+                        onEditIntent(firstValid)
+                    }
+                }
             }
             .help("Assignment intent determines how the app will be deployed to devices")
+            .disabled(validIntents.isEmpty)
 
             Button(action: onRemove) {
                 Image(systemName: "xmark.circle")
@@ -614,6 +680,24 @@ struct PendingAssignmentRow: View {
             RoundedRectangle(cornerRadius: 6)
                 .stroke(Color.green.opacity(0.3), lineWidth: 1)
         )
+        .alert("Invalid Assignment Intent", isPresented: $showingInvalidIntentAlert) {
+            Button("OK") { }
+        } message: {
+            Text(invalidIntentMessage)
+        }
+        .onAppear {
+            // Validate current intent on appear and adjust if needed
+            if !validIntents.contains(selectedIntent) {
+                if let suggested = AssignmentIntentValidator.suggestedIntents(
+                    for: applicationTypes.first ?? .unknown,
+                    targetType: assignment.group.assignmentTargetType,
+                    preferredIntent: selectedIntent
+                ).first {
+                    selectedIntent = suggested
+                    onEditIntent(suggested)
+                }
+            }
+        }
     }
 }
 
