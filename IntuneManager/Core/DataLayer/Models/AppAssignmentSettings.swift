@@ -23,18 +23,18 @@ struct IOSVppAppAssignmentSettings: AppAssignmentSettingsProtocol {
     var assignmentFilterId: String?
     var assignmentFilterMode: AssignmentFilterMode?
 
-    // iOS VPP specific settings
-    var useDeviceLicensing: Bool = false
+    // iOS VPP specific settings - ONLY valid fields per Microsoft Graph API
+    // Defaults manually validated against Intune portal (confirmed 2025-09-24):
+    var useDeviceLicensing: Bool = true       // ✓ Defaults to Device Licensing
     var vpnConfigurationId: String?
-    var uninstallOnDeviceRemoval: Bool = false
-    var isRemovable: Bool = true
-    var preventManagedAppBackup: Bool = false
-    var preventAutoAppUpdate: Bool = false
-
-    // Additional iOS settings from screenshots
-    var installAsManaged: Bool = false
+    var uninstallOnDeviceRemoval: Bool = false // ✓ Defaults to No (app stays on device removal)
+    var isRemovable: Bool = true               // ✓ Defaults to Yes (install as removable)
+    var preventManagedAppBackup: Bool = false  // ✓ Defaults to No (allow iCloud backup)
+    var preventAutoAppUpdate: Bool = false     // ✓ Defaults to No (allow automatic updates)
+    // Note: installAsManaged is NOT valid for VPP apps - only for iOS Store apps
 
     enum CodingKeys: String, CodingKey {
+        case odataType = "@odata.type"
         case assignmentFilterId = "deviceAndAppManagementAssignmentFilterId"
         case assignmentFilterMode = "deviceAndAppManagementAssignmentFilterType"
         case useDeviceLicensing
@@ -113,13 +113,14 @@ struct IOSLobAppAssignmentSettings: AppAssignmentSettingsProtocol {
     var assignmentFilterId: String?
     var assignmentFilterMode: AssignmentFilterMode?
 
-    // iOS LOB specific settings
+    // iOS LOB specific settings - following validated Intune defaults:
     var vpnConfigurationId: String?
-    var uninstallOnDeviceRemoval: Bool = false
-    var isRemovable: Bool = true
-    var preventManagedAppBackup: Bool = false
+    var uninstallOnDeviceRemoval: Bool = false // ✓ Defaults to No
+    var isRemovable: Bool = true               // ✓ Defaults to Yes (install as removable)
+    var preventManagedAppBackup: Bool = false  // ✓ Defaults to No (allow iCloud backup)
 
     enum CodingKeys: String, CodingKey {
+        case odataType = "@odata.type"
         case assignmentFilterId = "deviceAndAppManagementAssignmentFilterId"
         case assignmentFilterMode = "deviceAndAppManagementAssignmentFilterType"
         case vpnConfigurationId
@@ -184,12 +185,13 @@ struct MacOSVppAppAssignmentSettings: AppAssignmentSettingsProtocol {
     var assignmentFilterId: String?
     var assignmentFilterMode: AssignmentFilterMode?
 
-    // macOS VPP specific settings
-    var useDeviceLicensing: Bool = false
-    var uninstallOnDeviceRemoval: Bool = false
-    var preventAutoAppUpdate: Bool = false
+    // macOS VPP specific settings - following validated Intune defaults:
+    var useDeviceLicensing: Bool = true       // ✓ Defaults to Device Licensing
+    var uninstallOnDeviceRemoval: Bool = false // ✓ Defaults to No
+    var preventAutoAppUpdate: Bool = false     // ✓ Defaults to No (allow automatic updates)
 
     enum CodingKeys: String, CodingKey {
+        case odataType = "@odata.type"
         case assignmentFilterId = "deviceAndAppManagementAssignmentFilterId"
         case assignmentFilterMode = "deviceAndAppManagementAssignmentFilterType"
         case useDeviceLicensing
@@ -266,6 +268,7 @@ struct MacOSDmgAppAssignmentSettings: AppAssignmentSettingsProtocol {
     }
 
     enum CodingKeys: String, CodingKey {
+        case odataType = "@odata.type"
         case assignmentFilterId = "deviceAndAppManagementAssignmentFilterId"
         case assignmentFilterMode = "deviceAndAppManagementAssignmentFilterType"
         case minimumOperatingSystem
@@ -360,6 +363,7 @@ struct WindowsAppAssignmentSettings: AppAssignmentSettingsProtocol {
     }
 
     enum CodingKeys: String, CodingKey {
+        case odataType = "@odata.type"
         case assignmentFilterId = "deviceAndAppManagementAssignmentFilterId"
         case assignmentFilterMode = "deviceAndAppManagementAssignmentFilterType"
         case deliveryOptimizationPriority
