@@ -316,6 +316,12 @@ struct BulkAssignmentOperation: Identifiable {
 
                 // Use per-group settings if available, otherwise use global settings
                 if let groupSetting = groupSettings?.first(where: { $0.groupId == group.id }) {
+                    // Update target type based on assignment mode (include/exclude)
+                    if groupSetting.assignmentMode == .exclude {
+                        // For exclusion, change the target type
+                        assignment.targetType = .exclusionGroup
+                    }
+
                     // Store the app assignment settings in the Assignment's settings property
                     assignment.settings = Assignment.AssignmentSettings(
                         notificationEnabled: true,

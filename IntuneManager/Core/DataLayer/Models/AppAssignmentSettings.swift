@@ -476,12 +476,37 @@ struct GroupAssignmentSettings: Identifiable, Codable {
     let id: UUID
     var groupId: String
     var groupName: String
+    var assignmentMode: AssignmentMode = .include  // Include or exclude this group
     var settings: AppAssignmentSettings
+
+    enum AssignmentMode: String, Codable, CaseIterable {
+        case include = "include"
+        case exclude = "exclude"
+
+        var displayName: String {
+            switch self {
+            case .include:
+                return "Include"
+            case .exclude:
+                return "Exclude"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .include:
+                return "plus.circle"
+            case .exclude:
+                return "minus.circle"
+            }
+        }
+    }
 
     init(groupId: String, groupName: String, appType: Application.AppType, intent: Assignment.AssignmentIntent) {
         self.id = UUID()
         self.groupId = groupId
         self.groupName = groupName
+        self.assignmentMode = .include  // Default to include
 
         // Initialize with default settings based on app type
         switch appType {
