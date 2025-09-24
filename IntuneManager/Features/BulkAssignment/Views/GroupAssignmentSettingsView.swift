@@ -5,15 +5,24 @@ struct GroupAssignmentSettingsView: View {
     let selectedApplications: Set<Application>
     let selectedGroups: Set<DeviceGroup>
     @State private var selectedGroupId: String?
-    @State private var showingDocumentation = false
-    @State private var documentationUrl: URL?
+    @State private var showingHelp = false
+    @State private var helpInfo: (title: String, description: String, url: String?)? = nil
 
     // Determine the primary app type from selected applications
+    @State private var cachedAppType: Application.AppType = .unknown
+
     var primaryAppType: Application.AppType {
+        return cachedAppType
+    }
+
+    private func updateCachedAppType() {
         // Group apps by type and take the most common
-        let appTypes = selectedApplications.map { $0.appType }
+        let appTypes = selectedApplications.compactMap { app in
+            // Safely access the app type
+            return app.appType
+        }
         let typeCount = Dictionary(grouping: appTypes, by: { $0 }).mapValues { $0.count }
-        return typeCount.max(by: { $0.value < $1.value })?.key ?? .unknown
+        cachedAppType = typeCount.max(by: { $0.value < $1.value })?.key ?? .unknown
     }
 
     var commonPlatforms: Set<Application.DevicePlatform> {
@@ -47,9 +56,9 @@ struct GroupAssignmentSettingsView: View {
                         settings: $groupSettings[index],
                         appType: primaryAppType,
                         platforms: commonPlatforms,
-                        onShowDocumentation: { url in
-                            documentationUrl = url
-                            showingDocumentation = true
+                        onShowHelp: { title, description, url in
+                            helpInfo = (title, description, url)
+                            showingHelp = true
                         }
                     )
                     .frame(maxWidth: 600, alignment: .topLeading)
@@ -63,14 +72,20 @@ struct GroupAssignmentSettingsView: View {
         }
         .frame(minWidth: 700, maxWidth: 900)
         .onAppear {
+            // Update cached app type to avoid SwiftData detachment issues
+            updateCachedAppType()
             // Select the first group if none selected
             if selectedGroupId == nil, let firstGroup = selectedGroups.first {
                 selectedGroupId = firstGroup.id
             }
         }
-        .sheet(isPresented: $showingDocumentation) {
-            if let url = documentationUrl {
-                DocumentationWebView(url: url)
+        .sheet(isPresented: $showingHelp) {
+            if let info = helpInfo {
+                HelpTextView(
+                    title: info.title,
+                    description: info.description,
+                    helpUrl: info.url
+                )
             }
         }
         #else
@@ -90,9 +105,9 @@ struct GroupAssignmentSettingsView: View {
                     settings: $groupSettings[index],
                     appType: primaryAppType,
                     platforms: commonPlatforms,
-                    onShowDocumentation: { url in
-                        documentationUrl = url
-                        showingDocumentation = true
+                    onShowHelp: { title, description, url in
+                        helpInfo = (title, description, url)
+                        showingHelp = true
                     }
                 )
             } else {
@@ -100,14 +115,20 @@ struct GroupAssignmentSettingsView: View {
             }
         }
         .onAppear {
+            // Update cached app type to avoid SwiftData detachment issues
+            updateCachedAppType()
             // Select the first group if none selected
             if selectedGroupId == nil, let firstGroup = selectedGroups.first {
                 selectedGroupId = firstGroup.id
             }
         }
-        .sheet(isPresented: $showingDocumentation) {
-            if let url = documentationUrl {
-                DocumentationWebView(url: url)
+        .sheet(isPresented: $showingHelp) {
+            if let info = helpInfo {
+                HelpTextView(
+                    title: info.title,
+                    description: info.description,
+                    helpUrl: info.url
+                )
             }
         }
         #endif
@@ -261,7 +282,7 @@ struct GroupSettingsPanel: View {
     @Binding var settings: GroupAssignmentSettings
     let appType: Application.AppType
     let platforms: Set<Application.DevicePlatform>
-    let onShowDocumentation: (URL) -> Void
+    let onShowHelp: (String, String, String?) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -286,7 +307,7 @@ struct GroupSettingsPanel: View {
                                     settings.settings.iosVppSettings = $0
                                 }
                             ),
-                            onShowDocumentation: onShowDocumentation
+                            onShowHelp: onShowHelp
                         )
                         .onAppear {
                             if settings.settings.iosVppSettings == nil {
@@ -304,7 +325,7 @@ struct GroupSettingsPanel: View {
                                     settings.settings.iosLobSettings = $0
                                 }
                             ),
-                            onShowDocumentation: onShowDocumentation
+                            onShowHelp: onShowHelp
                         )
                         .onAppear {
                             if settings.settings.iosLobSettings == nil {
@@ -322,7 +343,7 @@ struct GroupSettingsPanel: View {
                                     settings.settings.macosVppSettings = $0
                                 }
                             ),
-                            onShowDocumentation: onShowDocumentation
+                            onShowHelp: onShowHelp
                         )
                         .onAppear {
                             if settings.settings.macosVppSettings == nil {
@@ -340,7 +361,7 @@ struct GroupSettingsPanel: View {
                                     settings.settings.macosDmgSettings = $0
                                 }
                             ),
-                            onShowDocumentation: onShowDocumentation
+                            onShowHelp: onShowHelp
                         )
                         .onAppear {
                             if settings.settings.macosDmgSettings == nil {
@@ -358,7 +379,7 @@ struct GroupSettingsPanel: View {
                                     settings.settings.windowsSettings = $0
                                 }
                             ),
-                            onShowDocumentation: onShowDocumentation
+                            onShowHelp: onShowHelp
                         )
                         .onAppear {
                             if settings.settings.windowsSettings == nil {
