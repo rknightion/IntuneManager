@@ -389,7 +389,11 @@ struct AssignmentEditView: View {
             if errorMessage.contains("CRITICAL") {
                 Button("Open Intune", role: .none) {
                     if let url = URL(string: "https://intune.microsoft.com") {
+                        #if os(macOS)
                         NSWorkspace.shared.open(url)
+                        #else
+                        UIApplication.shared.open(url)
+                        #endif
                     }
                 }
             }
