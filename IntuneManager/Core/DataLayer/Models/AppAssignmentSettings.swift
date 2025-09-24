@@ -537,53 +537,116 @@ struct AssignmentSettingDescription {
         "useDeviceLicensing": AssignmentSettingDescription(
             key: "useDeviceLicensing",
             title: "Device Licensing",
-            description: "Assign the app using device licenses instead of user licenses. Device licensing doesn't require users to sign in with an Apple ID.",
-            helpUrl: "https://docs.microsoft.com/en-us/mem/intune/apps/vpp-apps-ios#assign-a-volume-purchased-app"
+            description: "Assign the app using device licenses instead of user licenses. Device licensing allows apps to be installed without requiring users to sign in with an Apple ID. This is ideal for shared devices or when you want to deploy apps without user interaction. Intune defaults to device licensing for better deployment flexibility.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/vpp-apps-ios#assign-a-volume-purchased-app"
         ),
         "vpnConfiguration": AssignmentSettingDescription(
             key: "vpnConfiguration",
-            title: "VPN",
-            description: "Automatically connect to VPN when this app launches. Select a VPN profile to use.",
-            helpUrl: "https://docs.microsoft.com/en-us/mem/intune/configuration/vpn-settings-ios"
+            title: "VPN Configuration",
+            description: "Automatically connect to a VPN when this app launches. Select an existing VPN profile to associate with this app. The VPN connection will establish before the app opens, ensuring secure connectivity for apps that require internal network access.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/configuration/vpn-settings-ios"
         ),
         "uninstallOnDeviceRemoval": AssignmentSettingDescription(
             key: "uninstallOnDeviceRemoval",
             title: "Uninstall on device removal",
-            description: "Automatically uninstall this app when the device is removed from Intune management.",
-            helpUrl: "https://docs.microsoft.com/en-us/mem/intune/apps/apps-deploy#uninstall-apps"
+            description: "Automatically uninstall this app when the device is removed from Intune management, retired, or wiped. This helps maintain license compliance and ensures apps are removed when devices are no longer managed by your organization.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/apps-deploy#uninstall-apps"
         ),
         "isRemovable": AssignmentSettingDescription(
             key: "isRemovable",
-            title: "Install as removable",
-            description: "Allow users to uninstall this app from their device. When set to No, the app cannot be uninstalled by the user.",
-            helpUrl: "https://docs.microsoft.com/en-us/mem/intune/apps/app-configuration-policies-use-ios"
+            title: "Allow app removal",
+            description: "Controls whether users can uninstall this app from their device. When set to 'Yes', users can remove the app through normal iOS uninstall methods. When set to 'No', the app cannot be removed by the user, ensuring critical business apps remain installed.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/app-configuration-policies-use-ios"
         ),
         "preventManagedAppBackup": AssignmentSettingDescription(
             key: "preventManagedAppBackup",
-            title: "Prevent iCloud app backup",
-            description: "Prevent this app's data from being backed up to iCloud.",
-            helpUrl: "https://docs.microsoft.com/en-us/mem/intune/apps/app-protection-policy-settings-ios"
+            title: "Prevent iCloud backup",
+            description: "Prevents this managed app's data from being backed up to iCloud. Enable this setting to ensure sensitive corporate data within the app doesn't get synchronized to personal iCloud accounts, maintaining data sovereignty and compliance.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/app-protection-policy-settings-ios"
         ),
         "preventAutoAppUpdate": AssignmentSettingDescription(
             key: "preventAutoAppUpdate",
-            title: "Prevent automatic app updates",
-            description: "Prevent the app from updating automatically. Updates must be deployed through Intune.",
-            helpUrl: "https://docs.microsoft.com/en-us/mem/intune/apps/apps-deploy#prevent-automatic-updating-of-apps"
+            title: "Prevent automatic updates",
+            description: "Prevents the app from updating automatically through the App Store. When enabled, app updates must be deployed through Intune, giving IT administrators control over app versions and the ability to test updates before deployment.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/apps-deploy#prevent-automatic-updating-of-apps"
         )
     ]
 
     static let macosDescriptions: [String: AssignmentSettingDescription] = [
+        "useDeviceLicensing": AssignmentSettingDescription(
+            key: "useDeviceLicensing",
+            title: "Device Licensing",
+            description: "Assign the app using device licenses instead of user licenses. Device licensing simplifies app deployment on shared Macs and doesn't require users to sign in with an Apple ID. This is the recommended approach for lab computers, kiosks, and shared workstations.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/vpp-apps-macos"
+        ),
+        "uninstallOnDeviceRemoval": AssignmentSettingDescription(
+            key: "uninstallOnDeviceRemoval",
+            title: "Uninstall on device removal",
+            description: "Automatically uninstall this app when the Mac is removed from Intune management. This helps reclaim licenses and ensures corporate apps are removed when devices leave your organization's management.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/apps-deploy#uninstall-apps"
+        ),
+        "preventAutoAppUpdate": AssignmentSettingDescription(
+            key: "preventAutoAppUpdate",
+            title: "Prevent automatic updates",
+            description: "Prevents the app from updating automatically through the Mac App Store. When enabled, updates must be deployed through Intune, allowing IT to test compatibility and control the rollout of new versions.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/apps-deploy#prevent-automatic-updating-of-apps"
+        ),
         "minimumOperatingSystem": AssignmentSettingDescription(
             key: "minimumOperatingSystem",
             title: "Minimum operating system",
-            description: "The minimum macOS version required to install this app.",
-            helpUrl: "https://docs.microsoft.com/en-us/mem/intune/apps/apps-macos-dmg"
+            description: "Specifies the minimum macOS version required to install this DMG app. The app will only install on devices running this version or later. Use semantic versioning (e.g., 14.0, 13.5, 12.7.1) to ensure compatibility.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/apps-macos-dmg"
+        ),
+        "ignoreVersionDetection": AssignmentSettingDescription(
+            key: "ignoreVersionDetection",
+            title: "Ignore version detection",
+            description: "When enabled, Intune will install the app regardless of any existing version on the device. Use this for apps that don't properly report version information or when you always want to force installation of your packaged version.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/apps-macos-dmg#app-information"
         ),
         "detectionRules": AssignmentSettingDescription(
             key: "detectionRules",
             title: "Detection rules",
-            description: "Rules to detect if the app is already installed on the device.",
-            helpUrl: "https://docs.microsoft.com/en-us/mem/intune/apps/apps-macos-dmg#step-3-requirements"
+            description: "Define rules to detect if the app is already installed. You can check for file/folder existence or version information. Detection rules prevent unnecessary reinstallation and help Intune report accurate compliance status.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/apps-macos-dmg#step-3-requirements"
+        )
+    ]
+
+    static let windowsDescriptions: [String: AssignmentSettingDescription] = [
+        "deliveryOptimizationPriority": AssignmentSettingDescription(
+            key: "deliveryOptimizationPriority",
+            title: "Delivery optimization priority",
+            description: "Controls the priority for downloading this app. 'Foreground' gives the app higher priority and faster download speeds, useful for critical apps. 'Not configured' uses default Windows settings for balanced performance.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/apps-win32-app-management#delivery-optimization"
+        ),
+        "notifications": AssignmentSettingDescription(
+            key: "notifications",
+            title: "End user notifications",
+            description: "Controls what notifications users see during app installation. 'Show all' displays progress and completion notifications. 'Show reboot only' shows only restart prompts. 'Hide all' runs installations silently without user notifications.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/apps-win32-app-management#end-user-notifications"
+        ),
+        "restartSettings": AssignmentSettingDescription(
+            key: "restartSettings",
+            title: "Device restart settings",
+            description: "Configure device restart behavior after app installation. Set grace periods to give users time to save work, configure countdown timers before automatic restart, and define snooze durations. These settings help balance IT requirements with user productivity.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/apps-win32-app-management#device-restart-behavior"
+        ),
+        "gracePeriodInMinutes": AssignmentSettingDescription(
+            key: "gracePeriodInMinutes",
+            title: "Grace period (minutes)",
+            description: "Time in minutes before a required restart is enforced after app installation. During this period, users can save their work and close applications. Default is 1440 minutes (24 hours) to minimize disruption.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/apps-win32-app-management#device-restart-behavior"
+        ),
+        "installTimeSettings": AssignmentSettingDescription(
+            key: "installTimeSettings",
+            title: "Installation deadline",
+            description: "Set a deadline for when the app must be installed. After the deadline, installation becomes mandatory and cannot be postponed. Use local time zones to respect working hours across different regions.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/apps-win32-app-management#installation-time-requirements"
+        ),
+        "assignmentFilter": AssignmentSettingDescription(
+            key: "assignmentFilter",
+            title: "Assignment filters",
+            description: "Use filters to refine assignments based on device properties like OS version, manufacturer, or model. Filters help target specific device subsets within assigned groups for more precise app deployment.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/fundamentals/filters"
         )
     ]
 }
