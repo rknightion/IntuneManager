@@ -86,6 +86,7 @@ final class AssignmentService: ObservableObject {
         var completed: Int
         var failed: Int
         var currentOperation: String
+        var isVerifying: Bool = false  // Track if we're in verification phase
         var percentComplete: Double {
             guard total > 0 else { return 0 }
             return Double(completed + failed) / Double(total) * 100
@@ -164,10 +165,38 @@ final class AssignmentService: ObservableObject {
         assignmentHistory.append(contentsOf: failedAssignments)
         persistAssignmentHistory()
 
-        currentProgress = nil
-        activeAssignments = []
+        // Enter verification phase - keep progress active for UI
+        currentProgress?.isVerifying = true
+        currentProgress?.currentOperation = "Verifying assignments with Microsoft Graph..."
 
         Logger.shared.info("Bulk assignment completed: \(completedAssignments.count) successful, \(failedAssignments.count) failed")
+
+        // Verify and refresh if any assignments were successful
+        if !completedAssignments.isEmpty {
+            Logger.shared.info("Starting verification and background refresh of applications...")
+
+            // Small delay to allow Graph API to process the assignments
+            try await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+
+            currentProgress?.currentOperation = "Refreshing application data..."
+
+            do {
+                // Refresh applications and their assignments to update cache
+                _ = try await appService.fetchApplications(forceRefresh: true)
+                Logger.shared.info("Background refresh completed - application cache updated")
+                currentProgress?.currentOperation = "Assignment verification complete"
+            } catch {
+                Logger.shared.error("Background refresh failed: \(error.localizedDescription)")
+                currentProgress?.currentOperation = "Verification complete (refresh failed)"
+            }
+
+            // Keep the progress visible for a moment so users can see completion
+            try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+        }
+
+        // Now clear progress
+        currentProgress = nil
+        activeAssignments = []
 
         if !failedAssignments.isEmpty {
             throw AssignmentError.partialFailure(successful: completedAssignments.count, failed: failedAssignments.count)
@@ -201,6 +230,9 @@ final class AssignmentService: ObservableObject {
             requests.append(request)
         }
 
+        // Update progress before batch submission
+        currentProgress?.currentOperation = "Submitting batch to Microsoft Graph..."
+
         // Execute batch request - the API client now handles rate limiting internally
         // The /assign endpoint returns 204 No Content, so we use EmptyResponse
         struct AssignActionResponse: Decodable, Sendable {}
@@ -208,6 +240,9 @@ final class AssignmentService: ObservableObject {
 
         // Log rate limit status after batch
         await apiClient.logRateLimitStatus()
+
+        // Update progress for response processing
+        currentProgress?.currentOperation = "Processing batch responses..."
 
         // Process responses
         for (index, response) in responses.enumerated() {

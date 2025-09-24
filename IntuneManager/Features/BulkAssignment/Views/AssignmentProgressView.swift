@@ -50,8 +50,8 @@ struct AssignmentProgressView: View {
                     .scaleEffect(1.5)
             }
 
-            // Summary section when processing is complete
-            if !viewModel.isProcessing && (viewModel.completedAssignments.count > 0 || viewModel.failedAssignments.count > 0) {
+            // Summary section when processing is complete (but not during verification)
+            if !viewModel.isProcessing && !(viewModel.progress?.isVerifying ?? false) && (viewModel.completedAssignments.count > 0 || viewModel.failedAssignments.count > 0) {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -93,7 +93,10 @@ struct AssignmentProgressView: View {
                 .cornerRadius(8)
             }
 
-            if !viewModel.isProcessing {
+            // Show buttons only when not processing AND not verifying
+            let isActive = viewModel.isProcessing || (viewModel.progress?.isVerifying ?? false)
+
+            if !isActive {
                 VStack(spacing: 12) {
                     if !viewModel.failedAssignments.isEmpty {
                         HStack(spacing: 12) {
@@ -117,10 +120,12 @@ struct AssignmentProgressView: View {
                     .buttonStyle(.bordered)
                 }
             } else {
+                // Show cancel during processing, but disable during verification
                 Button("Cancel") {
                     viewModel.cancelAssignment()
                 }
                 .buttonStyle(.bordered)
+                .disabled(viewModel.progress?.isVerifying ?? false)
             }
         }
         .padding(40)
