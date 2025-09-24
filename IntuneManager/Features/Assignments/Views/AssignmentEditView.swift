@@ -835,7 +835,7 @@ class AssignmentEditViewModel: ObservableObject {
     private let assignmentService = AssignmentService.shared
     private let apiClient = GraphAPIClient.shared
     private var applicationIds: [String] = []
-    private var applicationData: [(id: String, displayName: String)] = []
+    private var applicationData: [(id: String, displayName: String, appType: Application.AppType)] = []
 
     var applicationNames: [String] {
         applicationData.map { $0.displayName }
@@ -892,7 +892,7 @@ class AssignmentEditViewModel: ObservableObject {
 
     func loadAssignments(for applications: [Application]) {
         // Extract all data synchronously before any async operations to avoid SwiftData context issues
-        var appData: [(id: String, displayName: String, assignments: [AppAssignment])] = []
+        var appData: [(id: String, displayName: String, appType: Application.AppType, assignments: [AppAssignment])] = []
 
         for app in applications {
             // Force immediate evaluation of the lazy assignments relationship
@@ -907,13 +907,14 @@ class AssignmentEditViewModel: ObservableObject {
             appData.append((
                 id: app.id,
                 displayName: app.displayName,
+                appType: app.appType,
                 assignments: assignmentsCopy
             ))
         }
 
         // Store extracted data
         self.applicationIds = appData.map { $0.id }
-        self.applicationData = appData.map { (id: $0.id, displayName: $0.displayName) }
+        self.applicationData = appData.map { (id: $0.id, displayName: $0.displayName, appType: $0.appType) }
 
         isLoading = true
 
