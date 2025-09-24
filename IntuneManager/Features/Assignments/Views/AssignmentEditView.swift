@@ -374,6 +374,8 @@ struct AssignmentEditView: View {
                     if let error = errorSummary {
                         errorMessage = error
                         showingErrorAlert = true
+                        // Reload assignments even on error to show current state
+                        await viewModel.loadAssignments(for: applications)
                     } else {
                         dismiss()
                     }
@@ -1271,11 +1273,36 @@ class AssignmentEditViewModel: ObservableObject {
             }
 
             Logger.shared.error(errorSummary)
+
+            // Post notification for other views to refresh
             NotificationCenter.default.post(name: .assignmentsDidChange, object: nil)
+
+            // Also explicitly refresh the applications to ensure assignments are updated (even on partial success)
+            Task { @MainActor in
+                do {
+                    _ = try await ApplicationService.shared.fetchApplications(forceRefresh: true)
+                    Logger.shared.info("Successfully refreshed applications after assignment changes (with errors)")
+                } catch {
+                    Logger.shared.error("Failed to refresh applications after assignment changes: \(error)")
+                }
+            }
+
             return errorSummary
         }
 
+        // Post notification for other views to refresh
         NotificationCenter.default.post(name: .assignmentsDidChange, object: nil)
+
+        // Also explicitly refresh the applications to ensure assignments are updated
+        Task { @MainActor in
+            do {
+                _ = try await ApplicationService.shared.fetchApplications(forceRefresh: true)
+                Logger.shared.info("Successfully refreshed applications after assignment changes")
+            } catch {
+                Logger.shared.error("Failed to refresh applications after assignment changes: \(error)")
+            }
+        }
+
         return nil
     }
 
