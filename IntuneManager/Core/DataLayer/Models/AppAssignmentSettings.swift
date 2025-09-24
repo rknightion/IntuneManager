@@ -43,11 +43,68 @@ struct IOSVppAppAssignmentSettings: AppAssignmentSettingsProtocol {
         case isRemovable
         case preventManagedAppBackup
         case preventAutoAppUpdate
-        case installAsManaged
     }
 
     var odataType: String {
         return "#microsoft.graph.iosVppAppAssignmentSettings"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(odataType, forKey: .odataType)
+
+        // Always include useDeviceLicensing for VPP apps
+        try container.encode(useDeviceLicensing, forKey: .useDeviceLicensing)
+
+        // Optional fields - only encode if they differ from defaults
+        // Per Microsoft docs: null values are treated as false for boolean fields
+
+        // VPN config - only if specified
+        if let vpnId = vpnConfigurationId {
+            try container.encode(vpnId, forKey: .vpnConfigurationId)
+        }
+
+        // Only send these if true (different from default false)
+        if uninstallOnDeviceRemoval {  // Default is false
+            try container.encode(uninstallOnDeviceRemoval, forKey: .uninstallOnDeviceRemoval)
+        }
+        if preventManagedAppBackup {  // Default is null/false
+            try container.encode(preventManagedAppBackup, forKey: .preventManagedAppBackup)
+        }
+        if preventAutoAppUpdate {  // Default is null/false
+            try container.encode(preventAutoAppUpdate, forKey: .preventAutoAppUpdate)
+        }
+
+        // Only send isRemovable if false (different from default true)
+        if !isRemovable {  // Default is true
+            try container.encode(isRemovable, forKey: .isRemovable)
+        }
+
+        // Assignment filters only if set
+        if let filterId = assignmentFilterId {
+            try container.encode(filterId, forKey: .assignmentFilterId)
+            if let filterMode = assignmentFilterMode {
+                try container.encode(filterMode.rawValue, forKey: .assignmentFilterMode)
+            }
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Skip @odata.type during decode
+        self.assignmentFilterId = try container.decodeIfPresent(String.self, forKey: .assignmentFilterId)
+        self.assignmentFilterMode = try container.decodeIfPresent(AssignmentFilterMode.self, forKey: .assignmentFilterMode)
+        self.useDeviceLicensing = try container.decodeIfPresent(Bool.self, forKey: .useDeviceLicensing) ?? true
+        self.vpnConfigurationId = try container.decodeIfPresent(String.self, forKey: .vpnConfigurationId)
+        self.uninstallOnDeviceRemoval = try container.decodeIfPresent(Bool.self, forKey: .uninstallOnDeviceRemoval) ?? false
+        self.isRemovable = try container.decodeIfPresent(Bool.self, forKey: .isRemovable) ?? true
+        self.preventManagedAppBackup = try container.decodeIfPresent(Bool.self, forKey: .preventManagedAppBackup) ?? false
+        self.preventAutoAppUpdate = try container.decodeIfPresent(Bool.self, forKey: .preventAutoAppUpdate) ?? false
+        // installAsManaged is not valid for VPP apps
+    }
+
+    init() {
+        // Keep default values from property declarations
     }
 }
 
@@ -74,6 +131,52 @@ struct IOSLobAppAssignmentSettings: AppAssignmentSettingsProtocol {
     var odataType: String {
         return "#microsoft.graph.iosLobAppAssignmentSettings"
     }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(odataType, forKey: .odataType)
+
+        // VPN config - only if specified
+        if let vpnId = vpnConfigurationId {
+            try container.encode(vpnId, forKey: .vpnConfigurationId)
+        }
+
+        // Only send if true (different from default false)
+        if uninstallOnDeviceRemoval {  // Default is false
+            try container.encode(uninstallOnDeviceRemoval, forKey: .uninstallOnDeviceRemoval)
+        }
+        if preventManagedAppBackup {  // Default is null/false
+            try container.encode(preventManagedAppBackup, forKey: .preventManagedAppBackup)
+        }
+
+        // Only send isRemovable if false (different from default true)
+        if !isRemovable {  // Default is true
+            try container.encode(isRemovable, forKey: .isRemovable)
+        }
+
+        // Assignment filters only if set
+        if let filterId = assignmentFilterId {
+            try container.encode(filterId, forKey: .assignmentFilterId)
+            if let filterMode = assignmentFilterMode {
+                try container.encode(filterMode.rawValue, forKey: .assignmentFilterMode)
+            }
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Skip @odata.type during decode
+        self.assignmentFilterId = try container.decodeIfPresent(String.self, forKey: .assignmentFilterId)
+        self.assignmentFilterMode = try container.decodeIfPresent(AssignmentFilterMode.self, forKey: .assignmentFilterMode)
+        self.vpnConfigurationId = try container.decodeIfPresent(String.self, forKey: .vpnConfigurationId)
+        self.uninstallOnDeviceRemoval = try container.decodeIfPresent(Bool.self, forKey: .uninstallOnDeviceRemoval) ?? false
+        self.isRemovable = try container.decodeIfPresent(Bool.self, forKey: .isRemovable) ?? true
+        self.preventManagedAppBackup = try container.decodeIfPresent(Bool.self, forKey: .preventManagedAppBackup) ?? false
+    }
+
+    init() {
+        // Keep default values from property declarations
+    }
 }
 
 // MARK: - macOS VPP App Assignment Settings
@@ -96,6 +199,44 @@ struct MacOSVppAppAssignmentSettings: AppAssignmentSettingsProtocol {
 
     var odataType: String {
         return "#microsoft.graph.macOsVppAppAssignmentSettings"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(odataType, forKey: .odataType)
+
+        // Always include useDeviceLicensing for VPP apps
+        try container.encode(useDeviceLicensing, forKey: .useDeviceLicensing)
+
+        // Only send if true (different from default false)
+        if uninstallOnDeviceRemoval {  // Default is false
+            try container.encode(uninstallOnDeviceRemoval, forKey: .uninstallOnDeviceRemoval)
+        }
+        if preventAutoAppUpdate {  // Default is null/false
+            try container.encode(preventAutoAppUpdate, forKey: .preventAutoAppUpdate)
+        }
+
+        // Assignment filters only if set
+        if let filterId = assignmentFilterId {
+            try container.encode(filterId, forKey: .assignmentFilterId)
+            if let filterMode = assignmentFilterMode {
+                try container.encode(filterMode.rawValue, forKey: .assignmentFilterMode)
+            }
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Skip @odata.type during decode
+        self.assignmentFilterId = try container.decodeIfPresent(String.self, forKey: .assignmentFilterId)
+        self.assignmentFilterMode = try container.decodeIfPresent(AssignmentFilterMode.self, forKey: .assignmentFilterMode)
+        self.useDeviceLicensing = try container.decodeIfPresent(Bool.self, forKey: .useDeviceLicensing) ?? true
+        self.uninstallOnDeviceRemoval = try container.decodeIfPresent(Bool.self, forKey: .uninstallOnDeviceRemoval) ?? false
+        self.preventAutoAppUpdate = try container.decodeIfPresent(Bool.self, forKey: .preventAutoAppUpdate) ?? false
+    }
+
+    init() {
+        // Keep default values from property declarations
     }
 }
 
@@ -134,6 +275,39 @@ struct MacOSDmgAppAssignmentSettings: AppAssignmentSettingsProtocol {
 
     var odataType: String {
         return "#microsoft.graph.macOsDmgAppAssignmentSettings"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(odataType, forKey: .odataType)
+        // Only encode assignment filter fields if they have values
+        if let filterId = assignmentFilterId {
+            try container.encode(filterId, forKey: .assignmentFilterId)
+            if let filterMode = assignmentFilterMode {
+                try container.encode(filterMode.rawValue, forKey: .assignmentFilterMode)
+            }
+        }
+        if let minOS = minimumOperatingSystem {
+            try container.encode(minOS, forKey: .minimumOperatingSystem)
+        }
+        try container.encode(ignoreVersionDetection, forKey: .ignoreVersionDetection)
+        if let rules = detectionRules {
+            try container.encode(rules, forKey: .detectionRules)
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Skip @odata.type during decode
+        self.assignmentFilterId = try container.decodeIfPresent(String.self, forKey: .assignmentFilterId)
+        self.assignmentFilterMode = try container.decodeIfPresent(AssignmentFilterMode.self, forKey: .assignmentFilterMode)
+        self.minimumOperatingSystem = try container.decodeIfPresent(String.self, forKey: .minimumOperatingSystem)
+        self.ignoreVersionDetection = try container.decodeIfPresent(Bool.self, forKey: .ignoreVersionDetection) ?? false
+        self.detectionRules = try container.decodeIfPresent([DetectionRule].self, forKey: .detectionRules)
+    }
+
+    init() {
+        // Keep default values from property declarations
     }
 }
 
@@ -196,6 +370,41 @@ struct WindowsAppAssignmentSettings: AppAssignmentSettingsProtocol {
 
     var odataType: String {
         return "#microsoft.graph.win32LobAppAssignmentSettings"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(odataType, forKey: .odataType)
+        // Only encode assignment filter fields if they have values
+        if let filterId = assignmentFilterId {
+            try container.encode(filterId, forKey: .assignmentFilterId)
+            if let filterMode = assignmentFilterMode {
+                try container.encode(filterMode.rawValue, forKey: .assignmentFilterMode)
+            }
+        }
+        try container.encode(deliveryOptimizationPriority, forKey: .deliveryOptimizationPriority)
+        try container.encode(notifications, forKey: .notifications)
+        if let restart = restartSettings {
+            try container.encode(restart, forKey: .restartSettings)
+        }
+        if let installTime = installTimeSettings {
+            try container.encode(installTime, forKey: .installTimeSettings)
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Skip @odata.type during decode
+        self.assignmentFilterId = try container.decodeIfPresent(String.self, forKey: .assignmentFilterId)
+        self.assignmentFilterMode = try container.decodeIfPresent(AssignmentFilterMode.self, forKey: .assignmentFilterMode)
+        self.deliveryOptimizationPriority = try container.decodeIfPresent(DeliveryOptimizationPriority.self, forKey: .deliveryOptimizationPriority) ?? .notConfigured
+        self.notifications = try container.decodeIfPresent(NotificationSetting.self, forKey: .notifications) ?? .showAll
+        self.restartSettings = try container.decodeIfPresent(RestartSettings.self, forKey: .restartSettings)
+        self.installTimeSettings = try container.decodeIfPresent(InstallTimeSettings.self, forKey: .installTimeSettings)
+    }
+
+    init() {
+        // Keep default values from property declarations
     }
 }
 
