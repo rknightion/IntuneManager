@@ -1152,15 +1152,44 @@ class AssignmentEditViewModel: ObservableObject {
                 // Create new assignment with updated intent
                 // For built-in targets, use the special IDs
                 let groupId: String
+                let targetType: AppAssignment.AssignmentTarget.TargetType
                 switch item.assignment.target.type {
                 case .allDevices:
                     groupId = DeviceGroup.allDevicesGroupID
+                    targetType = .allDevices
                 case .allUsers:
                     groupId = DeviceGroup.allUsersGroupID
+                    targetType = .allUsers
                 case .group:
                     groupId = item.assignment.target.groupId ?? ""
+                    targetType = .group
                 default:
                     groupId = item.assignment.target.groupId ?? ""
+                    targetType = item.assignment.target.type
+                }
+
+                // Find the app to get its type from our stored application data
+                let appType = applicationData.first(where: { $0.id == item.appId })?.appType ?? .unknown
+
+                // Validate the intent before trying to create the assignment
+                var finalIntent = newIntent
+                if !AssignmentIntentValidator.isIntentValid(intent: newIntent, appType: appType, targetType: targetType) {
+                    // Get a valid alternative intent
+                    let validIntents = AssignmentIntentValidator.validIntents(for: appType, targetType: targetType)
+                    if let suggestedIntent = validIntents.first {
+                        Logger.shared.warning("Intent '\(newIntent.rawValue)' is not valid for \(appType.displayName) apps with \(targetType.displayName) target. Using '\(suggestedIntent.rawValue)' instead.")
+                        finalIntent = suggestedIntent
+                    } else {
+                        // No valid intents available - skip this assignment
+                        Logger.shared.error("No valid intents available for \(appType.displayName) apps with \(targetType.displayName) target. Skipping assignment.")
+                        updateErrors.append((
+                            app: item.appName,
+                            group: groupName,
+                            error: "No valid assignment intents available for this app type and target combination",
+                            wasDeleted: true
+                        ))
+                        continue
+                    }
                 }
 
                 let pending = PendingAssignment(
@@ -1168,10 +1197,10 @@ class AssignmentEditViewModel: ObservableObject {
                         id: groupId,
                         displayName: groupName
                     ),
-                    intent: newIntent
+                    intent: finalIntent
                 )
                 try await createAssignment(pending, forAppId: item.appId)
-                Logger.shared.info("Recreated assignment with new intent for \(item.appName) - \(groupName)")
+                Logger.shared.info("Recreated assignment with intent '\(finalIntent.rawValue)' for \(item.appName) - \(groupName)")
             } catch {
                 // This is critical - the assignment was deleted but couldn't be recreated
                 updateErrors.append((
