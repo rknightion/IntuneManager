@@ -581,7 +581,12 @@ struct HelpTextView: View {
                                 Label("View Microsoft Documentation", systemImage: "arrow.up.right.square")
                                     .font(.caption)
                             }
+                            #if os(macOS)
                             .buttonStyle(.link)
+                            #else
+                            .buttonStyle(.plain)
+                            .foregroundColor(.accentColor)
+                            #endif
                         }
                     }
                 }

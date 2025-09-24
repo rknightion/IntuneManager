@@ -142,13 +142,17 @@ struct CopyAssignmentsSheet: View {
                                     Label("Copy Intent", systemImage: "flag")
                                         .font(.caption)
                                 }
+                                #if os(macOS)
                                 .toggleStyle(.checkbox)
+                                #endif
 
                                 Toggle(isOn: $copySettings) {
                                     Label("Copy Settings", systemImage: "gearshape")
                                         .font(.caption)
                                 }
+                                #if os(macOS)
                                 .toggleStyle(.checkbox)
+                                #endif
 
                                 Spacer()
 
