@@ -38,7 +38,7 @@ final class Application: Identifiable, Codable, Hashable {
     /// Returns the platforms this app supports based on its type
     var supportedPlatforms: Set<DevicePlatform> {
         switch appType {
-        case .macOS, .macOSLobApp, .managedMacOSStoreApp, .macOSOfficeSuiteApp, .macOSPkgApp, .macOSDmgApp:
+        case .macOS, .macOSLobApp, .managedMacOSStoreApp, .macOSOfficeSuiteApp, .macOSPkgApp, .macOSDmgApp, .macOSMicrosoftDefenderApp:
             return [.macOS]
         case .iOS, .iosLobApp, .managedIOSStoreApp, .iosStoreApp:
             // iOS apps without VPP info default to iPhone/iPad
@@ -189,6 +189,7 @@ final class Application: Identifiable, Codable, Hashable {
         case windowsWebApp
         case win32CatalogApp  // Windows catalog app (Enterprise App Catalog)
         case microsoftDefenderForEndpoint  // Microsoft Defender for Endpoint onboarding
+        case macOSMicrosoftDefenderApp  // macOS Microsoft Defender app
         case unknown  // For any unrecognized app types
 
         var displayName: String {
@@ -219,6 +220,7 @@ final class Application: Identifiable, Codable, Hashable {
             case .windowsWebApp: return "Windows Web App"
             case .win32CatalogApp: return "Windows catalog app (Win32)"
             case .microsoftDefenderForEndpoint: return "Microsoft Defender for Endpoint"
+            case .macOSMicrosoftDefenderApp: return "macOS Microsoft Defender"
             case .unknown: return "Unknown"
             }
         }
@@ -239,7 +241,7 @@ final class Application: Identifiable, Codable, Hashable {
                 return "network"
             case .officeSuiteApp:
                 return "briefcase"
-            case .microsoftDefenderForEndpoint:
+            case .microsoftDefenderForEndpoint, .macOSMicrosoftDefenderApp:
                 return "shield"
             case .unknown:
                 return "questionmark.app"
@@ -293,6 +295,8 @@ final class Application: Identifiable, Codable, Hashable {
                 self = .win32CatalogApp
             case "microsoftDefenderForEndpointOnboardingPackageWindows10":
                 self = .microsoftDefenderForEndpoint
+            case "macOSMicrosoftDefenderApp":
+                self = .macOSMicrosoftDefenderApp
             case "win32LobApp":
                 self = .win32LobApp
             case "windowsMobileMSI":
