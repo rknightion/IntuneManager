@@ -27,36 +27,41 @@ struct GroupAssignmentSettingsView: View {
 
     var body: some View {
         #if os(macOS)
-        HStack(spacing: 0) {
-            // Group List
+        HStack(alignment: .top, spacing: 0) {
+            // Group List Sidebar
             GroupListSidebar(
                 groups: selectedGroups,
                 selectedGroupId: $selectedGroupId,
                 groupSettings: groupSettings
             )
-            .frame(width: 300)
+            .frame(width: 250)
+            .frame(maxHeight: .infinity)
 
             Divider()
 
             // Settings Panel
-            if let selectedGroup = selectedGroups.first(where: { $0.id == selectedGroupId }),
-               let index = groupSettings.firstIndex(where: { $0.groupId == selectedGroup.id }) {
-                GroupSettingsPanel(
-                    settings: $groupSettings[index],
-                    appType: primaryAppType,
-                    platforms: commonPlatforms,
-                    onShowDocumentation: { url in
-                        documentationUrl = url
-                        showingDocumentation = true
-                    }
-                )
-                .frame(minWidth: 500, maxWidth: .infinity)
-            } else {
-                EmptyGroupSettingsView()
-                .frame(maxWidth: .infinity)
+            ScrollView {
+                if let selectedGroup = selectedGroups.first(where: { $0.id == selectedGroupId }),
+                   let index = groupSettings.firstIndex(where: { $0.groupId == selectedGroup.id }) {
+                    GroupSettingsPanel(
+                        settings: $groupSettings[index],
+                        appType: primaryAppType,
+                        platforms: commonPlatforms,
+                        onShowDocumentation: { url in
+                            documentationUrl = url
+                            showingDocumentation = true
+                        }
+                    )
+                    .frame(maxWidth: 600, alignment: .topLeading)
+                    .padding(.horizontal)
+                } else {
+                    EmptyGroupSettingsView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
+            .frame(minWidth: 400, maxWidth: .infinity)
         }
-        .frame(minWidth: 800, idealWidth: 900, maxWidth: 1200)
+        .frame(minWidth: 700, maxWidth: 900)
         .onAppear {
             // Select the first group if none selected
             if selectedGroupId == nil, let firstGroup = selectedGroups.first {
@@ -217,15 +222,14 @@ struct GroupSettingsPanel: View {
     let onShowDocumentation: (URL) -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Header
-                GroupSettingsHeader(groupName: settings.groupName, appType: appType)
+        VStack(alignment: .leading, spacing: 20) {
+            // Header
+            GroupSettingsHeader(groupName: settings.groupName, appType: appType)
 
-                Divider()
+            Divider()
 
-                // Assignment Intent
-                AssignmentIntentSection(intent: $settings.settings.intent)
+            // Assignment Intent
+            AssignmentIntentSection(intent: $settings.settings.intent)
 
                 // App Type Specific Settings
                 Group {
@@ -331,7 +335,6 @@ struct GroupSettingsPanel: View {
                 AssignmentFiltersSection(settings: $settings.settings)
             }
             .padding()
-        }
     }
 }
 
@@ -375,16 +378,28 @@ struct AssignmentIntentSection: View {
             Label("Assignment Mode", systemImage: "arrow.down.square")
                 .font(.headline)
 
-            Picker("", selection: $intent) {
-                ForEach(Assignment.AssignmentIntent.allCases, id: \.self) { intent in
-                    HStack {
-                        Image(systemName: intent.icon)
-                        Text(intent.displayName)
+            // Use a custom button group instead of segmented picker
+            HStack(spacing: 8) {
+                ForEach(Assignment.AssignmentIntent.allCases.filter { $0 != .availableWithoutEnrollment }, id: \.self) { option in
+                    Button(action: {
+                        intent = option
+                    }) {
+                        VStack(spacing: 4) {
+                            Image(systemName: option.icon)
+                                .font(.title2)
+                                .foregroundColor(intent == option ? .white : .accentColor)
+                            Text(option.displayName)
+                                .font(.caption)
+                                .foregroundColor(intent == option ? .white : .primary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(intent == option ? Color.accentColor : Color.gray.opacity(0.1))
+                        .cornerRadius(8)
                     }
-                    .tag(intent)
+                    .buttonStyle(.plain)
                 }
             }
-            .pickerStyle(.segmented)
 
             // Intent Description
             HStack(alignment: .top, spacing: 8) {
@@ -394,6 +409,7 @@ struct AssignmentIntentSection: View {
                 Text(intent.detailedDescription)
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(8)
             .background(Color.accentColor.opacity(0.05))

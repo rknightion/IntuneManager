@@ -56,7 +56,6 @@ struct BulkAssignmentView: View {
                         selectedApplications: viewModel.selectedApplications,
                         selectedGroups: viewModel.selectedGroups
                     )
-                    .frame(maxWidth: 1200)
                 case .review:
                     ReviewAssignmentView(viewModel: viewModel)
                 }

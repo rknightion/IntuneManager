@@ -246,7 +246,7 @@ struct MacOSDmgSettingsSection: View {
                     set: { settings.minimumOperatingSystem = $0.isEmpty ? nil : $0 }
                 ))
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 100)
+                .frame(maxWidth: 150)
             }
 
             // Version Detection
@@ -344,7 +344,7 @@ struct WindowsSettingsSection: View {
                                 set: { settings.restartSettings?.gracePeriodInMinutes = $0 }
                             ), format: .number)
                             .textFieldStyle(.roundedBorder)
-                            .frame(width: 80)
+                            .frame(maxWidth: 100)
                             Text("minutes")
                                 .foregroundColor(.secondary)
                         }
@@ -390,7 +390,7 @@ struct AssignmentFiltersSection: View {
                     Text("Excluded").tag(AssignmentFilterMode.exclude)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 200)
+                .frame(maxWidth: 200)
             }
 
             // Filter selection
@@ -427,7 +427,7 @@ struct AssignmentFiltersSection: View {
                     .foregroundColor(.secondary)
                 Spacer()
             }
-            .frame(width: 400, height: 300)
+            .frame(minWidth: 300, idealWidth: 400, maxWidth: 500, minHeight: 250, idealHeight: 300)
         }
     }
 
@@ -504,7 +504,7 @@ struct SettingRow<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             content()
-                .frame(width: 200)
+                .frame(maxWidth: 200)
         }
         .padding(8)
         .background(hoveredSetting == settingKey ? Color.gray.opacity(0.05) : Color.clear)
