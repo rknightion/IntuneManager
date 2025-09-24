@@ -32,46 +32,274 @@ struct AssignmentEditView: View {
         Dictionary(grouping: filteredAssignments) { $0.appName }
     }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text("Edit Assignments")
-                            .font(.title2)
-                            .fontWeight(.bold)
+    var bulkActionsBar: some View {
+        HStack {
+            if !viewModel.selectedAssignments.isEmpty {
+                Text("\(viewModel.selectedAssignments.count) selected")
+                    .font(.caption)
+                    .foregroundColor(.accentColor)
 
-                        Text(applications.count == 1 ?
-                             applications[0].displayName :
-                             "\(applications.count) applications selected")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+                Button("Change Intent") {
+                    showingBulkIntentMenu = true
+                }
+                .buttonStyle(.bordered)
+                .popover(isPresented: $showingBulkIntentMenu) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Set Intent for Selected")
+                            .font(.headline)
+                            .padding(.bottom, 4)
+
+                        ForEach(AppAssignment.AssignmentIntent.allCases, id: \.self) { intent in
+                            Button(action: {
+                                viewModel.bulkUpdateIntent(intent)
+                                showingBulkIntentMenu = false
+                            }) {
+                                Label(intent.displayName, systemImage: intent.icon)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(4)
+                        }
                     }
+                    .padding()
+                    .frame(width: 200)
+                }
+
+                Button("Delete Selected") {
+                    viewModel.bulkDelete()
+                }
+                .buttonStyle(.bordered)
+                .foregroundColor(.red)
+            }
+
+            Spacer()
+
+            // Quick actions
+            if applications.count > 1 {
+                Button(action: {
+                    if expandedApps.count == applications.count {
+                        expandedApps.removeAll()
+                    } else {
+                        expandedApps = Set(applications.map { $0.displayName })
+                    }
+                }) {
+                    Label(expandedApps.isEmpty ? "Expand All" : "Collapse All",
+                          systemImage: expandedApps.isEmpty ? "chevron.down.square" : "chevron.up.square")
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if viewModel.currentAssignmentsWithApp.count > 0 {
+                Button("Delete All") {
+                    viewModel.markAllAssignmentsForDeletion()
+                }
+                .buttonStyle(.bordered)
+                .foregroundColor(.red)
+            }
+        }
+    }
+
+    var currentAssignmentsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Header with search and actions
+            VStack(spacing: 12) {
+                HStack {
+                    Label("Current Assignments", systemImage: "person.2.square.stack")
+                        .font(.headline)
 
                     Spacer()
 
-                    HStack(spacing: 12) {
-                        Button("Cancel") {
-                            dismiss()
-                        }
-                        .buttonStyle(.bordered)
+                    Text("\(filteredAssignments.count) of \(viewModel.currentAssignmentsWithApp.count) shown")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
 
-                        Button("Save Changes") {
-                            showingSaveConfirmation = true
+                // Search bar
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField("Search groups or apps...", text: $assignmentSearchText)
+                        .textFieldStyle(.plain)
+                    if !assignmentSearchText.isEmpty {
+                        Button(action: { assignmentSearchText = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(!viewModel.hasChanges || viewModel.isSaving)
+                        .buttonStyle(.plain)
                     }
                 }
-                .padding()
+                .padding(6)
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(6)
 
-                if viewModel.isLoading {
-                    ProgressView("Loading assignments...")
-                        .padding(.horizontal)
+                // Bulk actions bar
+                bulkActionsBar
+            }
+
+            // Assignments list
+            if applications.count > 1 {
+                // Group by app for multiple apps
+                ForEach(assignmentsByApp.keys.sorted(), id: \.self) { appName in
+                    DisclosureGroup(
+                        isExpanded: Binding(
+                            get: { expandedApps.contains(appName) },
+                            set: { isExpanded in
+                                if isExpanded {
+                                    expandedApps.insert(appName)
+                                } else {
+                                    expandedApps.remove(appName)
+                                }
+                            }
+                        )
+                    ) {
+                        ForEach(assignmentsByApp[appName] ?? []) { item in
+                            CurrentAssignmentRow(
+                                assignmentWithApp: item,
+                                appType: applications.first(where: { $0.id == item.appId })?.appType ?? .unknown,
+                                isPendingDeletion: viewModel.isMarkedForDeletion(item),
+                                isPendingUpdate: viewModel.hasPendingUpdate(item),
+                                isSelected: viewModel.selectedAssignments.contains(item.id),
+                                showAppName: false,
+                                onToggleSelection: {
+                                    viewModel.toggleSelection(item)
+                                },
+                                onToggleDelete: {
+                                    viewModel.toggleAssignmentDeletion(item)
+                                },
+                                onEditIntent: { newIntent in
+                                    viewModel.updateAssignmentIntent(item, intent: newIntent)
+                                }
+                            )
+                        }
+                    } label: {
+                        HStack {
+                            Label(appName, systemImage: "app.badge")
+                                .font(.system(.body, weight: .medium))
+                            Spacer()
+                            Text("\(assignmentsByApp[appName]?.count ?? 0) assignments")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            } else {
+                // Flat list for single app
+                ForEach(filteredAssignments) { item in
+                    CurrentAssignmentRow(
+                        assignmentWithApp: item,
+                        appType: applications.first(where: { $0.id == item.appId })?.appType ?? .unknown,
+                        isPendingDeletion: viewModel.isMarkedForDeletion(item),
+                        isPendingUpdate: viewModel.hasPendingUpdate(item),
+                        isSelected: viewModel.selectedAssignments.contains(item.id),
+                        showAppName: false,
+                        onToggleSelection: {
+                            viewModel.toggleSelection(item)
+                        },
+                        onToggleDelete: {
+                            viewModel.toggleAssignmentDeletion(item)
+                        },
+                        onEditIntent: { newIntent in
+                            viewModel.updateAssignmentIntent(item, intent: newIntent)
+                        }
+                    )
                 }
             }
-            .background(Theme.Colors.secondaryBackground)
+        }
+        .padding()
+        .background(Theme.Colors.secondaryBackground)
+        .cornerRadius(8)
+    }
+
+    var newAssignmentsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Add New Assignments", systemImage: "plus.circle")
+                    .font(.headline)
+
+                Spacer()
+
+                Button("Copy from App") {
+                    showingCopyAssignments = true
+                }
+                .buttonStyle(.bordered)
+
+                Button("Add Groups") {
+                    viewModel.showingGroupSelector = true
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if !viewModel.pendingAssignments.isEmpty {
+                ForEach(viewModel.pendingAssignments) { pending in
+                    PendingAssignmentRow(
+                        assignment: pending,
+                        applicationNames: viewModel.applicationNames,
+                        applicationTypes: applications.map { $0.appType },
+                        onRemove: {
+                            viewModel.removePendingAssignment(pending)
+                        },
+                        onEditIntent: { newIntent in
+                            viewModel.updatePendingIntent(pending, intent: newIntent)
+                        }
+                    )
+                }
+            } else {
+                Text("No new assignments added")
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding()
+            }
+        }
+        .padding()
+        .background(Theme.Colors.secondaryBackground)
+        .cornerRadius(8)
+    }
+
+    var headerView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("Edit Assignments")
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    Text(applications.count == 1 ?
+                         applications[0].displayName :
+                         "\(applications.count) applications selected")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                HStack(spacing: 12) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("Save Changes") {
+                        showingSaveConfirmation = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!viewModel.hasChanges || viewModel.isSaving)
+                }
+            }
+            .padding()
+
+            if viewModel.isLoading {
+                ProgressView("Loading assignments...")
+                    .padding(.horizontal)
+            }
+        }
+        .background(Theme.Colors.secondaryBackground)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            headerView
 
             Divider()
 
@@ -81,220 +309,11 @@ struct AssignmentEditView: View {
                     VStack(spacing: 16) {
                         // Current Assignments Section
                         if !viewModel.currentAssignmentsWithApp.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
-                                // Header with search and actions
-                                VStack(spacing: 12) {
-                                    HStack {
-                                        Label("Current Assignments", systemImage: "person.2.square.stack")
-                                            .font(.headline)
-
-                                        Spacer()
-
-                                        Text("\(filteredAssignments.count) of \(viewModel.currentAssignmentsWithApp.count) shown")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-
-                                    // Search bar
-                                    HStack {
-                                        Image(systemName: "magnifyingglass")
-                                            .foregroundColor(.secondary)
-                                        TextField("Search groups or apps...", text: $assignmentSearchText)
-                                            .textFieldStyle(.plain)
-                                        if !assignmentSearchText.isEmpty {
-                                            Button(action: { assignmentSearchText = "" }) {
-                                                Image(systemName: "xmark.circle.fill")
-                                                    .foregroundColor(.secondary)
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
-                                    }
-                                    .padding(6)
-                                    .background(Color.gray.opacity(0.1))
-                                    .cornerRadius(6)
-
-                                    // Bulk actions bar
-                                    HStack {
-                                        if !viewModel.selectedAssignments.isEmpty {
-                                            Text("\(viewModel.selectedAssignments.count) selected")
-                                                .font(.caption)
-                                                .foregroundColor(.accentColor)
-
-                                            Button("Change Intent") {
-                                                showingBulkIntentMenu = true
-                                            }
-                                            .buttonStyle(.bordered)
-                                            .popover(isPresented: $showingBulkIntentMenu) {
-                                                VStack(alignment: .leading, spacing: 8) {
-                                                    Text("Set Intent for Selected")
-                                                        .font(.headline)
-                                                        .padding(.bottom, 4)
-
-                                                    ForEach(AppAssignment.AssignmentIntent.allCases, id: \.self) { intent in
-                                                        Button(action: {
-                                                            viewModel.bulkUpdateIntent(intent)
-                                                            showingBulkIntentMenu = false
-                                                        }) {
-                                                            Label(intent.displayName, systemImage: intent.icon)
-                                                                .frame(maxWidth: .infinity, alignment: .leading)
-                                                        }
-                                                        .buttonStyle(.plain)
-                                                        .padding(4)
-                                                    }
-                                                }
-                                                .padding()
-                                                .frame(width: 200)
-                                            }
-
-                                            Button("Delete Selected") {
-                                                viewModel.bulkDelete()
-                                            }
-                                            .buttonStyle(.bordered)
-                                            .foregroundColor(.red)
-                                        }
-
-                                        Spacer()
-
-                                        // Quick actions
-                                        if applications.count > 1 {
-                                            Button(action: {
-                                                if expandedApps.count == applications.count {
-                                                    expandedApps.removeAll()
-                                                } else {
-                                                    expandedApps = Set(applications.map { $0.displayName })
-                                                }
-                                            }) {
-                                                Label(expandedApps.isEmpty ? "Expand All" : "Collapse All",
-                                                      systemImage: expandedApps.isEmpty ? "chevron.down.square" : "chevron.up.square")
-                                            }
-                                            .buttonStyle(.bordered)
-                                        }
-
-                                        if viewModel.currentAssignmentsWithApp.count > 0 {
-                                            Button("Delete All") {
-                                                viewModel.markAllAssignmentsForDeletion()
-                                            }
-                                            .buttonStyle(.bordered)
-                                            .foregroundColor(.red)
-                                        }
-                                    }
-                                }
-
-                                // Assignments list
-                                if applications.count > 1 {
-                                    // Group by app for multiple apps
-                                    ForEach(assignmentsByApp.keys.sorted(), id: \.self) { appName in
-                                        DisclosureGroup(
-                                            isExpanded: Binding(
-                                                get: { expandedApps.contains(appName) },
-                                                set: { isExpanded in
-                                                    if isExpanded {
-                                                        expandedApps.insert(appName)
-                                                    } else {
-                                                        expandedApps.remove(appName)
-                                                    }
-                                                }
-                                            )
-                                        ) {
-                                            ForEach(assignmentsByApp[appName] ?? []) { item in
-                                                CurrentAssignmentRow(
-                                                    assignmentWithApp: item,
-                                                    isPendingDeletion: viewModel.isMarkedForDeletion(item),
-                                                    isPendingUpdate: viewModel.hasPendingUpdate(item),
-                                                    isSelected: viewModel.selectedAssignments.contains(item.id),
-                                                    showAppName: false,
-                                                    onToggleSelection: {
-                                                        viewModel.toggleSelection(item)
-                                                    },
-                                                    onToggleDelete: {
-                                                        viewModel.toggleAssignmentDeletion(item)
-                                                    },
-                                                    onEditIntent: { newIntent in
-                                                        viewModel.updateAssignmentIntent(item, intent: newIntent)
-                                                    }
-                                                )
-                                            }
-                                        } label: {
-                                            HStack {
-                                                Label(appName, systemImage: "app.badge")
-                                                    .font(.system(.body, weight: .medium))
-                                                Spacer()
-                                                Text("\(assignmentsByApp[appName]?.count ?? 0) assignments")
-                                                    .font(.caption)
-                                                    .foregroundColor(.secondary)
-                                            }
-                                            .padding(.vertical, 4)
-                                        }
-                                    }
-                                } else {
-                                    // Flat list for single app
-                                    ForEach(filteredAssignments) { item in
-                                        CurrentAssignmentRow(
-                                            assignmentWithApp: item,
-                                            isPendingDeletion: viewModel.isMarkedForDeletion(item),
-                                            isPendingUpdate: viewModel.hasPendingUpdate(item),
-                                            isSelected: viewModel.selectedAssignments.contains(item.id),
-                                            showAppName: false,
-                                            onToggleSelection: {
-                                                viewModel.toggleSelection(item)
-                                            },
-                                            onToggleDelete: {
-                                                viewModel.toggleAssignmentDeletion(item)
-                                            },
-                                            onEditIntent: { newIntent in
-                                                viewModel.updateAssignmentIntent(item, intent: newIntent)
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                            .padding()
-                            .background(Theme.Colors.secondaryBackground)
-                            .cornerRadius(8)
+                            currentAssignmentsSection
                         }
 
                         // Add New Assignments Section
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Label("Add New Assignments", systemImage: "plus.circle")
-                                    .font(.headline)
-
-                                Spacer()
-
-                                Button("Copy from App") {
-                                    showingCopyAssignments = true
-                                }
-                                .buttonStyle(.bordered)
-
-                                Button("Add Groups") {
-                                    viewModel.showingGroupSelector = true
-                                }
-                                .buttonStyle(.bordered)
-                            }
-
-                            if !viewModel.pendingAssignments.isEmpty {
-                                ForEach(viewModel.pendingAssignments) { pending in
-                                    PendingAssignmentRow(
-                                        assignment: pending,
-                                        applicationNames: viewModel.applicationNames,
-                                        onRemove: {
-                                            viewModel.removePendingAssignment(pending)
-                                        },
-                                        onEditIntent: { newIntent in
-                                            viewModel.updatePendingIntent(pending, intent: newIntent)
-                                        }
-                                    )
-                                }
-                            } else {
-                                Text("No new assignments added")
-                                    .foregroundColor(.secondary)
-                                    .frame(maxWidth: .infinity, alignment: .center)
-                                    .padding()
-                            }
-                        }
-                        .padding()
-                        .background(Theme.Colors.secondaryBackground)
-                        .cornerRadius(8)
+                        newAssignmentsSection
 
                         // Summary
                         if viewModel.hasChanges {
