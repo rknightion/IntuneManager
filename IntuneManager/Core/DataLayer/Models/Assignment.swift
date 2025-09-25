@@ -340,10 +340,51 @@ struct BulkAssignmentOperation: Identifiable {
                         uninstallOnDeviceRemoval: groupSetting.settings.iosVppSettings?.uninstallOnDeviceRemoval,
                         vpnConfigurationId: groupSetting.settings.iosVppSettings?.vpnConfigurationId
                     )
-                    // Store the full settings for Graph API use
-                    assignment.graphSettings = groupSetting.settings
+
+                    // IMPORTANT: For VPP apps being uninstalled, force device licensing
+                    var adjustedSettings = groupSetting.settings
+                    if assignmentIntent == .uninstall && (app.appType == .iosVppApp || app.appType == .macOSVppApp) {
+                        // Ensure device licensing is enabled for uninstalls
+                        if adjustedSettings.iosVppSettings != nil {
+                            adjustedSettings.iosVppSettings?.useDeviceLicensing = true
+                            adjustedSettings.iosVppSettings?.uninstallOnDeviceRemoval = true
+                        } else if adjustedSettings.macosVppSettings != nil {
+                            adjustedSettings.macosVppSettings?.useDeviceLicensing = true
+                            adjustedSettings.macosVppSettings?.uninstallOnDeviceRemoval = true
+                        } else if app.appType == .iosVppApp {
+                            var vppSettings = IOSVppAppAssignmentSettings()
+                            vppSettings.useDeviceLicensing = true
+                            vppSettings.uninstallOnDeviceRemoval = true
+                            adjustedSettings.iosVppSettings = vppSettings
+                        } else if app.appType == .macOSVppApp {
+                            var vppSettings = MacOSVppAppAssignmentSettings()
+                            vppSettings.useDeviceLicensing = true
+                            vppSettings.uninstallOnDeviceRemoval = true
+                            adjustedSettings.macosVppSettings = vppSettings
+                        }
+                    }
+
+                    // Store the adjusted settings for Graph API use
+                    assignment.graphSettings = adjustedSettings
                 } else {
                     assignment.settings = settings
+
+                    // For global settings, also check for VPP uninstall scenario
+                    if assignmentIntent == .uninstall && (app.appType == .iosVppApp || app.appType == .macOSVppApp) {
+                        var adjustedSettings = AppAssignmentSettings(intent: assignmentIntent)
+                        if app.appType == .iosVppApp {
+                            var vppSettings = IOSVppAppAssignmentSettings()
+                            vppSettings.useDeviceLicensing = true
+                            vppSettings.uninstallOnDeviceRemoval = true
+                            adjustedSettings.iosVppSettings = vppSettings
+                        } else {
+                            var vppSettings = MacOSVppAppAssignmentSettings()
+                            vppSettings.useDeviceLicensing = true
+                            vppSettings.uninstallOnDeviceRemoval = true
+                            adjustedSettings.macosVppSettings = vppSettings
+                        }
+                        assignment.graphSettings = adjustedSettings
+                    }
                 }
 
                 assignment.scheduledDate = scheduledDate
