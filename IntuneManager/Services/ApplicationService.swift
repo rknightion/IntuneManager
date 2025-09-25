@@ -292,11 +292,10 @@ final class ApplicationService: ObservableObject {
             Logger.shared.debug("Fetched install summary directly for app \(appId)", category: .network)
             return summary
         } catch {
-            Logger.shared.debug("Direct install summary not available, fetching device/user statuses separately", category: .network)
+            Logger.shared.debug("Direct install summary not available for app \(appId), trying device statuses", category: .network)
         }
 
-        // Fallback to fetching device and user statuses separately
-        // Fetch device statuses
+        // Fallback to fetching device statuses only (user statuses endpoint doesn't exist for all app types)
         let deviceStatusEndpoint = "/deviceAppManagement/mobileApps/\(appId)/deviceStatuses"
         do {
             struct DeviceStatus: Decodable {
@@ -333,43 +332,13 @@ final class ApplicationService: ObservableObject {
             }
 
             Logger.shared.debug("Fetched \(deviceStatuses.count) device statuses for app \(appId)", category: .network)
+            return summary
         } catch {
-            // If we can't fetch device statuses, log but don't fail
-            Logger.shared.warning("Failed to fetch device statuses for app \(appId): \(error)", category: .network)
+            // If we can't fetch device statuses either, return empty summary
+            Logger.shared.debug("No install status data available for app \(appId): \(error)", category: .network)
+            // Return empty summary - this is not an error, some apps don't have status data
+            return summary
         }
-
-        // Fetch user statuses
-        let userStatusEndpoint = "/deviceAppManagement/mobileApps/\(appId)/userStatuses"
-        do {
-            struct UserStatus: Decodable {
-                let installedDeviceCount: Int?
-                let failedDeviceCount: Int?
-                let notInstalledDeviceCount: Int?
-                let userPrincipalName: String?
-            }
-
-            let userStatuses: [UserStatus] = try await apiClient.getAllPagesForModels(
-                userStatusEndpoint,
-                parameters: [
-                    "$select": "installedDeviceCount,failedDeviceCount,notInstalledDeviceCount,userPrincipalName",
-                    "$top": "100"  // Limit to avoid timeouts
-                ]
-            )
-
-            // Sum up user install counts
-            for status in userStatuses {
-                summary.installedUserCount += status.installedDeviceCount ?? 0
-                summary.failedUserCount += status.failedDeviceCount ?? 0
-                summary.notInstalledUserCount += status.notInstalledDeviceCount ?? 0
-            }
-
-            Logger.shared.debug("Fetched \(userStatuses.count) user statuses for app \(appId)", category: .network)
-        } catch {
-            // If we can't fetch user statuses, log but don't fail
-            Logger.shared.warning("Failed to fetch user statuses for app \(appId): \(error)", category: .network)
-        }
-
-        return summary
     }
 
     // MARK: - Private Methods
