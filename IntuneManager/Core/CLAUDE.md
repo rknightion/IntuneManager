@@ -9,9 +9,9 @@
 - Surface auth state changes via published properties and `AuthError` enums so the UI can present meaningful alerts.
 
 ## DataLayer
-- SwiftData models (`@Model`) must stay `Codable`, `Identifiable`, and `Sendable` when practical. Preserve `@Attribute(.unique)` markers to avoid duplicates.
+- SwiftData models (`@Model`) must stay `Codable`, `Identifiable`, and `Sendable` when practical. Preserve `@Attribute(.unique)` markers to avoid duplicates. Recent additions include configuration profiles/templates, audit logs, and assignment export DTOs—keep them grouped under `Models/` with conversion helpers.
 - Add migrations thoughtfully: update `LocalDataStore` helpers when schemas evolve, and provide backfill logic to keep cached data consistent.
-- `LocalDataStore` is the canonical persistence entry point. Call `configure(with:)` before use and prefer `replace*` helpers for bulk updates.
+- `LocalDataStore` is the canonical persistence entry point. Call `configure(with:)` before use and prefer `replace*` helpers for bulk updates. Configuration-related `LocalDataStore` methods are currently stubbed; if you implement persistence there, ensure the in-memory fallbacks in `ConfigurationService` remain consistent.
 
 ## Networking
 - Use `GraphAPIClient` for all HTTP requests. Prefer generic helpers (`getModel`, `getAllPagesForModels`, `batchModels`) instead of reimplementing networking stacks.
@@ -23,8 +23,12 @@
 - Keep keychain identifiers and access groups aligned with entitlements managed by Xcode (do not edit entitlements here).
 
 ## CrossPlatform & UI Helpers
-- Add cross-platform abstractions (`PlatformNavigation`, `PlatformFormStyle`, haptics, file presenters) in `CrossPlatform` to centralize OS branching.
+- Add cross-platform abstractions (`PlatformNavigation`, `PlatformFormStyle`, haptics, file presenters) in `CrossPlatform` to centralize OS branching. New file/import/export helpers should route through these shims so both macOS and iOS flows get exercised.
 - Shared SwiftUI components (empty states, theming) belong under `UI/` and should avoid feature-specific knowledge.
+
+## Utilities
+- Domain validators such as `AssignmentIntentValidator` and `AssignmentConflictDetector` live in `Core/Utilities`; keep them pure and heavily unit tested so services/features can rely on deterministic output.
+- When adding new conflict or validation rules, prefer parameterizing these utilities rather than embedding conditionals in feature code.
 
 ## Concurrency & Testing
 - Mark observable classes `@MainActor` when they mutate shared state consumed by SwiftUI.

@@ -21,13 +21,13 @@
 ## Architecture Overview
 - **App Layer (`IntuneManager/App`)**: `IntuneManagerApp` bootstraps global singletons (`AuthManagerV2`, `CredentialManager`, `AppState`) and wires platform-specific scenes. `UnifiedContentView` adapts navigation between macOS split-view and iOS/tab layouts.
 - **Core Layer (`IntuneManager/Core`)**: Shared infrastructure split into Authentication (MSAL glue), DataLayer (SwiftData models & `LocalDataStore` cache), Networking (`GraphAPIClient` + `RateLimiter`), Security (`CredentialManager`), CrossPlatform shims, and shared UI components.
-- **Services (`IntuneManager/Services`)**: `DeviceService`, `ApplicationService`, `GroupService`, `AssignmentService`, `SyncService` orchestrate Graph requests, caching, and business flows. They centralize async work on the main actor and hydrate the SwiftData store.
-- **Features (`IntuneManager/Features`)**: User-facing modules (Dashboard, Devices, Applications, Groups, Assignments, Reports, Settings, Setup). Each feature keeps SwiftUI views under `Views/` and supporting models or view models under `ViewModels/`, consuming shared services instead of duplicating logic.
+- **Services (`IntuneManager/Services`)**: Graph orchestration sits here. Core fetchers (`DeviceService`, `ApplicationService`, `GroupService`, `SyncService`) now work alongside assignment workflow helpers (`AssignmentService`, `AssignmentImportService`, `AssignmentExportService`), compliance/audit utilities (`AuditLogService`), and the configuration pipeline (`ConfigurationService`, `ProfileValidationService`, `ProfileExportService`, `MobileConfigService`). Keep them actor-isolated, expose async APIs, and let them own progress/error publishing for the UI.
+- **Features (`IntuneManager/Features`)**: Modules now cover Dashboard, Devices, Applications (Bulk Assignment workspace), Groups, Configuration (profiles/templates/mobileconfig), Reports, Settings, Setup, About, and TestAuth scaffolding. Views live under `Views/` with paired `ViewModels/` that compose services and `AppState`; extend existing folders instead of spawning ad-hoc navigation inside other features.
 - **Utilities & Extensions**: Cross-cutting helpers like `Logger` and styling/Color extensions; prefer reusing these before adding new helpers.
 - **Tests (`IntuneManagerTests`, `IntuneManagerUITests`)**: XCTest suites mirror the source structure. Add unit coverage alongside new functionality; gate UI flows with `@MainActor` tests when feasible.
 - **Config**: `Config/AppInfo.plist` and other plist/entitlement files hold bundle metadata—update carefully and never commit secrets.
 
-Data flows from the Microsoft Graph through `GraphAPIClient` → rate-limited batch helpers → Services → SwiftData `LocalDataStore` → environment-bound view models and SwiftUI views. Logging runs through `Logger.shared` so new work should surface key events there rather than `print`.
+Data flows from Microsoft Graph through `GraphAPIClient` → `RateLimiter` → domain services (assignments, configuration, audit logging, mobileconfig) → SwiftData caches (`LocalDataStore` plus per-service in-memory state) → view models and SwiftUI views. Configuration operations route through validation/export helpers before pushing back to Graph. Funnel logging through `Logger.shared` rather than `print`.
 
 ## Multi-Platform Best Practices
 - Maintain feature parity: when updating a feature view, it should render acceptably on macOS, iPad, and iPhone. Use `platformGlassBackground`, `PlatformNavigation`, and other cross-platform modifiers instead of ad-hoc device checks when possible.
@@ -36,6 +36,9 @@ Data flows from the Microsoft Graph through `GraphAPIClient` → rate-limited ba
 - Respect concurrency annotations: UI-facing models stay `@MainActor`; background Graph work happens inside services actors or async functions with explicit `Sendable` models.
 - Reuse `AppState.Tab` to surface new sections; update sidebar/tab registration and provide consistent icons and labels.
 - When introducing new Graph endpoints, define Codable/`@Model` types in `Core/DataLayer/Models`, extend services to call them, and document required API permissions in the relevant feature README.
+- Test workflows that diverge per platform: profile import/export uses macOS save panels while iOS relies on `UIDocumentPicker`, so verify both paths and provide safe defaults.
+- Provide keyboard-friendly affordances for macOS-first flows (commands, menu items) and mirror them with touch UI so iPad/iPhone stay functional without duplicating views.
+- Validate dynamic type, pointer interactions, and compact width layouts when adding Bulk Assignment or Configuration screens—they must remain legible in split view and tab contexts.
 
 ## Implementation Guardrails
 - Prefer dependency injection through shared singletons already established (`DeviceService.shared`, etc.); if a new shared service is needed, expose it via the Services layer rather than from a view.
