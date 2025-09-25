@@ -304,13 +304,23 @@ struct BulkAssignmentOperation: Identifiable {
 
         for app in applications {
             for group in groups {
+                // Use per-group settings intent if available, otherwise use global intent
+                let assignmentIntent: Assignment.AssignmentIntent
+                if let groupSetting = groupSettings?.first(where: { $0.groupId == group.id }) {
+                    // Use the intent from the group-specific settings
+                    assignmentIntent = groupSetting.settings.intent
+                } else {
+                    // Fall back to the global intent
+                    assignmentIntent = intent
+                }
+
                 let assignment = Assignment(
                     applicationId: app.id,
                     applicationName: app.displayName,
                     groupId: group.id,
                     groupName: group.displayName,
                     targetType: group.assignmentTargetType,
-                    intent: intent
+                    intent: assignmentIntent  // Use the correct intent here
                 )
                 assignment.batchId = id
 
