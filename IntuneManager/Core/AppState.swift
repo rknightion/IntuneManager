@@ -18,6 +18,7 @@ class AppState: ObservableObject {
         case applications = "Applications"
         case groups = "Groups"
         case assignments = "Assignments"
+        case configuration = "Configuration"
         case reports = "Reports"
         case settings = "Settings"
 
@@ -28,6 +29,7 @@ class AppState: ObservableObject {
             case .applications: return "app.badge"
             case .groups: return "person.3"
             case .assignments: return "checklist"
+            case .configuration: return "gearshape.2"
             case .reports: return "chart.bar.doc.horizontal"
             case .settings: return "gear"
             }
@@ -80,6 +82,12 @@ class AppState: ObservableObject {
             return ["Group.Read.All", "GroupMember.Read.All"]
         case "assignment", "assignments":
             return ["DeviceManagementApps.ReadWrite.All"]
+        case "configuration", "configurations", "profile", "profiles":
+            if operation.contains("write") || operation.contains("update") || operation.contains("create") || operation.contains("delete") {
+                return ["DeviceManagementConfiguration.ReadWrite.All"]
+            } else {
+                return ["DeviceManagementConfiguration.Read.All"]
+            }
         case "auditLog", "auditLogs":
             return ["DeviceManagementApps.Read.All", "AuditLog.Read.All"]
         default:

@@ -152,6 +152,9 @@ struct UnifiedContentView: View {
         case .assignments:
             BulkAssignmentView()
                 .onAppear { Logger.shared.info("Navigated to Bulk Assignments", category: .ui) }
+        case .configuration:
+            ConfigurationListView()
+                .onAppear { Logger.shared.info("Navigated to Configuration", category: .ui) }
         case .reports:
             ReportsView()
                 .onAppear { Logger.shared.info("Navigated to Reports", category: .ui) }

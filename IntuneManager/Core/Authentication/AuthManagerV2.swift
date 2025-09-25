@@ -79,11 +79,19 @@ class AuthManagerV2: ObservableObject {
             }
             #endif
 
-            // Enable logging for debugging
-            MSALGlobalConfig.loggerConfig.logLevel = .verbose
+            // Configure MSAL logging to only show warnings and errors
+            MSALGlobalConfig.loggerConfig.logLevel = .warning
             MSALGlobalConfig.loggerConfig.setLogCallback { (level, message, containsPII) in
                 if !containsPII {
-                    Logger.shared.debug("MSAL: \(message ?? "")")
+                    switch level {
+                    case .error:
+                        Logger.shared.error("MSAL: \(message ?? "")")
+                    case .warning:
+                        Logger.shared.warning("MSAL: \(message ?? "")")
+                    default:
+                        // Ignore info, verbose, and other levels
+                        break
+                    }
                 }
             }
 

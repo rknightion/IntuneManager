@@ -274,7 +274,7 @@ struct ApplicationFiltersView: View {
                         }
                     }
                 } label: {
-                    FilterChip(title: "Type", value: selectedAppType?.displayName)
+                    AppFilterChip(title: "Type", value: selectedAppType?.displayName)
                 }
 
                 // Platform Filter
@@ -290,7 +290,7 @@ struct ApplicationFiltersView: View {
                         }
                     }
                 } label: {
-                    FilterChip(title: "Platform", value: selectedPlatform?.displayName)
+                    AppFilterChip(title: "Platform", value: selectedPlatform?.displayName)
                 }
 
                 // Publishing State Filter
@@ -306,7 +306,7 @@ struct ApplicationFiltersView: View {
                         }
                     }
                 } label: {
-                    FilterChip(title: "Publishing State", value: selectedPublishingState?.displayName)
+                    AppFilterChip(title: "Publishing State", value: selectedPublishingState?.displayName)
                 }
 
                 // Featured Filter
@@ -328,7 +328,7 @@ struct ApplicationFiltersView: View {
                             }
                         }
                     } label: {
-                        FilterChip(title: "Publisher", value: selectedPublisher)
+                        AppFilterChip(title: "Publisher", value: selectedPublisher)
                     }
                 }
 
@@ -348,7 +348,7 @@ struct ApplicationFiltersView: View {
                             }
                         }
                     } label: {
-                        FilterChip(title: "Owner", value: selectedOwner)
+                        AppFilterChip(title: "Owner", value: selectedOwner)
                     }
                 }
 
@@ -368,7 +368,7 @@ struct ApplicationFiltersView: View {
                             }
                         }
                     } label: {
-                        FilterChip(title: "Developer", value: selectedDeveloper)
+                        AppFilterChip(title: "Developer", value: selectedDeveloper)
                     }
                 }
 
@@ -463,5 +463,31 @@ struct ApplicationListRowView: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
+    }
+}
+
+struct AppFilterChip: View {
+    let title: String
+    let value: String?
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            if let value = value {
+                Text(value)
+                    .font(.caption)
+                    .fontWeight(.medium)
+            } else {
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(8)
     }
 }

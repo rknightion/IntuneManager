@@ -17,6 +17,8 @@ struct AssignmentEditView: View {
     @State private var showingCopyAssignments = false
     @State private var showingErrorAlert = false
     @State private var errorMessage = ""
+    @State private var defaultIntentForNewGroups: AppAssignment.AssignmentIntent = .required
+    @State private var useDefaultIntent = true
 
     var filteredAssignments: [AssignmentWithApp] {
         if assignmentSearchText.isEmpty {
@@ -211,6 +213,102 @@ struct AssignmentEditView: View {
         .cornerRadius(8)
     }
 
+    @ViewBuilder
+    var conflictWarningsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            conflictHeader
+            conflictsList
+        }
+        .padding()
+        .background(Color.orange.opacity(0.05))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+        )
+    }
+
+    private var conflictHeader: some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+            Text("Assignment Conflicts Detected")
+                .font(.headline)
+                .foregroundColor(.orange)
+
+            Spacer()
+
+            Text("\(viewModel.assignmentConflicts.count) conflict(s)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private var conflictsList: some View {
+        ForEach(viewModel.assignmentConflicts) { conflict in
+            conflictRow(for: conflict)
+        }
+    }
+
+    @ViewBuilder
+    private func conflictRow(for conflict: AssignmentConflictDetector.AssignmentConflict) -> some View {
+        HStack(alignment: .top) {
+            conflictIcon(for: conflict)
+            conflictDetails(for: conflict)
+            Spacer()
+        }
+        .padding(8)
+        .background(Color(conflict.severity.color).opacity(0.1))
+        .cornerRadius(6)
+    }
+
+    private func conflictIcon(for conflict: AssignmentConflictDetector.AssignmentConflict) -> some View {
+        Image(systemName: conflict.conflictType.icon)
+            .foregroundColor(Color(conflict.severity.color))
+            .frame(width: 20)
+    }
+
+    @ViewBuilder
+    private func conflictDetails(for conflict: AssignmentConflictDetector.AssignmentConflict) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(conflict.groupName)
+                    .fontWeight(.medium)
+                Text("(\(conflict.conflictType.displayName))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            ForEach(conflict.assignments, id: \.applicationName) { assignment in
+                conflictAssignmentRow(assignment)
+            }
+
+            Text(conflict.resolution)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .italic()
+        }
+    }
+
+    private func conflictAssignmentRow(_ assignment: AssignmentConflictDetector.AssignmentConflict.ConflictingAssignment) -> some View {
+        HStack {
+            Text("• \(assignment.applicationName):")
+                .font(.caption)
+            Label(assignment.intent.displayName, systemImage: assignment.intent.icon)
+                .font(.caption)
+                .foregroundColor(assignment.intent == .required ? .green : .orange)
+            if assignment.isExisting {
+                Text("(existing)")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("(new)")
+                    .font(.caption2)
+                    .foregroundColor(.blue)
+            }
+        }
+    }
+
     var newAssignmentsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -228,6 +326,43 @@ struct AssignmentEditView: View {
                     viewModel.showingGroupSelector = true
                 }
                 .buttonStyle(.bordered)
+            }
+
+            // Default intent selector for batch operations
+            if !viewModel.pendingAssignments.isEmpty {
+                HStack {
+                    Toggle("Use default intent for all", isOn: $useDefaultIntent)
+                        .toggleStyle(.checkbox)
+                        .help("Apply the same intent to all new assignments")
+
+                    if useDefaultIntent {
+                        Picker("Default Intent", selection: $defaultIntentForNewGroups) {
+                            ForEach(AppAssignment.AssignmentIntent.allCases, id: \.self) { intent in
+                                Label(intent.displayName, systemImage: intent.icon)
+                                    .tag(intent)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(width: 160)
+                        .onChange(of: defaultIntentForNewGroups) { _, newIntent in
+                            // Apply to all pending assignments
+                            if useDefaultIntent {
+                                viewModel.applyIntentToAllPending(newIntent)
+                            }
+                        }
+
+                        Button("Apply to All") {
+                            viewModel.applyIntentToAllPending(defaultIntentForNewGroups)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    Spacer()
+                }
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
+                .background(Color.accentColor.opacity(0.05))
+                .cornerRadius(6)
             }
 
             if !viewModel.pendingAssignments.isEmpty {
@@ -307,6 +442,11 @@ struct AssignmentEditView: View {
             if !viewModel.isLoading {
                 ScrollView {
                     VStack(spacing: 16) {
+                        // Conflict Warnings Section
+                        if !viewModel.assignmentConflicts.isEmpty {
+                            conflictWarningsSection
+                        }
+
                         // Current Assignments Section
                         if !viewModel.currentAssignmentsWithApp.isEmpty {
                             currentAssignmentsSection
@@ -361,8 +501,9 @@ struct AssignmentEditView: View {
             GroupSelectorSheet(
                 selectedGroups: $viewModel.selectedGroupsForNewAssignment,
                 existingGroups: viewModel.currentAssignmentGroups,
-                onAddGroups: {
-                    viewModel.addPendingAssignments()
+                defaultIntent: useDefaultIntent ? defaultIntentForNewGroups : .required,
+                onAddGroups: { intent in
+                    viewModel.addPendingAssignments(withIntent: intent)
                 }
             )
         }
@@ -710,10 +851,12 @@ struct PendingAssignmentRow: View {
 struct GroupSelectorSheet: View {
     @Binding var selectedGroups: Set<DeviceGroup>
     let existingGroups: Set<DeviceGroup>
-    let onAddGroups: () -> Void
+    let defaultIntent: AppAssignment.AssignmentIntent
+    let onAddGroups: (AppAssignment.AssignmentIntent) -> Void
     @Environment(\.dismiss) private var dismiss
     @StateObject private var groupService = GroupService.shared
     @State private var searchText = ""
+    @State private var selectedIntent: AppAssignment.AssignmentIntent = .required
 
     var availableGroups: [DeviceGroup] {
         let allGroups = DeviceGroup.builtInAssignmentTargets + groupService.groups
@@ -737,13 +880,35 @@ struct GroupSelectorSheet: View {
                 .buttonStyle(.bordered)
 
                 Button("Add Selected") {
-                    onAddGroups()
+                    onAddGroups(selectedIntent)
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(selectedGroups.isEmpty)
             }
             .padding()
+
+            Divider()
+
+            // Intent selector for new groups
+            HStack {
+                Label("Assignment Intent", systemImage: "arrow.triangle.branch")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+
+                Picker("", selection: $selectedIntent) {
+                    ForEach(AppAssignment.AssignmentIntent.allCases, id: \.self) { intent in
+                        Label(intent.displayName, systemImage: intent.icon)
+                            .tag(intent)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .help("Select the intent for all selected groups")
+
+                Spacer()
+            }
+            .padding()
+            .background(Color.gray.opacity(0.05))
 
             Divider()
 
@@ -793,6 +958,9 @@ struct GroupSelectorSheet: View {
             }
         }
         .frame(width: 600, height: 500)
+        .onAppear {
+            selectedIntent = defaultIntent
+        }
         .task {
             if groupService.groups.isEmpty {
                 _ = try? await groupService.fetchGroups()
@@ -837,6 +1005,7 @@ class AssignmentEditViewModel: ObservableObject {
     @Published var isSaving = false
     @Published var showingGroupSelector = false
     @Published var selectedGroupsForNewAssignment: Set<DeviceGroup> = []
+    @Published var assignmentConflicts: [AssignmentConflictDetector.AssignmentConflict] = []
 
     private let assignmentService = AssignmentService.shared
     private let apiClient = GraphAPIClient.shared
@@ -948,6 +1117,9 @@ class AssignmentEditViewModel: ObservableObject {
                 }
                 return ($0.assignment.target.groupName ?? "") < ($1.assignment.target.groupName ?? "")
             }
+
+            // Detect conflicts after loading
+            detectConflicts()
         }
     }
 
@@ -1009,6 +1181,7 @@ class AssignmentEditViewModel: ObservableObject {
             // If marking for deletion, remove any pending updates
             assignmentsToUpdate.removeValue(forKey: key)
         }
+        detectConflicts()
     }
 
     func markAllAssignmentsForDeletion() {
@@ -1019,6 +1192,7 @@ class AssignmentEditViewModel: ObservableObject {
         }
         // Clear selection when doing a bulk delete all
         selectedAssignments.removeAll()
+        detectConflicts()
     }
 
     func updateAssignmentIntent(_ item: AssignmentWithApp, intent: AppAssignment.AssignmentIntent) {
@@ -1033,19 +1207,22 @@ class AssignmentEditViewModel: ObservableObject {
         } else {
             assignmentsToUpdate.removeValue(forKey: key)
         }
+        detectConflicts()
     }
 
     func removePendingAssignment(_ assignment: PendingAssignment) {
         pendingAssignments.removeAll { $0.id == assignment.id }
+        detectConflicts()
     }
 
     func updatePendingIntent(_ assignment: PendingAssignment, intent: AppAssignment.AssignmentIntent) {
         if let index = pendingAssignments.firstIndex(where: { $0.id == assignment.id }) {
             pendingAssignments[index].intent = intent
         }
+        detectConflicts()
     }
 
-    func addPendingAssignments() {
+    func addPendingAssignments(withIntent intent: AppAssignment.AssignmentIntent = .required) {
         for group in selectedGroupsForNewAssignment {
             // Check if this group already has an assignment (not deleted) for any app
             let hasExisting = currentAssignmentsWithApp.contains { item in
@@ -1062,11 +1239,28 @@ class AssignmentEditViewModel: ObservableObject {
             if !hasExisting && !hasPending {
                 pendingAssignments.append(PendingAssignment(
                     group: group,
-                    intent: .required
+                    intent: intent
                 ))
             }
         }
         selectedGroupsForNewAssignment.removeAll()
+        detectConflicts()
+    }
+
+    func applyIntentToAllPending(_ intent: AppAssignment.AssignmentIntent) {
+        for index in pendingAssignments.indices {
+            pendingAssignments[index].intent = intent
+        }
+        detectConflicts()
+    }
+
+    func detectConflicts() {
+        assignmentConflicts = AssignmentConflictDetector.detectConflicts(
+            currentAssignments: currentAssignmentsWithApp,
+            pendingAssignments: pendingAssignments,
+            deletedAssignmentKeys: assignmentsToDelete,
+            applicationNames: applicationNames
+        )
     }
 
     func addCopiedAssignments(_ copyableAssignments: [CopyableAssignment]) {

@@ -221,7 +221,7 @@ struct DeviceFiltersView: View {
                         }
                     }
                 } label: {
-                    FilterChip(title: "OS", value: viewModel.selectedOS == "All" ? nil : viewModel.selectedOS)
+                    DeviceFilterChip(title: "OS", value: viewModel.selectedOS == "All" ? nil : viewModel.selectedOS)
                 }
 
                 // Ownership Filter
@@ -233,7 +233,7 @@ struct DeviceFiltersView: View {
                         }
                     }
                 } label: {
-                    FilterChip(title: "Ownership", value: viewModel.selectedOwnership?.displayName)
+                    DeviceFilterChip(title: "Ownership", value: viewModel.selectedOwnership?.displayName)
                 }
 
                 // Compliance Filter
@@ -245,7 +245,7 @@ struct DeviceFiltersView: View {
                         }
                     }
                 } label: {
-                    FilterChip(title: "Compliance", value: viewModel.selectedCompliance?.displayName)
+                    DeviceFilterChip(title: "Compliance", value: viewModel.selectedCompliance?.displayName)
                 }
 
                 // Boolean Filters
@@ -270,7 +270,7 @@ struct DeviceFiltersView: View {
                             }
                         }
                     } label: {
-                        FilterChip(title: "Category", value: viewModel.selectedCategory)
+                        DeviceFilterChip(title: "Category", value: viewModel.selectedCategory)
                     }
                 }
 
@@ -290,7 +290,7 @@ struct DeviceFiltersView: View {
                             }
                         }
                     } label: {
-                        FilterChip(title: "Model", value: viewModel.selectedModel)
+                        DeviceFilterChip(title: "Model", value: viewModel.selectedModel)
                     }
                 }
 
@@ -310,7 +310,7 @@ struct DeviceFiltersView: View {
                             }
                         }
                     } label: {
-                        FilterChip(title: "Manufacturer", value: viewModel.selectedManufacturer)
+                        DeviceFilterChip(title: "Manufacturer", value: viewModel.selectedManufacturer)
                     }
                 }
 
@@ -327,7 +327,7 @@ struct DeviceFiltersView: View {
     }
 }
 
-struct FilterChip: View {
+struct DeviceFilterChip: View {
     let title: String
     let value: String?
 
