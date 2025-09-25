@@ -238,9 +238,15 @@ final class LocalDataStore {
         existing.uninstallCommandLine = new.uninstallCommandLine
         existing.ignoreVersionDetection = new.ignoreVersionDetection
 
-        // Update assignments - this is critical for avoiding detachment
-        existing.assignments = new.assignments
-        existing.installSummary = new.installSummary
+        // Update assignments - handle carefully to avoid context issues
+        // Only update if assignments are provided and not nil
+        if let newAssignments = new.assignments {
+            existing.assignments = newAssignments
+        }
+        // Update install summary
+        if let newSummary = new.installSummary {
+            existing.installSummary = newSummary
+        }
     }
 
     // MARK: - Device Groups
