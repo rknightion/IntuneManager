@@ -16,6 +16,14 @@ struct ApplicationListView: View {
     @State private var selectedPlatform: Application.DevicePlatform?
     @State private var showingBackupRestore = false
 
+    // Multi-selection and bulk delete
+    @State private var isSelecting = false
+    @State private var selectedApplications = Set<String>()
+    @State private var showingBulkDeleteConfirmation = false
+    @State private var isDeletingBulk = false
+    @State private var bulkDeleteError: String?
+    @State private var bulkDeleteResult: (successful: [String], failed: [(id: String, error: String)])?
+
     enum AssignmentFilter: String, CaseIterable {
         case all = "All"
         case unassigned = "Unassigned"
@@ -127,67 +135,140 @@ struct ApplicationListView: View {
         return apps
     }
 
+    @ViewBuilder
+    var mainContent: some View {
+        VStack(spacing: 0) {
+            // Filters view
+            if showFilters {
+                filtersSection
+            }
+
+            // Status bar
+            statusBar
+
+            // Applications list
+            applicationsList
+                .searchable(text: $searchText, prompt: "Search by name or publisher")
+        }
+    }
+
+    @ViewBuilder
+    var filtersSection: some View {
+        ApplicationFiltersView(
+            assignmentFilter: $assignmentFilter,
+            selectedAppType: $selectedAppType,
+            selectedPublisher: $selectedPublisher,
+            selectedOwner: $selectedOwner,
+            selectedDeveloper: $selectedDeveloper,
+            selectedPublishingState: $selectedPublishingState,
+            isFeaturedFilter: $isFeaturedFilter,
+            selectedPlatform: $selectedPlatform,
+            availablePublishers: availablePublishers,
+            availableOwners: availableOwners,
+            availableDevelopers: availableDevelopers,
+            activeFilterCount: activeFilterCount,
+            clearFilters: clearFilters
+        )
+        .padding()
+        .background(Theme.Colors.secondaryBackground)
+        .border(Color.secondary.opacity(0.2), width: 0.5)
+    }
+
+    var statusBar: some View {
+        HStack {
+            Text("\(filteredApplications.count) of \(appService.applications.count) applications")
+                .font(.caption)
+                .foregroundColor(.secondary)
+            Spacer()
+            HStack(spacing: 12) {
+                let unassignedCount = appService.applications.filter { !$0.hasAssignments }.count
+                let assignedCount = appService.applications.filter { $0.hasAssignments }.count
+                Label("\(unassignedCount) unassigned", systemImage: "square")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                Label("\(assignedCount) assigned", systemImage: "checkmark.square")
+                    .font(.caption)
+                    .foregroundColor(.green)
+                Text("(\(appService.applications.count) total)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    var applicationsList: some View {
+        if isSelecting {
+            List(filteredApplications, selection: $selectedApplications) { app in
+                ApplicationListRowView(application: app)
+                    .tag(app.id)
+            }
+            #if os(iOS)
+            .environment(\.editMode, .constant(.active))
+            #endif
+        } else {
+            List(filteredApplications) { app in
+                NavigationLink(destination: ApplicationDetailView(application: app)) {
+                    ApplicationListRowView(application: app)
+                }
+            }
+        }
+    }
+
     var body: some View {
         Group {
             if appService.isLoading && appService.applications.isEmpty {
                 ProgressView("Loading applications...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                VStack(spacing: 0) {
-                    // Filters view
-                    if showFilters {
-                        ApplicationFiltersView(
-                            assignmentFilter: $assignmentFilter,
-                            selectedAppType: $selectedAppType,
-                            selectedPublisher: $selectedPublisher,
-                            selectedOwner: $selectedOwner,
-                            selectedDeveloper: $selectedDeveloper,
-                            selectedPublishingState: $selectedPublishingState,
-                            isFeaturedFilter: $isFeaturedFilter,
-                            selectedPlatform: $selectedPlatform,
-                            availablePublishers: availablePublishers,
-                            availableOwners: availableOwners,
-                            availableDevelopers: availableDevelopers,
-                            activeFilterCount: activeFilterCount,
-                            clearFilters: clearFilters
-                        )
-                        .padding()
-                        .background(Theme.Colors.secondaryBackground)
-                        .border(Color.secondary.opacity(0.2), width: 0.5)
-                    }
-
-                    // Status bar
-                    HStack {
-                        Text("\(filteredApplications.count) of \(appService.applications.count) applications")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        HStack(spacing: 12) {
-                            Label("\(appService.applications.filter { !$0.hasAssignments }.count) unassigned", systemImage: "square")
-                                .font(.caption)
-                                .foregroundColor(.orange)
-                            Label("\(appService.applications.filter { $0.hasAssignments }.count) assigned", systemImage: "checkmark.square")
-                                .font(.caption)
-                                .foregroundColor(.green)
-                            Text("(\(appService.applications.count) total)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-
-                    List(filteredApplications) { app in
-                        NavigationLink(destination: ApplicationDetailView(application: app)) {
-                            ApplicationListRowView(application: app)
-                        }
-                    }
-                    .searchable(text: $searchText, prompt: "Search by name or publisher")
-                }
+                mainContent
             }
         }
         .navigationTitle("Applications")
         .toolbar {
+            ToolbarItem(placement: .secondaryAction) {
+                if isSelecting {
+                    Button(action: {
+                        if selectedApplications.count == filteredApplications.count {
+                            selectedApplications.removeAll()
+                        } else {
+                            selectedApplications = Set(filteredApplications.map { $0.id })
+                        }
+                    }) {
+                        Label(selectedApplications.count == filteredApplications.count ? "Deselect All" : "Select All",
+                              systemImage: selectedApplications.count == filteredApplications.count ? "checkmark.square" : "square")
+                    }
+                }
+            }
+
+            ToolbarItem(placement: .secondaryAction) {
+                if isSelecting && !selectedApplications.isEmpty {
+                    Button(role: .destructive) {
+                        showingBulkDeleteConfirmation = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "trash")
+                            Text("Delete (\(selectedApplications.count))")
+                        }
+                        .foregroundColor(.red)
+                    }
+                    .disabled(isDeletingBulk)
+                }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: {
+                    withAnimation {
+                        isSelecting.toggle()
+                        selectedApplications.removeAll()
+                    }
+                }) {
+                    Text(isSelecting ? "Done" : "Select")
+                }
+            }
+
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { showingBackupRestore = true }) {
                     Label("Backup/Restore", systemImage: "arrow.up.arrow.down.circle")
@@ -233,6 +314,126 @@ struct ApplicationListView: View {
         .sheet(isPresented: $showingBackupRestore) {
             AssignmentBackupRestoreView()
         }
+        .confirmationDialog(
+            "Delete Applications",
+            isPresented: $showingBulkDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete \(selectedApplications.count) Applications", role: .destructive) {
+                Task {
+                    await performBulkDelete()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to delete \(selectedApplications.count) applications? This action cannot be undone. All assignments will be removed but the apps will not be uninstalled from devices.")
+        }
+        .overlay {
+            if isDeletingBulk {
+                ZStack {
+                    Color.black.opacity(0.5)
+                        .ignoresSafeArea()
+
+                    VStack(spacing: 16) {
+                        ProgressView()
+                        Text("Deleting \(selectedApplications.count) applications...")
+                            .font(.headline)
+                        Text("Please wait, this may take a moment")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(32)
+                    .background(Theme.Colors.secondaryBackground)
+                    .cornerRadius(12)
+                }
+            }
+        }
+        .alert(
+            "Bulk Delete Complete",
+            isPresented: .constant(bulkDeleteResult != nil),
+            presenting: bulkDeleteResult
+        ) { result in
+            Button("OK") {
+                bulkDeleteResult = nil
+                // Exit selection mode after successful deletion
+                if !result.successful.isEmpty {
+                    isSelecting = false
+                    selectedApplications.removeAll()
+                }
+            }
+        } message: { result in
+            VStack(alignment: .leading, spacing: 8) {
+                if !result.successful.isEmpty {
+                    Text("Successfully deleted \(result.successful.count) applications")
+                        .font(.headline)
+                }
+                if !result.failed.isEmpty {
+                    Text("Failed to delete \(result.failed.count) applications:")
+                        .font(.headline)
+                        .foregroundColor(.red)
+
+                    // Group errors by message for better display
+                    let errorGroups = Dictionary(grouping: result.failed) { $0.error }
+
+                    ForEach(Array(errorGroups.keys).sorted(), id: \.self) { errorMessage in
+                        let count = errorGroups[errorMessage]?.count ?? 0
+                        if count == 1, let failedApp = errorGroups[errorMessage]?.first {
+                            // Show app name for single failures
+                            Text("• \(getAppName(for: failedApp.id)): \(errorMessage)")
+                                .font(.caption)
+                        } else {
+                            // Group multiple apps with same error
+                            Text("• \(count) apps: \(errorMessage)")
+                                .font(.caption)
+                            // If there are few enough apps, list them
+                            if count <= 3, let failedApps = errorGroups[errorMessage] {
+                                ForEach(failedApps, id: \.id) { failure in
+                                    Text("  - \(getAppName(for: failure.id))")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .applicationsDeleted)) { notification in
+            // Refresh the list after bulk deletion
+            if let deletedIds = notification.object as? [String], !deletedIds.isEmpty {
+                Task {
+                    _ = try? await appService.fetchApplications(forceRefresh: true)
+                }
+            }
+        }
+    }
+
+    // MARK: - Bulk Delete Helper
+
+    private func performBulkDelete() async {
+        isDeletingBulk = true
+        bulkDeleteError = nil
+
+        do {
+            let appIdsToDelete = Array(selectedApplications)
+            Logger.shared.info("Starting bulk deletion of \(appIdsToDelete.count) applications", category: .ui)
+
+            let result = try await appService.deleteBatchApplications(appIdsToDelete)
+
+            Logger.shared.info("Bulk deletion completed: \(result.successful.count) successful, \(result.failed.count) failed", category: .ui)
+
+            bulkDeleteResult = result
+        } catch {
+            Logger.shared.error("Bulk delete failed: \(error.localizedDescription)", category: .ui)
+            bulkDeleteError = error.localizedDescription
+            bulkDeleteResult = (successful: [], failed: selectedApplications.map { ($0, error.localizedDescription) })
+        }
+
+        isDeletingBulk = false
+    }
+
+    private func getAppName(for id: String) -> String {
+        appService.applications.first { $0.id == id }?.displayName ?? id
     }
 }
 

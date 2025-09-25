@@ -7,6 +7,8 @@ final class ApplicationDetailViewModel: ObservableObject {
     @Published var installSummary: Application.InstallSummary?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var isDeleting = false
+    @Published var showingDeleteConfirmation = false
 
     private let appService = ApplicationService.shared
     private var hasLoadedOnce = false
@@ -28,7 +30,6 @@ final class ApplicationDetailViewModel: ObservableObject {
 
         Logger.shared.info("Loading details for app: \(application.displayName) (ID: \(application.id))", category: .ui)
         isLoading = true
-        defer { isLoading = false }
 
         do {
             let fresh = try await appService.fetchApplication(id: application.id)
@@ -51,15 +52,34 @@ final class ApplicationDetailViewModel: ObservableObject {
                 Logger.shared.debug("App has no assignments, skipping install summary fetch", category: .ui)
                 installSummary = nil
             }
+
+            isLoading = false
         } catch {
             Logger.shared.error("Failed to load app details: \(error.localizedDescription)", category: .ui)
             errorMessage = error.localizedDescription
+            isLoading = false
+        }
+    }
+
+    func deleteApplication() async -> Bool {
+        isDeleting = true
+        defer { isDeleting = false }
+
+        do {
+            try await appService.deleteApplication(application.id)
+            Logger.shared.info("Successfully deleted application: \(application.displayName)")
+            return true
+        } catch {
+            Logger.shared.error("Failed to delete application: \(error.localizedDescription)")
+            errorMessage = "Failed to delete: \(error.localizedDescription)"
+            return false
         }
     }
 }
 
 struct ApplicationDetailView: View {
     @StateObject private var viewModel: ApplicationDetailViewModel
+    @Environment(\.dismiss) private var dismiss
 
     init(application: Application) {
         _viewModel = StateObject(wrappedValue: ApplicationDetailViewModel(application: application))
@@ -82,6 +102,24 @@ struct ApplicationDetailView: View {
             commandSection
             linksSection
 
+            // Delete Section
+            Section {
+                Button(role: .destructive) {
+                    viewModel.showingDeleteConfirmation = true
+                } label: {
+                    HStack {
+                        Image(systemName: "trash")
+                        Text("Delete Application")
+                    }
+                    .foregroundColor(.red)
+                }
+                .disabled(viewModel.isDeleting)
+            } footer: {
+                Text("This will permanently delete the application from Intune. All assignments will be removed. The app will not be uninstalled from devices.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
             if let error = viewModel.errorMessage {
                 Section {
                     Label(error, systemImage: "exclamationmark.triangle")
@@ -94,7 +132,7 @@ struct ApplicationDetailView: View {
         .navigationTitle(viewModel.application.displayName)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                if viewModel.isLoading {
+                if viewModel.isLoading || viewModel.isDeleting {
                     ProgressView()
                 } else {
                     Button {
@@ -105,6 +143,22 @@ struct ApplicationDetailView: View {
                     .help("Refresh from Microsoft Graph")
                 }
             }
+        }
+        .confirmationDialog(
+            "Delete Application",
+            isPresented: $viewModel.showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                Task {
+                    if await viewModel.deleteApplication() {
+                        dismiss()
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to delete '\(viewModel.application.displayName)'? This action cannot be undone.")
         }
         .task {
             Logger.shared.info("ApplicationDetailView appeared for: \(viewModel.application.displayName)", category: .ui)

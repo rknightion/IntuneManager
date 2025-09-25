@@ -259,6 +259,10 @@ struct ApplicationSelectionView: View {
     @State private var sortOrder: SortOrder = .name
     @State private var platformFilter: Application.DevicePlatform?
     @State private var showingBulkEdit = false
+    @State private var showingDeleteAssignmentsConfirmation = false
+    @State private var showingDeleteAppsConfirmation = false
+    @State private var isDeletingApps = false
+    @State private var deleteAppsResult: (successful: [String], failed: [(id: String, error: String)])?
 
     enum AssignmentFilter: String, CaseIterable {
         case all = "All Apps"
@@ -376,6 +380,21 @@ struct ApplicationSelectionView: View {
                             showingBulkEdit = true
                         }
                         .buttonStyle(.bordered)
+
+                        Button {
+                            showingDeleteAssignmentsConfirmation = true
+                        } label: {
+                            Label("Delete App Assignments", systemImage: "person.2.slash")
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button(role: .destructive) {
+                            showingDeleteAppsConfirmation = true
+                        } label: {
+                            Label("Delete Apps from Intune", systemImage: "trash")
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isDeletingApps)
                     }
 
                     Button("Select All") {
@@ -468,6 +487,162 @@ struct ApplicationSelectionView: View {
         }
         .sheet(isPresented: $showingBulkEdit) {
             AssignmentEditView(applications: Array(selectedApps))
+        }
+        .confirmationDialog(
+            "Delete App Assignments",
+            isPresented: $showingDeleteAssignmentsConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Assignments for \(selectedApps.count) Apps", role: .destructive) {
+                Task {
+                    await deleteAssignmentsForSelectedApps()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will remove all assignments for the selected apps but will not delete the apps from Intune.")
+        }
+        .confirmationDialog(
+            "Delete Apps from Intune",
+            isPresented: $showingDeleteAppsConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete \(selectedApps.count) Apps", role: .destructive) {
+                Task {
+                    await deleteSelectedApps()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to delete \(selectedApps.count) apps from Intune? This action cannot be undone. All assignments will be removed but the apps will not be uninstalled from devices.")
+        }
+        .overlay {
+            if isDeletingApps {
+                ZStack {
+                    Color.black.opacity(0.5)
+                        .ignoresSafeArea()
+
+                    VStack(spacing: 16) {
+                        ProgressView()
+                        Text("Deleting \(selectedApps.count) applications...")
+                            .font(.headline)
+                        Text("Please wait, this may take a moment")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(32)
+                    .background(Theme.Colors.secondaryBackground)
+                    .cornerRadius(12)
+                }
+            }
+        }
+        .alert(
+            "Operation Complete",
+            isPresented: .constant(deleteAppsResult != nil),
+            presenting: deleteAppsResult
+        ) { result in
+            Button("OK") {
+                deleteAppsResult = nil
+                // Clear selection after successful deletion
+                if !result.successful.isEmpty {
+                    selectedApps.removeAll()
+                }
+            }
+        } message: { result in
+            VStack(alignment: .leading, spacing: 8) {
+                if !result.successful.isEmpty {
+                    Text("Successfully deleted \(result.successful.count) applications")
+                        .font(.headline)
+                }
+                if !result.failed.isEmpty {
+                    Text("Failed to delete \(result.failed.count) applications:")
+                        .font(.headline)
+                        .foregroundColor(.red)
+
+                    // Group errors by message for better display
+                    let errorGroups = Dictionary(grouping: result.failed) { $0.error }
+
+                    ForEach(Array(errorGroups.keys).sorted(), id: \.self) { errorMessage in
+                        let count = errorGroups[errorMessage]?.count ?? 0
+                        if count == 1, let failedApp = errorGroups[errorMessage]?.first {
+                            // Show app name for single failures
+                            if let app = appService.applications.first(where: { $0.id == failedApp.id }) {
+                                Text("• \(app.displayName): \(errorMessage)")
+                                    .font(.caption)
+                            } else {
+                                Text("• \(errorMessage)")
+                                    .font(.caption)
+                            }
+                        } else {
+                            // Group multiple apps with same error
+                            Text("• \(count) apps: \(errorMessage)")
+                                .font(.caption)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Delete Functions
+
+    private func deleteAssignmentsForSelectedApps() async {
+        // Extract IDs and assignment info before any async operations
+        // to avoid accessing detached SwiftData models
+        var assignmentsToDelete: [(appId: String, assignmentId: String)] = []
+
+        for app in selectedApps {
+            let appId = app.id
+            // Safely extract assignments while model is still attached
+            if let assignments = app.assignments {
+                for assignment in assignments {
+                    assignmentsToDelete.append((appId: appId, assignmentId: assignment.id))
+                }
+            }
+        }
+
+        guard !assignmentsToDelete.isEmpty else {
+            Logger.shared.info("No assignments to delete for selected apps", category: .ui)
+            return
+        }
+
+        let appCount = selectedApps.count
+
+        isDeletingApps = true
+        defer { isDeletingApps = false }
+
+        do {
+            Logger.shared.info("Deleting \(assignmentsToDelete.count) assignments for \(appCount) apps", category: .ui)
+            try await appService.deleteBatchAssignments(assignmentsToDelete)
+
+            // Refresh applications
+            _ = try? await appService.fetchApplications(forceRefresh: true)
+
+            Logger.shared.info("Successfully deleted assignments", category: .ui)
+        } catch {
+            Logger.shared.error("Failed to delete assignments: \(error.localizedDescription)", category: .ui)
+        }
+    }
+
+    private func deleteSelectedApps() async {
+        // Extract IDs before any async operations to avoid accessing detached SwiftData models
+        let appIds = selectedApps.map { $0.id }
+
+        isDeletingApps = true
+        defer { isDeletingApps = false }
+
+        do {
+            Logger.shared.info("Starting deletion of \(appIds.count) applications", category: .ui)
+            let result = try await appService.deleteBatchApplications(appIds)
+
+            Logger.shared.info("Deletion completed: \(result.successful.count) successful, \(result.failed.count) failed", category: .ui)
+            deleteAppsResult = result
+
+            // Refresh the applications list
+            _ = try? await appService.fetchApplications(forceRefresh: true)
+        } catch {
+            Logger.shared.error("Failed to delete apps: \(error.localizedDescription)", category: .ui)
+            deleteAppsResult = (successful: [], failed: appIds.map { ($0, error.localizedDescription) })
         }
     }
 }

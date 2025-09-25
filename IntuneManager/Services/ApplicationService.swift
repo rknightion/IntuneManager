@@ -1,6 +1,12 @@
 import Foundation
 import Combine
 
+// MARK: - Notifications
+extension Notification.Name {
+    static let applicationDeleted = Notification.Name("applicationDeleted")
+    static let applicationsDeleted = Notification.Name("applicationsDeleted")
+}
+
 // MARK: - Helper Types for ApplicationService
 
 fileprivate struct AssignmentsResponse: Decodable, Sendable {
@@ -233,6 +239,147 @@ final class ApplicationService: ObservableObject {
         _ = try await fetchApplications(forceRefresh: true)
 
         return successfulAssignments
+    }
+
+    // MARK: - Delete Applications
+
+    func deleteApplication(_ appId: String) async throws {
+        let endpoint = "/deviceAppManagement/mobileApps/\(appId)"
+
+        try await apiClient.delete(endpoint)
+
+        Logger.shared.info("Deleted application \(appId)")
+
+        // Remove from local cache
+        // Create a new array to avoid modifying detached models
+        let remainingApps = applications.filter { $0.id != appId }
+        applications = remainingApps
+        dataStore.replaceApplications(with: remainingApps)
+
+        // Post notification for UI updates
+        NotificationCenter.default.post(name: .applicationDeleted, object: appId)
+    }
+
+    func deleteBatchApplications(_ appIds: [String]) async throws -> (successful: [String], failed: [(id: String, error: String)]) {
+        guard !appIds.isEmpty else {
+            return ([], [])
+        }
+
+        Logger.shared.info("Starting batch deletion of \(appIds.count) applications")
+
+        // Create batch requests - max 20 per batch
+        let batches = appIds.chunked(into: 20)
+        var allSuccessful: [String] = []
+        var allFailed: [(id: String, error: String)] = []
+
+        for batch in batches {
+            let requests = batch.map { appId in
+                BatchRequest(
+                    method: "DELETE",
+                    url: "/deviceAppManagement/mobileApps/\(appId)"
+                )
+            }
+
+            // Use a response type that can capture error details
+            struct DeleteErrorResponse: Decodable, Sendable {
+                let error: ErrorDetail?
+
+                struct ErrorDetail: Decodable {
+                    let code: String?
+                    let message: String?
+                    let innerError: InnerError?
+
+                    struct InnerError: Decodable {
+                        let message: String?
+                        let code: String?
+                        let date: String?
+                        let requestId: String?
+                        let clientRequestId: String?
+                    }
+                }
+            }
+
+            let responses: [BatchResponse<DeleteErrorResponse>] = try await apiClient.batchModels(requests)
+
+            for (index, response) in responses.enumerated() {
+                let appId = batch[index]
+
+                if response.status >= 200 && response.status < 300 {
+                    allSuccessful.append(appId)
+                    Logger.shared.info("Successfully deleted application \(appId)")
+                } else {
+                    // Extract error details from the response
+                    var errorMessage = "HTTP \(response.status)"
+
+                    if let errorBody = response.body,
+                       let error = errorBody.error {
+                        if let message = error.message {
+                            errorMessage = message
+
+                            // Common error patterns
+                            if message.lowercased().contains("vpp") || message.lowercased().contains("license") {
+                                errorMessage = "VPP licenses still assigned. Remove all VPP assignments first."
+                            } else if message.lowercased().contains("permission") || response.status == 403 {
+                                errorMessage = "Insufficient permissions to delete this application"
+                            } else if message.lowercased().contains("not found") || response.status == 404 {
+                                errorMessage = "Application not found or already deleted"
+                            } else if response.status == 409 {
+                                errorMessage = "Conflict: \(message)"
+                            }
+                        } else if let code = error.code {
+                            errorMessage = "Error code: \(code)"
+                        }
+
+                        // Log detailed error information
+                        Logger.shared.error("""
+                            Failed to delete application \(appId):
+                            - Status: \(response.status)
+                            - Code: \(error.code ?? "unknown")
+                            - Message: \(error.message ?? "no message")
+                            - Inner Error: \(error.innerError?.message ?? "none")
+                            - Request ID: \(error.innerError?.requestId ?? "none")
+                            """, category: .data)
+                    } else {
+                        // Try to provide context based on status code alone
+                        switch response.status {
+                        case 400:
+                            errorMessage = "Bad request - application may have dependencies"
+                        case 403:
+                            errorMessage = "Insufficient permissions"
+                        case 404:
+                            errorMessage = "Application not found"
+                        case 409:
+                            errorMessage = "Conflict - application may be in use"
+                        case 423:
+                            errorMessage = "Application is locked and cannot be deleted"
+                        default:
+                            Logger.shared.error("Failed to delete application \(appId): Status \(response.status) with no error body", category: .data)
+                        }
+                    }
+
+                    allFailed.append((id: appId, error: errorMessage))
+                }
+            }
+        }
+
+        // Remove successful deletions from local cache
+        // Create a new array to avoid modifying detached models
+        let remainingApps = applications.filter { app in
+            !allSuccessful.contains(app.id)
+        }
+        applications = remainingApps
+
+        // Replace in data store with the filtered list
+        dataStore.replaceApplications(with: remainingApps)
+
+        // Post notification for UI updates
+        if !allSuccessful.isEmpty {
+            NotificationCenter.default.post(name: .applicationsDeleted, object: allSuccessful)
+        }
+
+        Logger.shared.info("Batch deletion complete: \(allSuccessful.count) successful, \(allFailed.count) failed")
+
+        return (allSuccessful, allFailed)
     }
 
     func deleteBatchAssignments(_ assignments: [(appId: String, assignmentId: String)]) async throws {
