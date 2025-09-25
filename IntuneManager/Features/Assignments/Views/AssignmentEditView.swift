@@ -1643,7 +1643,7 @@ class AssignmentEditViewModel: ObservableObject {
                         settings = AssignRequest.AssignmentBody.Settings(
                             type: appType == .iosVppApp ? "#microsoft.graph.iosVppAppAssignmentSettings" : "#microsoft.graph.macosVppAppAssignmentSettings",
                             useDeviceLicensing: true,  // Force device licensing for uninstall
-                            uninstallOnDeviceRemoval: true
+                            uninstallOnDeviceRemoval: nil  // Do NOT include for uninstall intent - causes errors
                         )
                     }
 
@@ -1760,7 +1760,7 @@ class AssignmentEditViewModel: ObservableObject {
                         settings = AssignRequest.AssignmentBody.Settings(
                             type: appType == .iosVppApp ? "#microsoft.graph.iosVppAppAssignmentSettings" : "#microsoft.graph.macosVppAppAssignmentSettings",
                             useDeviceLicensing: true,  // Force device licensing for uninstall
-                            uninstallOnDeviceRemoval: true
+                            uninstallOnDeviceRemoval: nil  // Do NOT include for uninstall intent - causes errors
                         )
                     }
 

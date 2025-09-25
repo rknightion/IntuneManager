@@ -106,25 +106,46 @@ final class AssignmentService: ObservableObject {
         let assignments = operation.createAssignments()
         activeAssignments = assignments
 
+        // Check if we already have cached assignment data for all apps
+        let allAppsHaveCachedAssignments = operation.applications.allSatisfy { app in
+            app.assignments != nil
+        }
+
         currentProgress = AssignmentProgress(
             total: assignments.count,
             completed: 0,
             failed: 0,
-            currentOperation: "Validating assignments..."
+            currentOperation: allAppsHaveCachedAssignments ? "Processing assignments..." : "Validating assignments..."
         )
 
         Logger.shared.info("Starting bulk assignment: \(assignments.count) operations")
 
-        // Validate assignments first (check for existing assignments)
-        Logger.shared.info("Validating assignments for duplicates...")
-        let validatedAssignments = await validateAssignments(assignments)
+        let validatedAssignments: [Assignment]
 
-        // Track already-existing assignments as completed
-        let skippedCount = assignments.count - validatedAssignments.count
-        if skippedCount > 0 {
-            Logger.shared.info("Skipped \(skippedCount) existing assignments")
-            currentProgress?.completed = skippedCount
-            currentProgress?.currentOperation = "Processing new assignments..."
+        if allAppsHaveCachedAssignments {
+            // We already have assignment data, validate using cached data
+            Logger.shared.info("Using cached assignment data for validation")
+            validatedAssignments = validateAssignmentsFromCache(assignments, operation.applications)
+
+            // Track already-existing assignments as completed
+            let skippedCount = assignments.count - validatedAssignments.count
+            if skippedCount > 0 {
+                Logger.shared.info("Skipped \(skippedCount) existing assignments (from cache)")
+                currentProgress?.completed = skippedCount
+                currentProgress?.currentOperation = "Processing new assignments..."
+            }
+        } else {
+            // Need to fetch assignment data from API
+            Logger.shared.info("Fetching assignment data for validation...")
+            validatedAssignments = await validateAssignments(assignments)
+
+            // Track already-existing assignments as completed
+            let skippedCount = assignments.count - validatedAssignments.count
+            if skippedCount > 0 {
+                Logger.shared.info("Skipped \(skippedCount) existing assignments")
+                currentProgress?.completed = skippedCount
+                currentProgress?.currentOperation = "Processing new assignments..."
+            }
         }
 
         // Process only new assignments in batches
@@ -343,19 +364,41 @@ final class AssignmentService: ObservableObject {
     private func createBatchRequest(for assignment: Assignment) -> BatchRequest {
         let targetType = assignment.targetType
 
-        // Prepare the settings based on app type
+        // Prepare the settings based on app type AND intent
         var settingsValue: Encodable?
-        if let graphSettings = assignment.graphSettings {
-            if let iosVppSettings = graphSettings.iosVppSettings {
-                settingsValue = iosVppSettings
-            } else if let iosLobSettings = graphSettings.iosLobSettings {
-                settingsValue = iosLobSettings
-            } else if let macosVppSettings = graphSettings.macosVppSettings {
-                settingsValue = macosVppSettings
-            } else if let macosDmgSettings = graphSettings.macosDmgSettings {
-                settingsValue = macosDmgSettings
-            } else if let windowsSettings = graphSettings.windowsSettings {
-                settingsValue = windowsSettings
+
+        // For uninstall intent, only include device licensing setting for VPP apps
+        if assignment.intent == .uninstall {
+            if let graphSettings = assignment.graphSettings {
+                if var iosVppSettings = graphSettings.iosVppSettings {
+                    // For uninstall, only keep device licensing
+                    var cleanSettings = IOSVppAppAssignmentSettings()
+                    cleanSettings.useDeviceLicensing = iosVppSettings.useDeviceLicensing ?? true
+                    // Do NOT include uninstallOnDeviceRemoval for uninstall intent
+                    settingsValue = cleanSettings
+                } else if var macosVppSettings = graphSettings.macosVppSettings {
+                    // For uninstall, only keep device licensing
+                    var cleanSettings = MacOSVppAppAssignmentSettings()
+                    cleanSettings.useDeviceLicensing = macosVppSettings.useDeviceLicensing ?? true
+                    // Do NOT include uninstallOnDeviceRemoval for uninstall intent
+                    settingsValue = cleanSettings
+                }
+                // For non-VPP apps with uninstall intent, don't include any settings
+            }
+        } else {
+            // For non-uninstall intents, use full settings
+            if let graphSettings = assignment.graphSettings {
+                if let iosVppSettings = graphSettings.iosVppSettings {
+                    settingsValue = iosVppSettings
+                } else if let iosLobSettings = graphSettings.iosLobSettings {
+                    settingsValue = iosLobSettings
+                } else if let macosVppSettings = graphSettings.macosVppSettings {
+                    settingsValue = macosVppSettings
+                } else if let macosDmgSettings = graphSettings.macosDmgSettings {
+                    settingsValue = macosDmgSettings
+                } else if let windowsSettings = graphSettings.windowsSettings {
+                    settingsValue = windowsSettings
+                }
             }
         }
 
@@ -642,38 +685,134 @@ enum AssignmentError: LocalizedError {
 
     // MARK: - Pre-flight Validation
 
-    func validateAssignments(_ assignments: [Assignment]) async -> [Assignment] {
+    private func validateAssignmentsFromCache(_ assignments: [Assignment], _ applications: [Application]) -> [Assignment] {
         var validatedAssignments: [Assignment] = []
 
+        // Build a map of app ID to cached assignments for quick lookup
+        let appAssignmentsMap = Dictionary(uniqueKeysWithValues: applications.compactMap { app in
+            app.assignments.map { (app.id, $0) }
+        })
+
         for assignment in assignments {
-            // Check if assignment already exists
-            do {
-                let existingAssignments = try await ApplicationService.shared.getApplicationAssignments(appId: assignment.applicationId)
+            let existingAssignments = appAssignmentsMap[assignment.applicationId] ?? []
 
-                let alreadyExists = existingAssignments.contains { existing in
-                    // Check if there's already an assignment to the same group with same intent
-                    if let existingGroupId = existing.target.groupId {
-                        return existingGroupId == assignment.groupId &&
-                               existing.intent.rawValue == assignment.intent.rawValue
-                    }
-                    return false
+            let alreadyExists = existingAssignments.contains { existing in
+                // Check if there's already an assignment to the same group with same intent
+                if let existingGroupId = existing.target.groupId {
+                    return existingGroupId == assignment.groupId &&
+                           existing.intent.rawValue == assignment.intent.rawValue
                 }
+                return false
+            }
 
-                if alreadyExists {
-                    assignment.status = .completed
-                    assignment.errorMessage = "Assignment already exists (skipped)"
-                    assignment.completedDate = Date()
-                    Logger.shared.info("Skipping existing assignment: \(assignment.applicationName) -> \(assignment.groupName)")
-                } else {
-                    validatedAssignments.append(assignment)
-                }
-            } catch {
-                // If we can't check, include it for assignment attempt
+            if alreadyExists {
+                assignment.status = .completed
+                assignment.errorMessage = "Assignment already exists (skipped)"
+                assignment.completedDate = Date()
+                Logger.shared.info("Skipping existing assignment (from cache): \(assignment.applicationName) -> \(assignment.groupName)")
+            } else {
                 validatedAssignments.append(assignment)
-                Logger.shared.warning("Could not validate assignment: \(assignment.applicationName) -> \(assignment.groupName)")
             }
         }
 
+        Logger.shared.info("Cache validation complete: \(validatedAssignments.count) new assignments, \(assignments.count - validatedAssignments.count) skipped")
+        return validatedAssignments
+    }
+
+    func validateAssignments(_ assignments: [Assignment]) async -> [Assignment] {
+        var validatedAssignments: [Assignment] = []
+
+        // Group assignments by applicationId to reduce API calls
+        let assignmentsByApp = Dictionary(grouping: assignments) { $0.applicationId }
+        let uniqueAppIds = Array(assignmentsByApp.keys)
+
+        // Cache existing assignments per app to avoid duplicate calls
+        var existingAssignmentsCache: [String: [AppAssignment]] = [:]
+
+        // If we have a lot of apps, batch the GET requests
+        if uniqueAppIds.count > 5 {
+            // Use batch API for efficiency
+            let batches = uniqueAppIds.chunked(into: 20)  // Graph API batch limit
+
+            for batch in batches {
+                let batchRequests = batch.map { appId in
+                    BatchRequest(
+                        id: appId,
+                        method: "GET",
+                        url: "/deviceAppManagement/mobileApps/\(appId)/assignments"
+                    )
+                }
+
+                do {
+                    // Response structure for assignments list
+                    struct AssignmentsResponse: Decodable, Sendable {
+                        let value: [AppAssignment]
+                    }
+
+                    let responses: [BatchResponse<AssignmentsResponse>] = try await GraphAPIClient.shared.batchModels(batchRequests)
+
+                    for (index, response) in responses.enumerated() {
+                        let appId = batch[index]
+                        if response.status == 200, let body = response.body {
+                            existingAssignmentsCache[appId] = body.value
+                            let appName = assignmentsByApp[appId]?.first?.applicationName ?? appId
+                            Logger.shared.info("Fetched \(body.value.count) existing assignments for app \(appName)")
+                        } else {
+                            existingAssignmentsCache[appId] = []
+                            Logger.shared.warning("Could not fetch existing assignments for app \(appId)")
+                        }
+                    }
+                } catch {
+                    Logger.shared.error("Batch fetch failed, falling back to individual requests: \(error)")
+                    // Fall back to individual requests if batch fails
+                    for appId in batch {
+                        do {
+                            let existingAssignments = try await ApplicationService.shared.getApplicationAssignments(appId: appId)
+                            existingAssignmentsCache[appId] = existingAssignments
+                        } catch {
+                            existingAssignmentsCache[appId] = []
+                        }
+                    }
+                }
+            }
+        } else {
+            // For a small number of apps, use individual requests
+            for (appId, appAssignments) in assignmentsByApp {
+                do {
+                    let existingAssignments = try await ApplicationService.shared.getApplicationAssignments(appId: appId)
+                    existingAssignmentsCache[appId] = existingAssignments
+                    Logger.shared.info("Fetched \(existingAssignments.count) existing assignments for app \(appAssignments.first?.applicationName ?? appId)")
+                } catch {
+                    Logger.shared.warning("Could not fetch existing assignments for app \(appId): \(error)")
+                    existingAssignmentsCache[appId] = []
+                }
+            }
+        }
+
+        // Now validate each assignment using the cached data
+        for assignment in assignments {
+            let existingAssignments = existingAssignmentsCache[assignment.applicationId] ?? []
+
+            let alreadyExists = existingAssignments.contains { existing in
+                // Check if there's already an assignment to the same group with same intent
+                if let existingGroupId = existing.target.groupId {
+                    return existingGroupId == assignment.groupId &&
+                           existing.intent.rawValue == assignment.intent.rawValue
+                }
+                return false
+            }
+
+            if alreadyExists {
+                assignment.status = .completed
+                assignment.errorMessage = "Assignment already exists (skipped)"
+                assignment.completedDate = Date()
+                Logger.shared.info("Skipping existing assignment: \(assignment.applicationName) -> \(assignment.groupName)")
+            } else {
+                validatedAssignments.append(assignment)
+            }
+        }
+
+        Logger.shared.info("Validation complete: \(validatedAssignments.count) new assignments to create, \(assignments.count - validatedAssignments.count) skipped")
         return validatedAssignments
     }
 

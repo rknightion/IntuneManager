@@ -341,25 +341,26 @@ struct BulkAssignmentOperation: Identifiable {
                         vpnConfigurationId: groupSetting.settings.iosVppSettings?.vpnConfigurationId
                     )
 
-                    // IMPORTANT: For VPP apps being uninstalled, force device licensing
+                    // IMPORTANT: For VPP apps being uninstalled, force device licensing ONLY
                     var adjustedSettings = groupSetting.settings
                     if assignmentIntent == .uninstall && (app.appType == .iosVppApp || app.appType == .macOSVppApp) {
                         // Ensure device licensing is enabled for uninstalls
+                        // Do NOT set uninstallOnDeviceRemoval for uninstall intent - it causes errors
                         if adjustedSettings.iosVppSettings != nil {
                             adjustedSettings.iosVppSettings?.useDeviceLicensing = true
-                            adjustedSettings.iosVppSettings?.uninstallOnDeviceRemoval = true
+                            // Don't set uninstallOnDeviceRemoval for uninstall intent - causes API errors
                         } else if adjustedSettings.macosVppSettings != nil {
                             adjustedSettings.macosVppSettings?.useDeviceLicensing = true
-                            adjustedSettings.macosVppSettings?.uninstallOnDeviceRemoval = true
+                            // Don't set uninstallOnDeviceRemoval for uninstall intent - causes API errors
                         } else if app.appType == .iosVppApp {
                             var vppSettings = IOSVppAppAssignmentSettings()
                             vppSettings.useDeviceLicensing = true
-                            vppSettings.uninstallOnDeviceRemoval = true
+                            // Do NOT set uninstallOnDeviceRemoval for uninstall intent
                             adjustedSettings.iosVppSettings = vppSettings
                         } else if app.appType == .macOSVppApp {
                             var vppSettings = MacOSVppAppAssignmentSettings()
                             vppSettings.useDeviceLicensing = true
-                            vppSettings.uninstallOnDeviceRemoval = true
+                            // Do NOT set uninstallOnDeviceRemoval for uninstall intent
                             adjustedSettings.macosVppSettings = vppSettings
                         }
                     }
@@ -375,12 +376,12 @@ struct BulkAssignmentOperation: Identifiable {
                         if app.appType == .iosVppApp {
                             var vppSettings = IOSVppAppAssignmentSettings()
                             vppSettings.useDeviceLicensing = true
-                            vppSettings.uninstallOnDeviceRemoval = true
+                            // Do NOT set uninstallOnDeviceRemoval for uninstall intent
                             adjustedSettings.iosVppSettings = vppSettings
                         } else {
                             var vppSettings = MacOSVppAppAssignmentSettings()
                             vppSettings.useDeviceLicensing = true
-                            vppSettings.uninstallOnDeviceRemoval = true
+                            // Do NOT set uninstallOnDeviceRemoval for uninstall intent
                             adjustedSettings.macosVppSettings = vppSettings
                         }
                         assignment.graphSettings = adjustedSettings
