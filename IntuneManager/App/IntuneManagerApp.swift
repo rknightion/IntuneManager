@@ -121,7 +121,7 @@ struct IntuneManagerApp: App {
 
             CommandMenu("Tools") {
                 Button("Bulk Assignment") {
-                    appState.selectedTab = .assignments
+                    appState.selectedTab = .applications
                 }
                 .keyboardShortcut("A", modifiers: [.command, .shift])
 

@@ -15,10 +15,10 @@ struct BulkAssignmentView: View {
 
         var title: String {
             switch self {
-            case .selectApps: return "Select Applications"
-            case .selectGroups: return "Select Groups"
-            case .configureSettings: return "Configure Settings"
-            case .review: return "Review & Confirm"
+            case .selectApps: return "Applications Overview"
+            case .selectGroups: return "Select Target Groups"
+            case .configureSettings: return "Configure Assignment Settings"
+            case .review: return "Review & Deploy"
             }
         }
 
@@ -108,9 +108,9 @@ struct BulkAssignmentView: View {
             }
             .padding()
         }
-        .navigationTitle("Bulk Assignment")
+        .navigationTitle("Applications")
         #if os(macOS)
-        .navigationSubtitle("\(currentStep.title)")
+        .navigationSubtitle(currentStep == .selectApps ? "Browse & Manage" : "\(currentStep.title)")
         #endif
         .toolbar {
             ToolbarItem(placement: .automatic) {
@@ -328,6 +328,20 @@ struct ApplicationSelectionView: View {
 
     var body: some View {
         VStack {
+            // Header section
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Applications Management")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                Text("Browse all applications, view details, and manage assignments. Select applications to configure bulk assignments to groups.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+
+            Divider()
+
             // Toolbar
             VStack(spacing: 12) {
                 HStack {
@@ -464,6 +478,7 @@ struct ApplicationRowView: View {
     let onToggle: () -> Void
     @State private var showingAssignmentDetails = false
     @State private var showingEditAssignments = false
+    @State private var showingAppDetails = false
 
     var body: some View {
         HStack {
@@ -545,6 +560,17 @@ struct ApplicationRowView: View {
 
             Spacer()
 
+            // App Details button
+            Button(action: {
+                showingAppDetails = true
+            }) {
+                Image(systemName: "info.circle")
+                    .font(.body)
+                    .foregroundColor(.accentColor)
+            }
+            .buttonStyle(.plain)
+            .help("View app details")
+
             // Edit Assignments button
             Button(action: {
                 showingEditAssignments = true
@@ -578,6 +604,18 @@ struct ApplicationRowView: View {
         }
         .sheet(isPresented: $showingEditAssignments) {
             AssignmentEditView(applications: [application])
+        }
+        .sheet(isPresented: $showingAppDetails) {
+            NavigationStack {
+                ApplicationDetailView(application: application)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") {
+                                showingAppDetails = false
+                            }
+                        }
+                    }
+            }
         }
     }
 }

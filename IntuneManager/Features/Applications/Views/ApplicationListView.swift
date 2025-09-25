@@ -14,6 +14,7 @@ struct ApplicationListView: View {
     @State private var selectedPublishingState: Application.PublishingState?
     @State private var isFeaturedFilter: Bool?
     @State private var selectedPlatform: Application.DevicePlatform?
+    @State private var showingBackupRestore = false
 
     enum AssignmentFilter: String, CaseIterable {
         case all = "All"
@@ -188,6 +189,13 @@ struct ApplicationListView: View {
         .navigationTitle("Applications")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
+                Button(action: { showingBackupRestore = true }) {
+                    Label("Backup/Restore", systemImage: "arrow.up.arrow.down.circle")
+                }
+                .help("Backup or restore assignment configurations")
+            }
+
+            ToolbarItem(placement: .primaryAction) {
                 Button(action: { showFilters.toggle() }) {
                     Label("Filters", systemImage: "line.horizontal.3.decrease.circle")
                         .symbolVariant(showFilters ? .fill : .none)
@@ -221,6 +229,9 @@ struct ApplicationListView: View {
             Task {
                 _ = try? await appService.fetchApplications(forceRefresh: true)
             }
+        }
+        .sheet(isPresented: $showingBackupRestore) {
+            AssignmentBackupRestoreView()
         }
     }
 }

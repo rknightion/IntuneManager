@@ -144,14 +144,11 @@ struct UnifiedContentView: View {
             DeviceListView()
                 .onAppear { Logger.shared.info("Navigated to Devices", category: .ui) }
         case .applications:
-            ApplicationListView()
+            BulkAssignmentView()
                 .onAppear { Logger.shared.info("Navigated to Applications", category: .ui) }
         case .groups:
             GroupListView()
                 .onAppear { Logger.shared.info("Navigated to Groups", category: .ui) }
-        case .assignments:
-            BulkAssignmentView()
-                .onAppear { Logger.shared.info("Navigated to Bulk Assignments", category: .ui) }
         case .configuration:
             ConfigurationListView()
                 .onAppear { Logger.shared.info("Navigated to Configuration", category: .ui) }

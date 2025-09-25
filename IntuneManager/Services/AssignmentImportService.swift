@@ -431,4 +431,74 @@ final class AssignmentImportService: ObservableObject {
 
         return pendingAssignments
     }
+
+    /// Execute the import
+    func executeImport(validation: ImportValidation) async throws -> (successCount: Int, failedCount: Int) {
+        let pendingAssignments = createPendingAssignments(from: validation)
+        var successCount = 0
+        var failedCount = 0
+
+        for (appId, groupId, intent) in pendingAssignments {
+            do {
+                // Get the actual Application and DeviceGroup objects
+                guard let app = applicationService.applications.first(where: { $0.id == appId }) else {
+                    failedCount += 1
+                    continue
+                }
+
+                // Convert AppAssignment.AssignmentIntent to Assignment.AssignmentIntent
+                let assignmentIntent: Assignment.AssignmentIntent
+                switch intent {
+                case .available:
+                    assignmentIntent = .available
+                case .required:
+                    assignmentIntent = .required
+                case .uninstall:
+                    assignmentIntent = .uninstall
+                case .availableWithoutEnrollment:
+                    assignmentIntent = .available // Map to available as there's no direct equivalent
+                }
+
+                // Handle special group IDs and get the actual group
+                let groups: [DeviceGroup]
+                if groupId == DeviceGroup.allDevicesGroupID {
+                    // Create a pseudo group for all devices
+                    let allDevicesGroup = DeviceGroup(
+                        id: DeviceGroup.allDevicesGroupID,
+                        displayName: "All Devices"
+                    )
+                    groups = [allDevicesGroup]
+                } else if groupId == DeviceGroup.allUsersGroupID {
+                    // Create a pseudo group for all users
+                    let allUsersGroup = DeviceGroup(
+                        id: DeviceGroup.allUsersGroupID,
+                        displayName: "All Users"
+                    )
+                    groups = [allUsersGroup]
+                } else if let group = groupService.groups.first(where: { $0.id == groupId }) {
+                    groups = [group]
+                } else {
+                    failedCount += 1
+                    continue
+                }
+
+                // Create a bulk assignment operation
+                let operation = BulkAssignmentOperation(
+                    applications: [app],
+                    groups: groups,
+                    intent: assignmentIntent
+                )
+
+                // Execute the assignment
+                _ = try await AssignmentService.shared.performBulkAssignment(operation)
+
+                successCount += 1
+            } catch {
+                failedCount += 1
+                Logger.shared.error("Failed to import assignment for app \(appId): \(error)", category: .data)
+            }
+        }
+
+        return (successCount: successCount, failedCount: failedCount)
+    }
 }
