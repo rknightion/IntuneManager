@@ -364,27 +364,12 @@ final class AssignmentService: ObservableObject {
     private func createBatchRequest(for assignment: Assignment) -> BatchRequest {
         let targetType = assignment.targetType
 
-        // Prepare the settings based on app type AND intent
+        // Prepare the settings based on intent
         var settingsValue: Encodable?
 
-        // For uninstall intent, only include device licensing setting for VPP apps
+        // For uninstall intent, don't include ANY settings - let Intune use defaults
         if assignment.intent == .uninstall {
-            if let graphSettings = assignment.graphSettings {
-                if var iosVppSettings = graphSettings.iosVppSettings {
-                    // For uninstall, only keep device licensing
-                    var cleanSettings = IOSVppAppAssignmentSettings()
-                    cleanSettings.useDeviceLicensing = iosVppSettings.useDeviceLicensing ?? true
-                    // Do NOT include uninstallOnDeviceRemoval for uninstall intent
-                    settingsValue = cleanSettings
-                } else if var macosVppSettings = graphSettings.macosVppSettings {
-                    // For uninstall, only keep device licensing
-                    var cleanSettings = MacOSVppAppAssignmentSettings()
-                    cleanSettings.useDeviceLicensing = macosVppSettings.useDeviceLicensing ?? true
-                    // Do NOT include uninstallOnDeviceRemoval for uninstall intent
-                    settingsValue = cleanSettings
-                }
-                // For non-VPP apps with uninstall intent, don't include any settings
-            }
+            settingsValue = nil
         } else {
             // For non-uninstall intents, use full settings
             if let graphSettings = assignment.graphSettings {

@@ -1638,13 +1638,11 @@ class AssignmentEditViewModel: ObservableObject {
                     }
 
                     // Build settings - IMPORTANT: For VPP apps being uninstalled, use device licensing
+                    // For uninstall intent, don't include ANY settings - let Intune use defaults
                     var settings: AssignRequest.AssignmentBody.Settings? = nil
-                    if finalIntent == .uninstall && (appType == .iosVppApp || appType == .macOSVppApp) {
-                        settings = AssignRequest.AssignmentBody.Settings(
-                            type: appType == .iosVppApp ? "#microsoft.graph.iosVppAppAssignmentSettings" : "#microsoft.graph.macosVppAppAssignmentSettings",
-                            useDeviceLicensing: true,  // Force device licensing for uninstall
-                            uninstallOnDeviceRemoval: nil  // Do NOT include for uninstall intent - causes errors
-                        )
+                    if finalIntent != .uninstall {
+                        // Only include settings for non-uninstall intents
+                        // TODO: Add settings configuration for other intents if needed
                     }
 
                     let assignment = AssignRequest.AssignmentBody(
@@ -1755,13 +1753,11 @@ class AssignmentEditViewModel: ObservableObject {
                     }
 
                     // Build settings - IMPORTANT: For VPP apps being uninstalled, use device licensing
+                    // For uninstall intent, don't include ANY settings - let Intune use defaults
                     var settings: AssignRequest.AssignmentBody.Settings? = nil
-                    if finalIntent == .uninstall && (appType == .iosVppApp || appType == .macOSVppApp) {
-                        settings = AssignRequest.AssignmentBody.Settings(
-                            type: appType == .iosVppApp ? "#microsoft.graph.iosVppAppAssignmentSettings" : "#microsoft.graph.macosVppAppAssignmentSettings",
-                            useDeviceLicensing: true,  // Force device licensing for uninstall
-                            uninstallOnDeviceRemoval: nil  // Do NOT include for uninstall intent - causes errors
-                        )
+                    if finalIntent != .uninstall {
+                        // Only include settings for non-uninstall intents
+                        // TODO: Add settings configuration for other intents if needed
                     }
 
                     let assignment = AssignRequest.AssignmentBody(

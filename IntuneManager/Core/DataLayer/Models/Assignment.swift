@@ -341,50 +341,24 @@ struct BulkAssignmentOperation: Identifiable {
                         vpnConfigurationId: groupSetting.settings.iosVppSettings?.vpnConfigurationId
                     )
 
-                    // IMPORTANT: For VPP apps being uninstalled, force device licensing ONLY
-                    var adjustedSettings = groupSetting.settings
-                    if assignmentIntent == .uninstall && (app.appType == .iosVppApp || app.appType == .macOSVppApp) {
-                        // Ensure device licensing is enabled for uninstalls
-                        // Do NOT set uninstallOnDeviceRemoval for uninstall intent - it causes errors
-                        if adjustedSettings.iosVppSettings != nil {
-                            adjustedSettings.iosVppSettings?.useDeviceLicensing = true
-                            // Don't set uninstallOnDeviceRemoval for uninstall intent - causes API errors
-                        } else if adjustedSettings.macosVppSettings != nil {
-                            adjustedSettings.macosVppSettings?.useDeviceLicensing = true
-                            // Don't set uninstallOnDeviceRemoval for uninstall intent - causes API errors
-                        } else if app.appType == .iosVppApp {
-                            var vppSettings = IOSVppAppAssignmentSettings()
-                            vppSettings.useDeviceLicensing = true
-                            // Do NOT set uninstallOnDeviceRemoval for uninstall intent
-                            adjustedSettings.iosVppSettings = vppSettings
-                        } else if app.appType == .macOSVppApp {
-                            var vppSettings = MacOSVppAppAssignmentSettings()
-                            vppSettings.useDeviceLicensing = true
-                            // Do NOT set uninstallOnDeviceRemoval for uninstall intent
-                            adjustedSettings.macosVppSettings = vppSettings
-                        }
+                    // IMPORTANT: For uninstall intent, don't include ANY settings - let Intune use defaults
+                    if assignmentIntent == .uninstall {
+                        // Don't set any VPP settings for uninstall intent
+                        // Intune will handle the licensing automatically
+                        assignment.graphSettings = nil
+                    } else {
+                        // Store the settings for non-uninstall intents
+                        assignment.graphSettings = groupSetting.settings
                     }
-
-                    // Store the adjusted settings for Graph API use
-                    assignment.graphSettings = adjustedSettings
                 } else {
                     assignment.settings = settings
 
-                    // For global settings, also check for VPP uninstall scenario
-                    if assignmentIntent == .uninstall && (app.appType == .iosVppApp || app.appType == .macOSVppApp) {
-                        var adjustedSettings = AppAssignmentSettings(intent: assignmentIntent)
-                        if app.appType == .iosVppApp {
-                            var vppSettings = IOSVppAppAssignmentSettings()
-                            vppSettings.useDeviceLicensing = true
-                            // Do NOT set uninstallOnDeviceRemoval for uninstall intent
-                            adjustedSettings.iosVppSettings = vppSettings
-                        } else {
-                            var vppSettings = MacOSVppAppAssignmentSettings()
-                            vppSettings.useDeviceLicensing = true
-                            // Do NOT set uninstallOnDeviceRemoval for uninstall intent
-                            adjustedSettings.macosVppSettings = vppSettings
-                        }
-                        assignment.graphSettings = adjustedSettings
+                    // For uninstall intent, don't include ANY settings - let Intune use defaults
+                    if assignmentIntent == .uninstall {
+                        assignment.graphSettings = nil
+                    } else {
+                        // Store settings for non-uninstall intents
+                        assignment.graphSettings = settings != nil ? AppAssignmentSettings(intent: assignmentIntent) : nil
                     }
                 }
 
