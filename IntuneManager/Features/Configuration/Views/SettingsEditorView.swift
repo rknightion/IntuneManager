@@ -1,5 +1,10 @@
 import SwiftUI
 import Combine
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 struct SettingsEditorView: View {
     @Environment(\.dismiss) private var dismiss
@@ -282,7 +287,11 @@ struct SettingsCategorySection: View {
                 }
             }
             .padding(.vertical, 8)
+            #if os(macOS)
             .background(Color(NSColor.windowBackgroundColor))
+            #else
+            .background(Color(UIColor.systemBackground))
+            #endif
         }
     }
 }

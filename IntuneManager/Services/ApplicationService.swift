@@ -259,7 +259,11 @@ final class ApplicationService: ObservableObject {
     func fetchInstallSummary(appId: String) async throws -> Application.InstallSummary {
         var summary = Application.InstallSummary()
 
-        // Try to fetch install summary directly first (newer API)
+        // Only try to fetch install summary for specific app types that support it
+        // Many app types (web links, built-in apps, etc.) don't have install status endpoints
+        // and will return 400 errors if we try to access them
+
+        // Try to fetch install summary directly first (newer API, beta only)
         let summaryEndpoint = "/deviceAppManagement/mobileApps/\(appId)/installSummary"
         do {
             struct DirectSummary: Decodable {
@@ -289,54 +293,28 @@ final class ApplicationService: ObservableObject {
             summary.notInstalledUserCount = directSummary.notInstalledUserCount ?? 0
             summary.pendingInstallUserCount = directSummary.pendingInstallUserCount ?? 0
 
-            Logger.shared.debug("Fetched install summary directly for app \(appId)", category: .network)
+            Logger.shared.debug("Successfully fetched install summary for app \(appId)", category: .network)
             return summary
         } catch {
-            Logger.shared.debug("Direct install summary not available for app \(appId), trying device statuses", category: .network)
-        }
-
-        // Fallback to fetching device statuses only (user statuses endpoint doesn't exist for all app types)
-        let deviceStatusEndpoint = "/deviceAppManagement/mobileApps/\(appId)/deviceStatuses"
-        do {
-            struct DeviceStatus: Decodable {
-                let installState: String?
-                let deviceId: String?
-                let deviceName: String?
-                let userPrincipalName: String?
-            }
-
-            let deviceStatuses: [DeviceStatus] = try await apiClient.getAllPagesForModels(
-                deviceStatusEndpoint,
-                parameters: [
-                    "$select": "installState,deviceId,deviceName,userPrincipalName",
-                    "$top": "100"  // Limit to avoid timeouts
-                ]
-            )
-
-            // Count device install states
-            for status in deviceStatuses {
-                switch status.installState?.lowercased() {
-                case "installed":
-                    summary.installedDeviceCount += 1
-                case "failed":
-                    summary.failedDeviceCount += 1
-                case "notapplicable":
-                    summary.notApplicableDeviceCount += 1
-                case "pending", "pendinginstall":
-                    summary.pendingInstallDeviceCount += 1
-                case "notinstalled":
-                    summary.notInstalledDeviceCount += 1
+            if let graphError = error as? GraphAPIError {
+                switch graphError {
+                case .httpError(let statusCode):
+                    if statusCode == 404 || statusCode == 400 {
+                        // This is expected for many app types - not an error
+                        Logger.shared.debug("Install summary not available for app \(appId) - this is normal for many app types", category: .network)
+                    } else {
+                        Logger.shared.debug("HTTP error \(statusCode) fetching install summary for app \(appId)", category: .network)
+                    }
+                case .notFound:
+                    Logger.shared.debug("Install summary endpoint not found for app \(appId) - this is normal for many app types", category: .network)
                 default:
-                    break
+                    Logger.shared.debug("Failed to fetch install summary for app \(appId): \(error)", category: .network)
                 }
+            } else {
+                // Log unexpected errors
+                Logger.shared.debug("Failed to fetch install summary for app \(appId): \(error)", category: .network)
             }
-
-            Logger.shared.debug("Fetched \(deviceStatuses.count) device statuses for app \(appId)", category: .network)
-            return summary
-        } catch {
-            // If we can't fetch device statuses either, return empty summary
-            Logger.shared.debug("No install status data available for app \(appId): \(error)", category: .network)
-            // Return empty summary - this is not an error, some apps don't have status data
+            // Return empty summary for apps without install status support
             return summary
         }
     }

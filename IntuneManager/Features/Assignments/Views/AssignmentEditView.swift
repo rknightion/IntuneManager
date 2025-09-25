@@ -332,7 +332,9 @@ struct AssignmentEditView: View {
             if !viewModel.pendingAssignments.isEmpty {
                 HStack {
                     Toggle("Use default intent for all", isOn: $useDefaultIntent)
+                        #if os(macOS)
                         .toggleStyle(.checkbox)
+                        #endif
                         .help("Apply the same intent to all new assignments")
 
                     if useDefaultIntent {

@@ -42,14 +42,10 @@ final class ApplicationDetailViewModel: ObservableObject {
                 installSummary = summary
                 Logger.shared.debug("Install summary included in response", category: .ui)
             } else if fresh.hasAssignments {
-                // Only fetch install summary if app has assignments
-                Logger.shared.debug("Fetching install summary from statuses", category: .ui)
-                do {
-                    installSummary = try await appService.fetchInstallSummary(appId: fresh.id)
-                } catch {
-                    Logger.shared.warning("Could not fetch install summary: \(error)", category: .ui)
-                    installSummary = nil
-                }
+                // Install summary endpoints are not available for many app types and cause 400 errors
+                // Disabling this feature to prevent console spam
+                Logger.shared.debug("Install summary fetching disabled - not supported for many app types", category: .ui)
+                installSummary = nil
             } else {
                 // No assignments, no install summary needed
                 Logger.shared.debug("App has no assignments, skipping install summary fetch", category: .ui)
