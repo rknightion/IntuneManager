@@ -206,7 +206,6 @@ struct IntuneManagerApp: App {
         UITabBar.appearance().standardAppearance = tabAppearance
         UITabBar.appearance().scrollEdgeAppearance = tabAppearance
         #elseif os(macOS)
-        NSApplication.shared.applicationIconImage = NSImage(systemSymbolName: "laptopcomputer.and.iphone", accessibilityDescription: "IntuneManager")
         NSApplication.shared.setActivationPolicy(.regular)
         #endif
     }
