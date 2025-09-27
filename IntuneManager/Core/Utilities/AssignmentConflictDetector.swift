@@ -135,27 +135,33 @@ struct AssignmentConflictDetector {
         groupName: String,
         assignments: [(appName: String, intent: AppAssignment.AssignmentIntent, isExisting: Bool)]
     ) -> AssignmentConflict? {
-        let intents = Set(assignments.map { $0.intent })
+        // Group assignments by app name to check for conflicts within the same app
+        let appAssignments = Dictionary(grouping: assignments, by: { $0.appName })
 
-        // Check for Required vs Uninstall conflict
-        if intents.contains(.required) && intents.contains(.uninstall) {
-            let conflictingAssignments = assignments.compactMap { assignment -> AssignmentConflict.ConflictingAssignment? in
-                guard assignment.intent == .required || assignment.intent == .uninstall else { return nil }
-                return AssignmentConflict.ConflictingAssignment(
-                    applicationName: assignment.appName,
-                    intent: assignment.intent,
-                    isExisting: assignment.isExisting
+        // Check each app for conflicting intents
+        for (appName, appAssigns) in appAssignments {
+            let appIntents = Set(appAssigns.map { $0.intent })
+
+            // Check for Required vs Uninstall conflict for the same app
+            if appIntents.contains(.required) && appIntents.contains(.uninstall) {
+                let conflictingAssignments = appAssigns.compactMap { assignment -> AssignmentConflict.ConflictingAssignment? in
+                    guard assignment.intent == .required || assignment.intent == .uninstall else { return nil }
+                    return AssignmentConflict.ConflictingAssignment(
+                        applicationName: assignment.appName,
+                        intent: assignment.intent,
+                        isExisting: assignment.isExisting
+                    )
+                }
+
+                return AssignmentConflict(
+                    groupId: groupId,
+                    groupName: groupName,
+                    conflictType: .conflictingIntents,
+                    assignments: conflictingAssignments,
+                    severity: .critical,
+                    resolution: "Cannot have both 'Required' and 'Uninstall' intents for '\(appName)' assigned to the same group. Choose one intent."
                 )
             }
-
-            return AssignmentConflict(
-                groupId: groupId,
-                groupName: groupName,
-                conflictType: .conflictingIntents,
-                assignments: conflictingAssignments,
-                severity: .critical,
-                resolution: "Cannot have both 'Required' and 'Uninstall' intents for the same group. Choose one intent."
-            )
         }
 
         return nil
@@ -167,27 +173,33 @@ struct AssignmentConflictDetector {
         groupName: String,
         assignments: [(appName: String, intent: AppAssignment.AssignmentIntent, isExisting: Bool)]
     ) -> AssignmentConflict? {
-        let intents = Set(assignments.map { $0.intent })
+        // Group assignments by app name to check for redundancy within the same app
+        let appAssignments = Dictionary(grouping: assignments, by: { $0.appName })
 
-        // If Required is set, Available is redundant
-        if intents.contains(.required) && intents.contains(.available) {
-            let conflictingAssignments = assignments.compactMap { assignment -> AssignmentConflict.ConflictingAssignment? in
-                guard assignment.intent == .required || assignment.intent == .available else { return nil }
-                return AssignmentConflict.ConflictingAssignment(
-                    applicationName: assignment.appName,
-                    intent: assignment.intent,
-                    isExisting: assignment.isExisting
+        // Check each app for redundant intents
+        for (appName, appAssigns) in appAssignments {
+            let appIntents = Set(appAssigns.map { $0.intent })
+
+            // If Required is set, Available is redundant for the same app
+            if appIntents.contains(.required) && appIntents.contains(.available) {
+                let conflictingAssignments = appAssigns.compactMap { assignment -> AssignmentConflict.ConflictingAssignment? in
+                    guard assignment.intent == .required || assignment.intent == .available else { return nil }
+                    return AssignmentConflict.ConflictingAssignment(
+                        applicationName: assignment.appName,
+                        intent: assignment.intent,
+                        isExisting: assignment.isExisting
+                    )
+                }
+
+                return AssignmentConflict(
+                    groupId: groupId,
+                    groupName: groupName,
+                    conflictType: .redundantAssignment,
+                    assignments: conflictingAssignments,
+                    severity: .warning,
+                    resolution: "'Required' makes 'Available' redundant for '\(appName)'. Consider using only 'Required' for this group."
                 )
             }
-
-            return AssignmentConflict(
-                groupId: groupId,
-                groupName: groupName,
-                conflictType: .redundantAssignment,
-                assignments: conflictingAssignments,
-                severity: .warning,
-                resolution: "'Required' makes 'Available' redundant. Consider using only 'Required' for this group."
-            )
         }
 
         return nil
@@ -199,27 +211,33 @@ struct AssignmentConflictDetector {
         groupName: String,
         assignments: [(appName: String, intent: AppAssignment.AssignmentIntent, isExisting: Bool)]
     ) -> AssignmentConflict? {
-        let intents = Set(assignments.map { $0.intent })
+        // Group assignments by app name to check for logical conflicts within the same app
+        let appAssignments = Dictionary(grouping: assignments, by: { $0.appName })
 
-        // Check for Available without enrollment + Required conflict
-        if intents.contains(.availableWithoutEnrollment) && intents.contains(.required) {
-            let conflictingAssignments = assignments.compactMap { assignment -> AssignmentConflict.ConflictingAssignment? in
-                guard assignment.intent == .availableWithoutEnrollment || assignment.intent == .required else { return nil }
-                return AssignmentConflict.ConflictingAssignment(
-                    applicationName: assignment.appName,
-                    intent: assignment.intent,
-                    isExisting: assignment.isExisting
+        // Check each app for logical conflicts
+        for (appName, appAssigns) in appAssignments {
+            let appIntents = Set(appAssigns.map { $0.intent })
+
+            // Check for Available without enrollment + Required conflict for the same app
+            if appIntents.contains(.availableWithoutEnrollment) && appIntents.contains(.required) {
+                let conflictingAssignments = appAssigns.compactMap { assignment -> AssignmentConflict.ConflictingAssignment? in
+                    guard assignment.intent == .availableWithoutEnrollment || assignment.intent == .required else { return nil }
+                    return AssignmentConflict.ConflictingAssignment(
+                        applicationName: assignment.appName,
+                        intent: assignment.intent,
+                        isExisting: assignment.isExisting
+                    )
+                }
+
+                return AssignmentConflict(
+                    groupId: groupId,
+                    groupName: groupName,
+                    conflictType: .logicalConflict,
+                    assignments: conflictingAssignments,
+                    severity: .critical,
+                    resolution: "Cannot use 'Available without enrollment' with 'Required' for '\(appName)' assigned to the same group. Enrolled devices should use standard intents."
                 )
             }
-
-            return AssignmentConflict(
-                groupId: groupId,
-                groupName: groupName,
-                conflictType: .logicalConflict,
-                assignments: conflictingAssignments,
-                severity: .critical,
-                resolution: "Cannot use 'Available without enrollment' with 'Required' for the same group. Enrolled devices should use standard intents."
-            )
         }
 
         return nil

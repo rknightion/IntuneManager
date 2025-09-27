@@ -82,8 +82,11 @@ final class ApplicationService: ObservableObject {
 
             Logger.shared.info("Total apps available: \(filteredApps.count)", category: .data)
 
+            // Enrich assignments with group names
+            let enrichedApps = await enrichAssignmentsWithGroupNames(filteredApps)
+
             // Update the data store first to maintain context consistency
-            dataStore.replaceApplications(with: filteredApps)
+            dataStore.replaceApplications(with: enrichedApps)
 
             // Now update the in-memory collection with fresh data from the store
             // This ensures we're working with models attached to the current context
@@ -472,6 +475,62 @@ final class ApplicationService: ObservableObject {
         let cachedApps = dataStore.fetchApplications()
         if !cachedApps.isEmpty {
             applications = cachedApps
+        }
+    }
+
+    /// Enriches application assignments with group names from GroupService
+    private func enrichAssignmentsWithGroupNames(_ apps: [Application]) async -> [Application] {
+        // Fetch all groups once to avoid multiple API calls
+        let groups: [DeviceGroup]
+        do {
+            groups = try await GroupService.shared.fetchGroups()
+        } catch {
+            Logger.shared.warning("Failed to fetch groups for assignment enrichment: \(error)")
+            return apps
+        }
+
+        // Create a lookup dictionary for quick access
+        let groupLookup = Dictionary(uniqueKeysWithValues: groups.map { ($0.id, $0.displayName) })
+
+        // Enrich each app's assignments
+        return apps.map { app in
+            guard let assignments = app.assignments, !assignments.isEmpty else {
+                return app
+            }
+
+            // Create enriched assignments with group names
+            let enrichedAssignments = assignments.map { assignment in
+                // Only enrich if it's a group assignment and groupName is missing
+                if assignment.target.type == .group || assignment.target.type == .exclusionGroup,
+                   let groupId = assignment.target.groupId,
+                   assignment.target.groupName == nil {
+                    // Create a new target with the group name populated
+                    let enrichedTarget = AppAssignment.AssignmentTarget(
+                        type: assignment.target.type,
+                        groupId: assignment.target.groupId,
+                        groupName: groupLookup[groupId],
+                        deviceAndAppManagementAssignmentFilterId: assignment.target.deviceAndAppManagementAssignmentFilterId,
+                        deviceAndAppManagementAssignmentFilterType: assignment.target.deviceAndAppManagementAssignmentFilterType
+                    )
+
+                    // Create a new assignment with the enriched target
+                    let enrichedAssignment = AppAssignment(
+                        id: assignment.id,
+                        intent: assignment.intent,
+                        target: enrichedTarget,
+                        settings: assignment.settings,
+                        source: assignment.source,
+                        sourceId: assignment.sourceId
+                    )
+                    return enrichedAssignment
+                }
+                return assignment
+            }
+
+            // Create a new app with the enriched assignments
+            var enrichedApp = app
+            enrichedApp.assignments = enrichedAssignments
+            return enrichedApp
         }
     }
 }

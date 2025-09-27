@@ -33,6 +33,19 @@ struct AssignmentIntentValidator {
         intent: AppAssignment.AssignmentIntent,
         appType: Application.AppType
     ) -> Bool {
+        // If app type is unknown, allow all intents except those we know won't work
+        if appType == .unknown {
+            switch intent {
+            case .availableWithoutEnrollment:
+                // Conservative - don't allow this for unknown apps
+                return false
+            default:
+                // Allow other intents for unknown app types
+                // The Graph API will validate and reject if not supported
+                return true
+            }
+        }
+
         switch intent {
         case .available:
             // Available is supported for most app types
@@ -74,10 +87,9 @@ struct AssignmentIntentValidator {
             case .webApp, .windowsWebApp:
                 // Web apps can't be uninstalled (they're just links)
                 return false
-            case .iosStoreApp:
-                // Built-in/store apps might not support uninstall
-                return false
             default:
+                // Allow uninstall for all other app types including store apps
+                // The Graph API accepts uninstall intents for store apps
                 return true
             }
         }
@@ -155,8 +167,6 @@ struct AssignmentIntentValidator {
                 switch appType {
                 case .webApp, .windowsWebApp:
                     return "Web apps cannot be uninstalled as they are just web links"
-                case .iosStoreApp:
-                    return "Built-in store apps cannot be uninstalled via Intune"
                 default:
                     return "\(appType.displayName) apps do not support uninstall assignments"
                 }
