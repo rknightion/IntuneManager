@@ -1,0 +1,19 @@
+User-agent: *
+Allow: /
+
+# Highlight key documentation paths
+Allow: /getting-started/
+Allow: /device-support/
+Allow: /supported-entities/
+Allow: /architecture/
+Allow: /api-optimization/
+Allow: /faq/
+Allow: /changelog/
+
+# Static assets
+Allow: /assets/
+Allow: /stylesheets/
+Allow: /javascripts/
+
+Sitemap: https://m7kni.io/intunemanager/sitemap.xml
+Sitemap: https://m7kni.io/intunemanager/sitemap.xml.gz
