@@ -1,8 +1,8 @@
-name = "intunemanager-docs"
+name = "IntuneManager-docs"
 compatibility_date = "2025-04-01"
 routes = [
-  { pattern = "m7kni.io/intunemanager/*", zone_id = "040860c93967852c90bb3ecb9865f006" },
-  { pattern = "m7kni.io/intunemanager", zone_id = "040860c93967852c90bb3ecb9865f006" }
+  { pattern = "m7kni.io/IntuneManager/*", zone_id = "040860c93967852c90bb3ecb9865f006" },
+  { pattern = "m7kni.io/IntuneManager", zone_id = "040860c93967852c90bb3ecb9865f006" }
 ]
 
 [assets]

@@ -133,7 +133,7 @@ function addOpenGraphTags() {
   addMetaTag('property', 'og:description', description);
   addMetaTag('property', 'og:url', url);
   addMetaTag('property', 'og:locale', 'en_US');
-  addMetaTag('property', 'og:image', 'https://m7kni.io/intunemanager/assets/og-image.png');
+  addMetaTag('property', 'og:image', 'https://m7kni.io/IntuneManager/assets/og-image.png');
   addMetaTag('property', 'og:image:width', '1200');
   addMetaTag('property', 'og:image:height', '630');
   addMetaTag('property', 'og:image:alt', 'IntuneManager - Microsoft Intune companion app');
@@ -148,7 +148,7 @@ function addTwitterCardTags() {
   addMetaTag('name', 'twitter:card', 'summary_large_image');
   addMetaTag('name', 'twitter:title', title);
   addMetaTag('name', 'twitter:description', description);
-  addMetaTag('name', 'twitter:image', 'https://m7kni.io/intunemanager/assets/twitter-card.png');
+  addMetaTag('name', 'twitter:image', 'https://m7kni.io/IntuneManager/assets/twitter-card.png');
   addMetaTag('name', 'twitter:creator', '@rknightion');
   addMetaTag('name', 'twitter:site', '@rknightion');
 }

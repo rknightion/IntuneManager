@@ -1,6 +1,6 @@
 site_name: IntuneManager Documentation
 site_description: End-user guide for IntuneManager, a cross-platform app for managing Microsoft Intune devices, applications, and assignments
-site_url: https://m7kni.io/intunemanager/
+site_url: https://m7kni.io/IntuneManager/
 repo_name: rknightion/IntuneManager
 repo_url: https://github.com/rknightion/IntuneManager
 edit_uri: edit/main/docs/
