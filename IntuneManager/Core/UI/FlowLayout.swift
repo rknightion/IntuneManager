@@ -18,15 +18,15 @@ struct FlowLayout: Layout {
             subviews: subviews,
             spacing: spacing
         )
-        for (index, element) in result.rows.enumerated() {
-            let rowY = result.yOffsets[index]
+        for (rowIndex, element) in result.rows.enumerated() {
+            let rowY = result.yOffsets[rowIndex]
             var x = bounds.minX
-            for index in element.indices {
-                let subviewSize = element.sizes[index]
+            for (elementIndex, subviewIndex) in element.indices.enumerated() {
+                let subviewSize = element.sizes[elementIndex]
                 let proposal = ProposedViewSize(subviewSize)
-                subviews[element.indices[index]]
+                subviews[subviewIndex]
                     .place(at: CGPoint(x: x, y: bounds.minY + rowY), proposal: proposal)
-                x += subviewSize.width + (index < element.indices.count - 1 ? spacing : 0)
+                x += subviewSize.width + (elementIndex < element.indices.count - 1 ? spacing : 0)
             }
         }
     }

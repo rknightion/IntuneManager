@@ -47,6 +47,26 @@ Data flows from Microsoft Graph through `GraphAPIClient` → `RateLimiter` → d
 - Favor structured error types (`GraphAPIError`, `AuthError`) over generic `Error`; bubble meaningful messages to the UI via `AppState` or view models.
 - Keep configuration UI (`ConfigurationView`, Settings) free of tenant-specific values—lean on `CredentialManager` and local secrets.
 
+## Graph API Permission Management
+**CRITICAL**: When adding features that require new Microsoft Graph API permissions, you MUST update `PermissionCheckService.requiredPermissions` to include the new scopes. This ensures startup permission validation catches missing permissions before users encounter errors.
+
+- The app validates all required Graph permissions at startup via `PermissionCheckService.checkPermissions()` (called from `IntuneManagerApp.initializeApp()`).
+- All required permissions are centrally defined in `IntuneManager/Services/PermissionCheckService.swift` in the `requiredPermissions` static array.
+- Each permission entry documents its scope, description, and which features depend on it.
+- When users lack required permissions, they see a detailed alert on startup with options to continue, copy the permission list, or view details in Settings.
+- The service checks the access token's granted scopes and compares them against required permissions, logging any missing scopes.
+
+**Workflow for adding new Graph-dependent features:**
+1. Identify the Graph API permission(s) required for your feature (consult context7 library ID 'microsoftgraph/microsoft-graph-docs-contrib' or Microsoft Graph documentation).
+2. Add the permission(s) to `PermissionCheckService.requiredPermissions` with:
+   - `scope`: The exact Graph permission scope (e.g., "DeviceManagementConfiguration.ReadWrite.All")
+   - `description`: Brief explanation of what this permission grants
+   - `features`: Array of feature names that depend on this permission
+3. Update `AuthManagerV2.signIn()` if the new scope should be requested during interactive sign-in (line 148-153 in `Core/Authentication/AuthManagerV2.swift`).
+4. Test that the permission check detects missing permissions correctly by signing in with an account that lacks the new scope.
+
+This centralized approach ensures permission requirements are visible, documented, and validated consistently across the entire application.
+
 ## Testing & Verification Expectations
 - Expand the XCTest suite whenever you add new service logic, models, or complex UI state; place files under mirrors of the source path and suffix them with `Tests.swift`.
 - Use `xcodebuild test` destinations that match the platform you touched (macOS for shared logic, add iOS simulator for iOS-only changes). Summarize results in your final message.

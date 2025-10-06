@@ -57,7 +57,7 @@ struct BulkAssignmentView: View {
                         selectedGroups: viewModel.selectedGroups
                     )
                 case .review:
-                    ReviewAssignmentView(viewModel: viewModel)
+                    ReviewAssignmentView(viewModel: viewModel, currentStep: $currentStep)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

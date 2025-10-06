@@ -3,15 +3,10 @@ import SwiftUI
 struct ConfigurationListView: View {
     @StateObject private var viewModel = ConfigurationViewModel()
     @State private var selectedProfile: ConfigurationProfile?
-    @State private var showingCreateProfile = false
     @State private var searchText = ""
     @State private var selectedPlatform: ConfigurationProfile.PlatformType? = nil
     @State private var selectedType: ConfigurationProfile.ProfileType? = nil
-    @State private var showingEditProfile = false
-    @State private var showingDeleteConfirmation = false
-    @State private var profileToDelete: ConfigurationProfile?
-    @State private var showingImportExport = false
-    @State private var showingMobileConfigUpload = false
+    @State private var showingExport = false
 
     var filteredProfiles: [ConfigurationProfile] {
         var profiles = viewModel.profiles
@@ -60,21 +55,9 @@ struct ConfigurationListView: View {
         }
         .navigationTitle("Configuration Profiles")
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(action: { showingCreateProfile = true }) {
-                    Label("Create Profile", systemImage: "plus")
-                }
-            }
-
             ToolbarItem(placement: .automatic) {
-                Button(action: { showingMobileConfigUpload = true }) {
-                    Label("Upload .mobileconfig", systemImage: "doc.badge.arrow.up")
-                }
-            }
-
-            ToolbarItem(placement: .automatic) {
-                Button(action: { showingImportExport = true }) {
-                    Label("Import/Export", systemImage: "square.and.arrow.up.on.square")
+                Button(action: { showingExport = true }) {
+                    Label("Export", systemImage: "square.and.arrow.up")
                 }
             }
 
@@ -85,37 +68,9 @@ struct ConfigurationListView: View {
                 .disabled(viewModel.isLoading)
             }
         }
-        .sheet(isPresented: $showingCreateProfile) {
-            ProfileCreationView()
+        .sheet(isPresented: $showingExport) {
+            ProfileExportView()
                 .frame(minWidth: 800, minHeight: 600)
-        }
-        .sheet(isPresented: $showingEditProfile) {
-            if let profile = selectedProfile {
-                ProfileEditView(profile: profile)
-                    .frame(minWidth: 800, minHeight: 600)
-            }
-        }
-        .sheet(isPresented: $showingImportExport) {
-            ProfileImportExportView()
-                .frame(minWidth: 800, minHeight: 600)
-        }
-        .sheet(isPresented: $showingMobileConfigUpload) {
-            MobileConfigUploadView()
-                .frame(minWidth: 800, minHeight: 600)
-        }
-        .alert("Delete Configuration Profile", isPresented: $showingDeleteConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) {
-                if let profile = profileToDelete {
-                    Task {
-                        await deleteProfile(profile)
-                    }
-                }
-            }
-        } message: {
-            if let profile = profileToDelete {
-                Text("Are you sure you want to delete '\(profile.displayName)'? This action cannot be undone.")
-            }
         }
         .task {
             await viewModel.loadProfiles()
@@ -198,7 +153,7 @@ struct ConfigurationListView: View {
                         searchText.isEmpty ? "No Configuration Profiles" : "No Results",
                         systemImage: searchText.isEmpty ? "gearshape.2" : "magnifyingglass",
                         description: Text(searchText.isEmpty ?
-                            "Create your first configuration profile to get started" :
+                            "No configuration profiles found" :
                             "No profiles match '\(searchText)'")
                     )
                     Spacer()
@@ -220,16 +175,6 @@ struct ConfigurationListView: View {
             }
         }
         .frame(minWidth: 300, idealWidth: 350)
-    }
-
-    // MARK: - Actions
-
-    private func deleteProfile(_ profile: ConfigurationProfile) async {
-        await viewModel.deleteProfile(profile)
-        profileToDelete = nil
-        if selectedProfile?.id == profile.id {
-            selectedProfile = nil
-        }
     }
 }
 

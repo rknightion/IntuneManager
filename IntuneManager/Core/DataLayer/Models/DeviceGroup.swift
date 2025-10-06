@@ -29,6 +29,7 @@ final class DeviceGroup: Identifiable, Codable {
     // Relationships
     @Transient var assignedApplications: [Application]?
     @Transient var members: [GroupMember]?
+    @Transient var owners: [GroupOwner]?
 
     enum MembershipRuleProcessingState: String, Codable {
         case on = "On"
@@ -120,6 +121,14 @@ final class DeviceGroup: Identifiable, Codable {
         }
 
         return types.isEmpty ? "Standard" : types.joined(separator: ", ")
+    }
+
+    var primaryOwnerName: String? {
+        return owners?.first?.displayName
+    }
+
+    var hasOwners: Bool {
+        return owners != nil && !(owners?.isEmpty ?? true)
     }
 
     // Codable conformance
@@ -253,11 +262,22 @@ struct GroupMember: Codable, Identifiable, Sendable {
     let mail: String?
     let memberType: MemberType
 
+    // Device-specific fields
+    let deviceId: String?
+    let operatingSystem: String?
+    let operatingSystemVersion: String?
+    let accountEnabled: Bool?
+
+    // Group-specific fields
+    let groupTypes: [String]?
+    let securityEnabled: Bool?
+
     enum MemberType: String, Codable, Sendable {
         case user = "#microsoft.graph.user"
         case device = "#microsoft.graph.device"
         case group = "#microsoft.graph.group"
         case servicePrincipal = "#microsoft.graph.servicePrincipal"
+        case unknown = "unknown"
 
         var icon: String {
             switch self {
@@ -265,7 +285,139 @@ struct GroupMember: Codable, Identifiable, Sendable {
             case .device: return "desktopcomputer"
             case .group: return "person.3"
             case .servicePrincipal: return "gearshape.2"
+            case .unknown: return "questionmark.circle"
             }
         }
+
+        var displayName: String {
+            switch self {
+            case .user: return "User"
+            case .device: return "Device"
+            case .group: return "Group"
+            case .servicePrincipal: return "Service Principal"
+            case .unknown: return "Unknown"
+            }
+        }
+    }
+
+    // Computed property for unified display name
+    var effectiveDisplayName: String {
+        if let name = displayName, !name.isEmpty {
+            return name
+        }
+        // Fallback for devices without displayName
+        if memberType == .device {
+            if let deviceId = deviceId {
+                return deviceId
+            }
+        }
+        // Fallback for other types
+        if let upn = userPrincipalName {
+            return upn
+        }
+        if let mail = mail {
+            return mail
+        }
+        return "Unknown"
+    }
+
+    // Computed property for secondary info
+    var secondaryInfo: String? {
+        switch memberType {
+        case .device:
+            if let os = operatingSystem, let version = operatingSystemVersion {
+                return "\(os) \(version)"
+            } else if let os = operatingSystem {
+                return os
+            }
+            return deviceId
+        case .user:
+            return userPrincipalName ?? mail
+        case .group:
+            if let types = groupTypes, !types.isEmpty {
+                return types.joined(separator: ", ")
+            }
+            return securityEnabled == true ? "Security Group" : "Group"
+        case .servicePrincipal:
+            return mail
+        case .unknown:
+            return nil
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case displayName
+        case userPrincipalName
+        case mail
+        case memberType = "@odata.type"
+        case deviceId
+        case operatingSystem
+        case operatingSystemVersion
+        case accountEnabled
+        case groupTypes
+        case securityEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+        userPrincipalName = try container.decodeIfPresent(String.self, forKey: .userPrincipalName)
+        mail = try container.decodeIfPresent(String.self, forKey: .mail)
+
+        // Device-specific fields
+        deviceId = try container.decodeIfPresent(String.self, forKey: .deviceId)
+        operatingSystem = try container.decodeIfPresent(String.self, forKey: .operatingSystem)
+        operatingSystemVersion = try container.decodeIfPresent(String.self, forKey: .operatingSystemVersion)
+        accountEnabled = try container.decodeIfPresent(Bool.self, forKey: .accountEnabled)
+
+        // Group-specific fields
+        groupTypes = try container.decodeIfPresent([String].self, forKey: .groupTypes)
+        securityEnabled = try container.decodeIfPresent(Bool.self, forKey: .securityEnabled)
+
+        // Decode memberType with fallback to unknown
+        if let typeString = try container.decodeIfPresent(String.self, forKey: .memberType),
+           let type = MemberType(rawValue: typeString) {
+            memberType = type
+        } else {
+            memberType = .unknown
+        }
+    }
+}
+
+// MARK: - Group Owner
+struct GroupOwner: Codable, Identifiable, Sendable {
+    let id: String
+    let displayName: String?
+    let userPrincipalName: String?
+    let mail: String?
+    let ownerType: OwnerType
+
+    enum OwnerType: String, Codable, Sendable {
+        case user = "#microsoft.graph.user"
+        case servicePrincipal = "#microsoft.graph.servicePrincipal"
+
+        var icon: String {
+            switch self {
+            case .user: return "person.crop.circle"
+            case .servicePrincipal: return "gearshape.2.fill"
+            }
+        }
+
+        var displayName: String {
+            switch self {
+            case .user: return "User"
+            case .servicePrincipal: return "Service Principal"
+            }
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case displayName
+        case userPrincipalName
+        case mail
+        case ownerType = "@odata.type"
     }
 }

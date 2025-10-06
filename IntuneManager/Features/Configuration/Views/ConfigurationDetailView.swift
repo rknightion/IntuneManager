@@ -2,13 +2,9 @@ import SwiftUI
 
 struct ConfigurationDetailView: View {
     let profile: ConfigurationProfile
-    @StateObject private var viewModel = ConfigurationViewModel()
     @State private var showingAssignmentEditor = false
-    @State private var showingDeleteConfirmation = false
-    @State private var showingEditProfile = false
     @State private var showingStatusView = false
     @State private var showingValidation = false
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ScrollView {
@@ -39,10 +35,6 @@ struct ConfigurationDetailView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    Button(action: { showingEditProfile = true }) {
-                        Label("Edit Profile", systemImage: "pencil")
-                    }
-
                     Button(action: { showingAssignmentEditor = true }) {
                         Label("Manage Assignments", systemImage: "person.2")
                     }
@@ -50,20 +42,10 @@ struct ConfigurationDetailView: View {
                     Button(action: { showingValidation = true }) {
                         Label("Validate Profile", systemImage: "checkmark.shield")
                     }
-
-                    Divider()
-
-                    Button(role: .destructive, action: { showingDeleteConfirmation = true }) {
-                        Label("Delete Profile", systemImage: "trash")
-                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
             }
-        }
-        .sheet(isPresented: $showingEditProfile) {
-            ProfileEditView(profile: profile)
-                .frame(minWidth: 800, minHeight: 600)
         }
         .sheet(isPresented: $showingAssignmentEditor) {
             ConfigurationAssignmentView(profile: profile)
@@ -77,17 +59,6 @@ struct ConfigurationDetailView: View {
         .sheet(isPresented: $showingValidation) {
             ProfileValidationView(profile: profile)
                 .frame(minWidth: 700, minHeight: 600)
-        }
-        .alert("Delete Profile", isPresented: $showingDeleteConfirmation) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                Task {
-                    await viewModel.deleteProfile(profile)
-                    dismiss()
-                }
-            }
-        } message: {
-            Text("Are you sure you want to delete '\(profile.displayName)'? This action cannot be undone.")
         }
     }
 
@@ -284,13 +255,6 @@ struct ConfigurationDetailView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-
-            Button(role: .destructive, action: { showingDeleteConfirmation = true }) {
-                Label("Delete Profile", systemImage: "trash")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .foregroundColor(.red)
         }
         .padding()
     }
@@ -352,56 +316,5 @@ struct AssignmentRow: View {
             Spacer()
         }
         .padding(.vertical, 4)
-    }
-}
-
-struct EditProfileSheet: View {
-    let profile: ConfigurationProfile
-    @Binding var displayName: String
-    @Binding var description: String
-    let onSave: () -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationView {
-            Form {
-                Section("Profile Name") {
-                    TextField("Display Name", text: $displayName)
-                        .textFieldStyle(.roundedBorder)
-                }
-
-                Section("Description") {
-                    TextEditor(text: $description)
-                        .frame(minHeight: 100)
-                }
-
-                Section("Information") {
-                    LabeledContent("Platform", value: profile.platformType.displayName)
-                    LabeledContent("Type", value: profile.profileType.displayName)
-                    if let templateName = profile.templateDisplayName {
-                        LabeledContent("Template", value: templateName)
-                    }
-                }
-            }
-            .navigationTitle("Edit Profile")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        onSave()
-                        dismiss()
-                    }
-                    .disabled(displayName.isEmpty)
-                }
-            }
-        }
     }
 }

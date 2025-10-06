@@ -743,6 +743,41 @@ extension BatchResponseBody: Sendable where T: Sendable {}
 
 // MARK: - Error Types
 
+/// Categorizes errors for better UI presentation and recovery guidance
+enum GraphAPIErrorCategory {
+    case permission      // Missing Graph API scopes or insufficient permissions
+    case conflict        // Duplicate or conflicting operations
+    case validation      // Invalid request data or configuration
+    case rateLimit       // Microsoft Graph throttling
+    case network         // Connectivity or infrastructure issues
+    case authentication  // Auth token expired or invalid
+    case unknown         // Unexpected or unclassified errors
+
+    var displayName: String {
+        switch self {
+        case .permission: return "Permission Error"
+        case .conflict: return "Conflict"
+        case .validation: return "Validation Error"
+        case .rateLimit: return "Rate Limited"
+        case .network: return "Network Error"
+        case .authentication: return "Authentication Error"
+        case .unknown: return "Unknown Error"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .permission: return "lock.fill"
+        case .conflict: return "exclamationmark.triangle.fill"
+        case .validation: return "exclamationmark.circle.fill"
+        case .rateLimit: return "clock.fill"
+        case .network: return "wifi.slash"
+        case .authentication: return "person.crop.circle.badge.xmark"
+        case .unknown: return "questionmark.circle.fill"
+        }
+    }
+}
+
 enum GraphAPIError: LocalizedError {
     case invalidURL
     case invalidResponse
@@ -780,6 +815,134 @@ enum GraphAPIError: LocalizedError {
             return authError.localizedDescription
         case .encodingFailed(let error):
             return "Failed to encode request body: \(error.localizedDescription)"
+        }
+    }
+
+    /// Categorize the error for better UI presentation
+    var category: GraphAPIErrorCategory {
+        switch self {
+        case .unauthorized, .authenticationFailed:
+            return .authentication
+        case .forbidden:
+            return .permission
+        case .rateLimited:
+            return .rateLimit
+        case .networkError:
+            return .network
+        case .encodingFailed, .invalidURL, .invalidResponse:
+            return .validation
+        case .notFound:
+            return .unknown
+        case .serverError(_, let code):
+            // Categorize based on Graph API error codes
+            if code.contains("Authorization") || code.contains("Forbidden") {
+                return .permission
+            } else if code.contains("Conflict") || code.contains("Duplicate") {
+                return .conflict
+            } else if code.contains("BadRequest") || code.contains("Invalid") {
+                return .validation
+            }
+            return .unknown
+        case .httpError(let statusCode):
+            switch statusCode {
+            case 400...499:
+                return .validation
+            case 500...599:
+                return .unknown
+            default:
+                return .unknown
+            }
+        }
+    }
+
+    /// User-friendly recovery suggestion based on error type
+    var recoverySuggestion: String? {
+        switch self {
+        case .unauthorized, .authenticationFailed:
+            return "Sign out and sign in again with a valid account."
+
+        case .forbidden:
+            return "Contact your administrator to request the necessary permissions:\n\n• DeviceManagementApps.ReadWrite.All\n• DeviceManagementManagedDevices.ReadWrite.All\n• Group.Read.All"
+
+        case .rateLimited(let retryAfter):
+            if let retryAfter = retryAfter {
+                return "Microsoft Graph is throttling requests. The app will automatically retry after \(retryAfter) seconds."
+            }
+            return "Microsoft Graph is throttling requests. The app will automatically retry with exponential backoff."
+
+        case .networkError:
+            return "Check your internet connection and try again."
+
+        case .notFound:
+            return "The resource may have been deleted or moved. Try refreshing the data."
+
+        case .serverError(let message, let code):
+            if code.contains("Conflict") {
+                return "This assignment already exists. No changes were made."
+            } else if code.contains("BadRequest") {
+                return "The request contains invalid data. Please check your configuration and try again."
+            }
+            return "Microsoft Graph returned an error: \(message)\n\nIf this persists, contact support with error code: \(code)"
+
+        case .encodingFailed:
+            return "There was a problem preparing the request. Please try again or contact support if this persists."
+
+        case .invalidURL, .invalidResponse:
+            return "There was a problem communicating with Microsoft Graph. Please try again."
+
+        case .httpError(let statusCode):
+            switch statusCode {
+            case 400:
+                return "The request was invalid. Please check your configuration and try again."
+            case 409:
+                return "This operation conflicts with existing data. The assignment may already exist."
+            case 500...599:
+                return "Microsoft Graph is experiencing issues. Please try again later."
+            default:
+                return "An unexpected error occurred (HTTP \(statusCode)). Please try again or contact support."
+            }
+        }
+    }
+
+    /// Required Graph API permissions for permission-related errors
+    var requiredPermissions: [String]? {
+        switch self {
+        case .forbidden:
+            // Return common Intune app management permissions
+            return [
+                "DeviceManagementApps.ReadWrite.All",
+                "DeviceManagementManagedDevices.ReadWrite.All",
+                "Group.Read.All",
+                "Directory.Read.All"
+            ]
+        default:
+            return nil
+        }
+    }
+
+    /// Documentation link for this error type
+    var helpURL: String? {
+        switch self {
+        case .rateLimited:
+            return "https://learn.microsoft.com/en-us/graph/throttling"
+        case .forbidden, .unauthorized:
+            return "https://learn.microsoft.com/en-us/graph/permissions-reference"
+        case .serverError:
+            return "https://learn.microsoft.com/en-us/graph/errors"
+        default:
+            return nil
+        }
+    }
+
+    /// Whether this error can be automatically retried
+    var isRetriable: Bool {
+        switch self {
+        case .rateLimited, .networkError:
+            return true
+        case .httpError(let code):
+            return code >= 500
+        default:
+            return false
         }
     }
 }

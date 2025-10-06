@@ -7,6 +7,10 @@ fileprivate struct MembersResponse: Decodable, Sendable {
     let value: [GroupMember]
 }
 
+fileprivate struct OwnersResponse: Decodable, Sendable {
+    let value: [GroupOwner]
+}
+
 fileprivate struct AddMemberBody: Encodable, Sendable {
     let odataId: String
 
@@ -77,10 +81,6 @@ final class GroupService: ObservableObject {
 
             Logger.shared.info("Filtered to \(filteredGroups.count) assignable groups", category: .data)
 
-            // Fetch member counts for each group asynchronously
-            Logger.shared.info("Fetching member counts for groups...", category: .data)
-            await fetchMemberCounts(for: filteredGroups)
-
             // Update the data store first to maintain context consistency
             dataStore.replaceGroups(with: filteredGroups)
 
@@ -91,6 +91,10 @@ final class GroupService: ObservableObject {
 
             cacheManager.updateMetadata(for: .groups, recordCount: filteredGroups.count)
             Logger.shared.info("Stored \(filteredGroups.count) groups in cache", category: .data)
+
+            // Fetch member counts for each group asynchronously AFTER updating self.groups
+            Logger.shared.info("Fetching member counts for groups...", category: .data)
+            await fetchMemberCounts(for: self.groups)
 
             return filteredGroups
         } catch {
@@ -149,14 +153,47 @@ final class GroupService: ObservableObject {
 
     func fetchGroupMembers(groupId: String) async throws -> [GroupMember] {
         let endpoint = "/groups/\(groupId)/members"
+        // Request fields for all member types: users, devices, groups, and service principals
         let parameters = [
-            "$select": "id,displayName,userPrincipalName,mail",
+            "$select": "id,displayName,userPrincipalName,mail,deviceId,operatingSystem,operatingSystemVersion,accountEnabled,groupTypes,securityEnabled",
             "$count": "true"
         ]
         let headers = ["ConsistencyLevel": "eventual"]
 
         let response: MembersResponse = try await apiClient.getModel(endpoint, parameters: parameters, headers: headers)
         return response.value
+    }
+
+    // MARK: - Group Owners
+
+    func fetchGroupOwners(groupId: String) async throws -> [GroupOwner] {
+        let endpoint = "/groups/\(groupId)/owners"
+        let parameters = [
+            "$select": "id,displayName,userPrincipalName,mail"
+        ]
+        let headers = ["ConsistencyLevel": "eventual"]
+
+        let response: OwnersResponse = try await apiClient.getModel(endpoint, parameters: parameters, headers: headers)
+        return response.value
+    }
+
+    func fetchOwnersForGroups(_ groups: [DeviceGroup]) async {
+        Logger.shared.info("Fetching owners for \(groups.count) groups", category: .data)
+
+        for group in groups {
+            do {
+                let owners = try await fetchGroupOwners(groupId: group.id)
+                if let index = self.groups.firstIndex(where: { $0.id == group.id }) {
+                    self.groups[index].owners = owners
+                }
+                Logger.shared.debug("Fetched \(owners.count) owners for group: \(group.displayName)", category: .data)
+            } catch {
+                Logger.shared.error("Failed to fetch owners for group \(group.id): \(error.localizedDescription)", category: .data)
+                // Continue processing other groups instead of failing completely
+            }
+        }
+
+        Logger.shared.info("Completed fetching owners for groups", category: .data)
     }
 
     func addMemberToGroup(groupId: String, memberId: String) async throws {

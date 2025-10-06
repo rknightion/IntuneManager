@@ -323,6 +323,174 @@ struct MacOSDmgSettingsSection: View {
     }
 }
 
+// MARK: - Android Managed Store Settings Section
+struct AndroidSettingsSection: View {
+    @Binding var settings: AndroidManagedStoreAppAssignmentSettings
+    let onShowHelp: (String, String, String?) -> Void
+    @State private var hoveredSetting: String?
+    @State private var trackIdInput: String = ""
+    @State private var showingTrackInput: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Android App Settings", systemImage: "smartphone")
+                .font(.headline)
+
+            // Auto Update Mode
+            SettingRow(
+                title: "App update priority",
+                description: AssignmentSettingDescription.androidDescriptions["autoUpdateMode"]?.description ?? "",
+                hoveredSetting: $hoveredSetting,
+                settingKey: "autoUpdateMode",
+                onShowHelp: onShowHelp
+            ) {
+                Picker("", selection: $settings.autoUpdateMode) {
+                    ForEach(AndroidManagedStoreAppAssignmentSettings.AutoUpdateMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+
+            // Show description for selected update mode
+            if settings.autoUpdateMode != .default {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "info.circle")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    Text(settings.autoUpdateMode.description)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(8)
+                .background(Color.blue.opacity(0.05))
+                .cornerRadius(6)
+            }
+
+            Divider()
+
+            // App Tracks
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label("App Version Tracks", systemImage: "arrow.triangle.branch")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+
+                    Button(action: {
+                        let description = AssignmentSettingDescription.androidDescriptions["androidManagedStoreAppTrackIds"]
+                        if let desc = description {
+                            onShowHelp(desc.title, desc.description, desc.helpUrl)
+                        }
+                    }) {
+                        Image(systemName: "questionmark.circle")
+                            .font(.caption)
+                            .foregroundColor(.accentColor)
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(hoveredSetting == "androidManagedStoreAppTrackIds" ? 1 : 0.3)
+                    .help("View documentation")
+
+                    Spacer()
+                }
+                .onHover { hovering in
+                    if hovering {
+                        hoveredSetting = "androidManagedStoreAppTrackIds"
+                    } else if hoveredSetting == "androidManagedStoreAppTrackIds" {
+                        hoveredSetting = nil
+                    }
+                }
+
+                Text("Enable specific app tracks for staged rollouts and beta testing")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                // Track chips
+                if let tracks = settings.androidManagedStoreAppTrackIds, !tracks.isEmpty {
+                    FlowLayout(spacing: 8) {
+                        ForEach(tracks, id: \.self) { track in
+                            HStack(spacing: 4) {
+                                Text(track)
+                                    .font(.caption)
+                                Button(action: {
+                                    settings.androidManagedStoreAppTrackIds?.removeAll { $0 == track }
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.caption2)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.green.opacity(0.15))
+                            .foregroundColor(.green)
+                            .cornerRadius(12)
+                        }
+                    }
+                } else {
+                    Text("No tracks selected (uses default production track)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .italic()
+                }
+
+                // Add track button
+                Button(action: {
+                    showingTrackInput = true
+                }) {
+                    Label("Add Track", systemImage: "plus.circle")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .popover(isPresented: $showingTrackInput) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Add App Track")
+                            .font(.headline)
+
+                        Text("Common tracks: production, beta, alpha, internal")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        TextField("Track ID", text: $trackIdInput)
+                            .textFieldStyle(.roundedBorder)
+
+                        HStack {
+                            Button("Cancel") {
+                                showingTrackInput = false
+                                trackIdInput = ""
+                            }
+                            .keyboardShortcut(.escape)
+
+                            Spacer()
+
+                            Button("Add") {
+                                if !trackIdInput.isEmpty {
+                                    if settings.androidManagedStoreAppTrackIds == nil {
+                                        settings.androidManagedStoreAppTrackIds = []
+                                    }
+                                    if !settings.androidManagedStoreAppTrackIds!.contains(trackIdInput) {
+                                        settings.androidManagedStoreAppTrackIds?.append(trackIdInput)
+                                    }
+                                    trackIdInput = ""
+                                    showingTrackInput = false
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(trackIdInput.isEmpty)
+                        }
+                    }
+                    .padding()
+                    .frame(width: 300)
+                }
+            }
+            .padding(8)
+            .background(hoveredSetting == "androidManagedStoreAppTrackIds" ? Color.gray.opacity(0.05) : Color.clear)
+            .cornerRadius(6)
+        }
+    }
+}
+
 // MARK: - Windows Settings Section
 struct WindowsSettingsSection: View {
     @Binding var settings: WindowsAppAssignmentSettings
@@ -474,35 +642,89 @@ struct AssignmentFiltersSection: View {
     }
 
     func getFilterMode() -> AssignmentFilterMode? {
-        return settings.iosVppSettings?.assignmentFilterMode ??
-               settings.iosLobSettings?.assignmentFilterMode ??
-               settings.macosVppSettings?.assignmentFilterMode ??
-               settings.macosDmgSettings?.assignmentFilterMode ??
-               settings.windowsSettings?.assignmentFilterMode
+        if let mode = settings.iosVppSettings?.assignmentFilterMode {
+            return mode
+        }
+        if let mode = settings.iosLobSettings?.assignmentFilterMode {
+            return mode
+        }
+        if let mode = settings.macosVppSettings?.assignmentFilterMode {
+            return mode
+        }
+        if let mode = settings.macosDmgSettings?.assignmentFilterMode {
+            return mode
+        }
+        if let mode = settings.windowsSettings?.assignmentFilterMode {
+            return mode
+        }
+        if let mode = settings.androidSettings?.assignmentFilterMode {
+            return mode
+        }
+        return nil
     }
 
     func setFilterMode(_ mode: AssignmentFilterMode) {
-        settings.iosVppSettings?.assignmentFilterMode = mode
-        settings.iosLobSettings?.assignmentFilterMode = mode
-        settings.macosVppSettings?.assignmentFilterMode = mode
-        settings.macosDmgSettings?.assignmentFilterMode = mode
-        settings.windowsSettings?.assignmentFilterMode = mode
+        if settings.iosVppSettings != nil {
+            settings.iosVppSettings?.assignmentFilterMode = mode
+        }
+        if settings.iosLobSettings != nil {
+            settings.iosLobSettings?.assignmentFilterMode = mode
+        }
+        if settings.macosVppSettings != nil {
+            settings.macosVppSettings?.assignmentFilterMode = mode
+        }
+        if settings.macosDmgSettings != nil {
+            settings.macosDmgSettings?.assignmentFilterMode = mode
+        }
+        if settings.windowsSettings != nil {
+            settings.windowsSettings?.assignmentFilterMode = mode
+        }
+        if settings.androidSettings != nil {
+            settings.androidSettings?.assignmentFilterMode = mode
+        }
     }
 
     func getFilterId() -> String? {
-        return settings.iosVppSettings?.assignmentFilterId ??
-               settings.iosLobSettings?.assignmentFilterId ??
-               settings.macosVppSettings?.assignmentFilterId ??
-               settings.macosDmgSettings?.assignmentFilterId ??
-               settings.windowsSettings?.assignmentFilterId
+        if let id = settings.iosVppSettings?.assignmentFilterId {
+            return id
+        }
+        if let id = settings.iosLobSettings?.assignmentFilterId {
+            return id
+        }
+        if let id = settings.macosVppSettings?.assignmentFilterId {
+            return id
+        }
+        if let id = settings.macosDmgSettings?.assignmentFilterId {
+            return id
+        }
+        if let id = settings.windowsSettings?.assignmentFilterId {
+            return id
+        }
+        if let id = settings.androidSettings?.assignmentFilterId {
+            return id
+        }
+        return nil
     }
 
     func clearFilter() {
-        settings.iosVppSettings?.assignmentFilterId = nil
-        settings.iosLobSettings?.assignmentFilterId = nil
-        settings.macosVppSettings?.assignmentFilterId = nil
-        settings.macosDmgSettings?.assignmentFilterId = nil
-        settings.windowsSettings?.assignmentFilterId = nil
+        if settings.iosVppSettings != nil {
+            settings.iosVppSettings?.assignmentFilterId = nil
+        }
+        if settings.iosLobSettings != nil {
+            settings.iosLobSettings?.assignmentFilterId = nil
+        }
+        if settings.macosVppSettings != nil {
+            settings.macosVppSettings?.assignmentFilterId = nil
+        }
+        if settings.macosDmgSettings != nil {
+            settings.macosDmgSettings?.assignmentFilterId = nil
+        }
+        if settings.windowsSettings != nil {
+            settings.windowsSettings?.assignmentFilterId = nil
+        }
+        if settings.androidSettings != nil {
+            settings.androidSettings?.assignmentFilterId = nil
+        }
     }
 }
 

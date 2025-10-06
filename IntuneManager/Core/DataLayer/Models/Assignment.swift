@@ -15,14 +15,27 @@ final class Assignment: Identifiable, Codable {
     var modifiedDate: Date
     var completedDate: Date?
     var errorMessage: String?
+    var errorCategory: String?  // Stores error category for remediation
+    var failureTimestamp: Date?  // When the assignment last failed
     var retryCount: Int
     var batchId: String?
     var priority: AssignmentPriority
 
     // Additional metadata
     var settings: AssignmentSettings?
-    var graphSettings: AppAssignmentSettings?  // Full settings for Graph API
+    var graphSettingsData: Data?  // Encoded AppAssignmentSettings for Graph API
     var filter: AssignmentFilter?
+
+    // Computed property to access graphSettings
+    var graphSettings: AppAssignmentSettings? {
+        get {
+            guard let data = graphSettingsData else { return nil }
+            return try? JSONDecoder().decode(AppAssignmentSettings.self, from: data)
+        }
+        set {
+            graphSettingsData = try? JSONEncoder().encode(newValue)
+        }
+    }
     var scheduledDate: Date?
     var createdBy: String?
     var modifiedBy: String?
@@ -213,10 +226,13 @@ final class Assignment: Identifiable, Codable {
         case modifiedDate
         case completedDate
         case errorMessage
+        case errorCategory
+        case failureTimestamp
         case retryCount
         case batchId
         case priority
         case settings
+        case graphSettingsData
         case filter
         case scheduledDate
         case createdBy
@@ -237,10 +253,13 @@ final class Assignment: Identifiable, Codable {
         modifiedDate = try container.decode(Date.self, forKey: .modifiedDate)
         completedDate = try container.decodeIfPresent(Date.self, forKey: .completedDate)
         errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage)
+        errorCategory = try container.decodeIfPresent(String.self, forKey: .errorCategory)
+        failureTimestamp = try container.decodeIfPresent(Date.self, forKey: .failureTimestamp)
         retryCount = try container.decode(Int.self, forKey: .retryCount)
         batchId = try container.decodeIfPresent(String.self, forKey: .batchId)
         priority = try container.decode(AssignmentPriority.self, forKey: .priority)
         settings = try container.decodeIfPresent(AssignmentSettings.self, forKey: .settings)
+        graphSettingsData = try container.decodeIfPresent(Data.self, forKey: .graphSettingsData)
         filter = try container.decodeIfPresent(AssignmentFilter.self, forKey: .filter)
         scheduledDate = try container.decodeIfPresent(Date.self, forKey: .scheduledDate)
         createdBy = try container.decodeIfPresent(String.self, forKey: .createdBy)
@@ -261,10 +280,13 @@ final class Assignment: Identifiable, Codable {
         try container.encode(modifiedDate, forKey: .modifiedDate)
         try container.encodeIfPresent(completedDate, forKey: .completedDate)
         try container.encodeIfPresent(errorMessage, forKey: .errorMessage)
+        try container.encodeIfPresent(errorCategory, forKey: .errorCategory)
+        try container.encodeIfPresent(failureTimestamp, forKey: .failureTimestamp)
         try container.encode(retryCount, forKey: .retryCount)
         try container.encodeIfPresent(batchId, forKey: .batchId)
         try container.encode(priority, forKey: .priority)
         try container.encodeIfPresent(settings, forKey: .settings)
+        try container.encodeIfPresent(graphSettingsData, forKey: .graphSettingsData)
         try container.encodeIfPresent(filter, forKey: .filter)
         try container.encodeIfPresent(scheduledDate, forKey: .scheduledDate)
         try container.encodeIfPresent(createdBy, forKey: .createdBy)

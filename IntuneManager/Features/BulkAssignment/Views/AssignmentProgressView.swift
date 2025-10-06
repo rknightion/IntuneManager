@@ -50,6 +50,11 @@ struct AssignmentProgressView: View {
                     .scaleEffect(1.5)
             }
 
+            // Per-app progress section when processing
+            if viewModel.isProcessing && !AssignmentService.shared.perAppProgress.isEmpty {
+                PerAppProgressSection(perAppProgress: AssignmentService.shared.perAppProgress)
+            }
+
             // Summary section when processing is complete (but not during verification)
             if !viewModel.isProcessing && !(viewModel.progress?.isVerifying ?? false) && (viewModel.completedAssignments.count > 0 || viewModel.failedAssignments.count > 0) {
                 Divider()
@@ -93,6 +98,11 @@ struct AssignmentProgressView: View {
                 .cornerRadius(8)
             }
 
+            // Assignment Log View
+            if viewModel.isProcessing || !AssignmentService.shared.assignmentLogs.isEmpty {
+                AssignmentLogView(logs: AssignmentService.shared.assignmentLogs)
+            }
+
             // Show buttons only when not processing AND not verifying
             let isActive = viewModel.isProcessing || (viewModel.progress?.isVerifying ?? false)
 
@@ -105,12 +115,22 @@ struct AssignmentProgressView: View {
                             }
                             .buttonStyle(.bordered)
 
-                            Button("Retry Failed") {
-                                Task {
-                                    await viewModel.retryFailedAssignments()
+                            Menu {
+                                Button("Retry Transient Errors Only") {
+                                    Task {
+                                        await viewModel.retryFailedAssignments(selective: true)
+                                    }
                                 }
+                                Button("Retry All Failed") {
+                                    Task {
+                                        await viewModel.retryFailedAssignments(selective: false)
+                                    }
+                                }
+                            } label: {
+                                Label("Retry Failed", systemImage: "arrow.clockwise")
                             }
                             .buttonStyle(.borderedProminent)
+                            .help("Retry failed assignments with exponential backoff")
                         }
                     }
 
@@ -140,6 +160,7 @@ struct AssignmentProgressView: View {
 struct AssignmentErrorDetailsView: View {
     let failedAssignments: [Assignment]
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
     @State private var searchText = ""
 
     var filteredAssignments: [Assignment] {
@@ -151,6 +172,42 @@ struct AssignmentErrorDetailsView: View {
                 $0.groupName.localizedCaseInsensitiveContains(searchText) ||
                 ($0.errorMessage ?? "").localizedCaseInsensitiveContains(searchText)
             }
+        }
+    }
+
+    // Helper to get remediation info based on error category
+    private func getRemediationInfo(for category: String?) -> (suggestion: String, helpURL: String?, canRetry: Bool) {
+        switch category {
+        case "permission":
+            return (
+                "Contact your Azure AD administrator to grant the required Microsoft Graph permissions:\n• DeviceManagementApps.ReadWrite.All\n• Group.Read.All",
+                "https://learn.microsoft.com/en-us/graph/permissions-reference",
+                false
+            )
+        case "validation":
+            return (
+                "Review the assignment configuration and ensure all required fields are valid. Verify that the app and group IDs exist in your tenant.",
+                "https://learn.microsoft.com/en-us/mem/intune/apps/apps-deploy",
+                false
+            )
+        case "rateLimit":
+            return (
+                "Microsoft Graph is rate limiting requests. Wait a few minutes and retry the operation. Consider reducing batch size for large operations.",
+                "https://learn.microsoft.com/en-us/graph/throttling",
+                true
+            )
+        case "network":
+            return (
+                "Network or server error occurred. Check your internet connection and verify Microsoft Graph service status. This error is usually temporary.",
+                "https://status.azure.com/",
+                true
+            )
+        default:
+            return (
+                "An unexpected error occurred. Review the error message for details. Try retrying the assignment or contact support if the issue persists.",
+                "https://learn.microsoft.com/en-us/mem/intune/fundamentals/get-support",
+                true
+            )
         }
     }
 
@@ -194,6 +251,29 @@ struct AssignmentErrorDetailsView: View {
                 .padding(.horizontal)
             }
 
+            // Remediation summary by category
+            if !filteredAssignments.isEmpty {
+                let errorsByCategory = Dictionary(grouping: filteredAssignments) { $0.errorCategory ?? "unknown" }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(errorsByCategory.keys.sorted()), id: \.self) { category in
+                            RemediationCard(
+                                category: category,
+                                count: errorsByCategory[category]?.count ?? 0,
+                                remediation: getRemediationInfo(for: category),
+                                onFixPermissions: {
+                                    // Navigate to Settings tab
+                                    appState.selectedTab = .settings
+                                    dismiss()
+                                }
+                            )
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+                .padding(.vertical, 8)
+            }
+
             // Detailed list
             List(filteredAssignments) { assignment in
                 VStack(alignment: .leading, spacing: 4) {
@@ -231,5 +311,336 @@ struct AssignmentErrorDetailsView: View {
         }
         .frame(width: 600, height: 500)
         .platformGlassBackground()
+    }
+}
+
+// MARK: - Assignment Log View
+struct AssignmentLogView: View {
+    let logs: [AssignmentService.AssignmentLogEntry]
+    @State private var filterLevel: AssignmentService.AssignmentLogEntry.LogLevel?
+    @State private var searchText = ""
+    @State private var autoScroll = true
+
+    private var filteredLogs: [AssignmentService.AssignmentLogEntry] {
+        var filtered = logs
+
+        if let level = filterLevel {
+            filtered = filtered.filter { $0.level == level }
+        }
+
+        if !searchText.isEmpty {
+            filtered = filtered.filter { entry in
+                entry.message.localizedCaseInsensitiveContains(searchText) ||
+                entry.appName?.localizedCaseInsensitiveContains(searchText) == true ||
+                entry.groupName?.localizedCaseInsensitiveContains(searchText) == true
+            }
+        }
+
+        return filtered
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Header with filters
+            HStack {
+                Text("Activity Log")
+                    .font(.headline)
+
+                Spacer()
+
+                // Level filter
+                Menu {
+                    Button("All") {
+                        filterLevel = nil
+                    }
+                    Divider()
+                    ForEach([AssignmentService.AssignmentLogEntry.LogLevel.info, .success, .warning, .error], id: \.self) { level in
+                        Button(action: {
+                            filterLevel = level
+                        }) {
+                            HStack {
+                                if filterLevel == level {
+                                    Image(systemName: "checkmark")
+                                }
+                                Image(systemName: level.icon)
+                                Text(level.rawValue)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                            .font(.caption)
+                        Text(filterLevel?.rawValue ?? "All")
+                            .font(.caption)
+                    }
+                }
+                .buttonStyle(.bordered)
+
+                // Auto-scroll toggle
+                Toggle(isOn: $autoScroll) {
+                    Image(systemName: "arrow.down.to.line")
+                        .font(.caption)
+                }
+                .toggleStyle(.button)
+                .help("Auto-scroll to latest")
+            }
+
+            // Log entries
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        ForEach(filteredLogs) { entry in
+                            LogEntryRow(entry: entry)
+                                .id(entry.id)
+                        }
+                    }
+                    .padding(8)
+                }
+                .frame(height: 200)
+                .background(Color.gray.opacity(0.05))
+                .cornerRadius(8)
+                .onChange(of: logs.count) { _ in
+                    if autoScroll, let lastLog = filteredLogs.last {
+                        withAnimation {
+                            proxy.scrollTo(lastLog.id, anchor: .bottom)
+                        }
+                    }
+                }
+            }
+
+            // Search field
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                    .font(.caption)
+                TextField("Search logs...", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(.caption)
+                if !searchText.isEmpty {
+                    Button(action: { searchText = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(6)
+            .background(Color.gray.opacity(0.1))
+            .cornerRadius(6)
+        }
+    }
+}
+
+// MARK: - Log Entry Row
+struct LogEntryRow: View {
+    let entry: AssignmentService.AssignmentLogEntry
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            // Timestamp
+            Text(entry.timestamp.formatted(date: .omitted, time: .standard))
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .frame(width: 70, alignment: .leading)
+
+            // Level icon
+            Image(systemName: entry.level.icon)
+                .foregroundColor(entry.level.color)
+                .font(.caption)
+                .frame(width: 16)
+
+            // Message
+            VStack(alignment: .leading, spacing: 2) {
+                if let appName = entry.appName, let groupName = entry.groupName {
+                    Text("\(appName) → \(groupName)")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                }
+                Text(entry.message)
+                    .font(.caption)
+                    .foregroundColor(.primary)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Per-App Progress Section
+struct PerAppProgressSection: View {
+    let perAppProgress: [String: AssignmentService.AppProgress]
+
+    private var sortedApps: [AssignmentService.AppProgress] {
+        perAppProgress.values.sorted { $0.appName < $1.appName }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Per-Application Progress")
+                .font(.headline)
+
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(sortedApps) { appProgress in
+                        PerAppProgressRow(appProgress: appProgress)
+                    }
+                }
+            }
+            .frame(maxHeight: 200)
+            .background(Color.gray.opacity(0.05))
+            .cornerRadius(8)
+        }
+    }
+}
+
+// MARK: - Per-App Progress Row
+struct PerAppProgressRow: View {
+    let appProgress: AssignmentService.AppProgress
+
+    private var statusColor: Color {
+        switch appProgress.status {
+        case .pending: return .gray
+        case .processing: return .blue
+        case .completed: return appProgress.groupsFailed == 0 ? .green : .orange
+        case .failed: return .red
+        }
+    }
+
+    private var statusIcon: String {
+        switch appProgress.status {
+        case .pending: return "circle"
+        case .processing: return "arrow.triangle.2.circlepath"
+        case .completed: return appProgress.groupsFailed == 0 ? "checkmark.circle.fill" : "exclamationmark.circle.fill"
+        case .failed: return "xmark.circle.fill"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                // Status icon
+                Image(systemName: statusIcon)
+                    .foregroundColor(statusColor)
+                    .font(.caption)
+
+                // App name
+                Text(appProgress.appName)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+
+                Spacer()
+
+                // Progress stats
+                HStack(spacing: 4) {
+                    if appProgress.groupsCompleted > 0 {
+                        Text("\(appProgress.groupsCompleted)")
+                            .foregroundColor(.green)
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+                    if appProgress.groupsFailed > 0 {
+                        Text("\(appProgress.groupsFailed)")
+                            .foregroundColor(.red)
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+                    Text("/ \(appProgress.groupsTotal)")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                }
+            }
+
+            // Progress bar
+            ProgressView(value: appProgress.percentComplete, total: 100)
+                .progressViewStyle(.linear)
+                .frame(height: 6)
+                .tint(statusColor)
+        }
+        .padding(8)
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(6)
+    }
+}
+
+// MARK: - Remediation Card
+struct RemediationCard: View {
+    let category: String
+    let count: Int
+    let remediation: (suggestion: String, helpURL: String?, canRetry: Bool)
+    let onFixPermissions: () -> Void
+
+    private var categoryInfo: (name: String, icon: String, color: Color) {
+        switch category {
+        case "permission":
+            return ("Permission", "lock.shield", .red)
+        case "validation":
+            return ("Validation", "exclamationmark.triangle", .orange)
+        case "rateLimit":
+            return ("Rate Limit", "clock", .yellow)
+        case "network":
+            return ("Network", "wifi.slash", .blue)
+        default:
+            return ("Unknown", "questionmark.circle", .gray)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Header
+            HStack {
+                Image(systemName: categoryInfo.icon)
+                    .foregroundColor(categoryInfo.color)
+                VStack(alignment: .leading) {
+                    Text(categoryInfo.name)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    Text("\(count) error\(count == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Divider()
+
+            // Remediation suggestion
+            Text("What to do next:")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundColor(.secondary)
+
+            Text(remediation.suggestion)
+                .font(.caption)
+                .foregroundColor(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // Action buttons
+            HStack(spacing: 8) {
+                if category == "permission" {
+                    Button(action: onFixPermissions) {
+                        Label("Fix Permissions", systemImage: "gear")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+
+                if let helpURL = remediation.helpURL, let url = URL(string: helpURL) {
+                    Link(destination: url) {
+                        Label("Help", systemImage: "questionmark.circle")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+        .padding()
+        .frame(width: 280)
+        .background(categoryInfo.color.opacity(0.1))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(categoryInfo.color.opacity(0.3), lineWidth: 1)
+        )
     }
 }

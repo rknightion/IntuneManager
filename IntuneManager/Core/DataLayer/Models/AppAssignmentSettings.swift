@@ -314,6 +314,87 @@ struct MacOSDmgAppAssignmentSettings: AppAssignmentSettingsProtocol {
     }
 }
 
+// MARK: - Android Managed Store App Assignment Settings
+struct AndroidManagedStoreAppAssignmentSettings: AppAssignmentSettingsProtocol {
+    var assignmentFilterId: String?
+    var assignmentFilterMode: AssignmentFilterMode?
+
+    // Android specific settings - following Microsoft Graph API schema
+    var autoUpdateMode: AutoUpdateMode = .default
+    var androidManagedStoreAppTrackIds: [String]?
+
+    enum AutoUpdateMode: String, Codable, CaseIterable {
+        case `default`
+        case postponed
+        case priority
+
+        var displayName: String {
+            switch self {
+            case .default: return "Default"
+            case .postponed: return "Postponed (up to 90 days)"
+            case .priority: return "High Priority"
+            }
+        }
+
+        var description: String {
+            switch self {
+            case .default:
+                return "Updates when device is connected to Wi-Fi, charging, not actively used, and app is not in foreground"
+            case .postponed:
+                return "Updates are postponed for a maximum of 90 days after the app becomes out of date"
+            case .priority:
+                return "App is updated as soon as possible. If device is online, updates within minutes"
+            }
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case odataType = "@odata.type"
+        case assignmentFilterId = "deviceAndAppManagementAssignmentFilterId"
+        case assignmentFilterMode = "deviceAndAppManagementAssignmentFilterType"
+        case autoUpdateMode
+        case androidManagedStoreAppTrackIds
+    }
+
+    var odataType: String {
+        return "#microsoft.graph.androidManagedStoreAppAssignmentSettings"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(odataType, forKey: .odataType)
+
+        // Auto update mode (always include as it has a default)
+        try container.encode(autoUpdateMode, forKey: .autoUpdateMode)
+
+        // Track IDs - only if specified
+        if let trackIds = androidManagedStoreAppTrackIds, !trackIds.isEmpty {
+            try container.encode(trackIds, forKey: .androidManagedStoreAppTrackIds)
+        }
+
+        // Assignment filters only if set
+        if let filterId = assignmentFilterId {
+            try container.encode(filterId, forKey: .assignmentFilterId)
+            if let filterMode = assignmentFilterMode {
+                try container.encode(filterMode.rawValue, forKey: .assignmentFilterMode)
+            }
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Skip @odata.type during decode
+        self.assignmentFilterId = try container.decodeIfPresent(String.self, forKey: .assignmentFilterId)
+        self.assignmentFilterMode = try container.decodeIfPresent(AssignmentFilterMode.self, forKey: .assignmentFilterMode)
+        self.autoUpdateMode = try container.decodeIfPresent(AutoUpdateMode.self, forKey: .autoUpdateMode) ?? .default
+        self.androidManagedStoreAppTrackIds = try container.decodeIfPresent([String].self, forKey: .androidManagedStoreAppTrackIds)
+    }
+
+    init() {
+        // Keep default values from property declarations
+    }
+}
+
 // MARK: - Windows App Assignment Settings
 struct WindowsAppAssignmentSettings: AppAssignmentSettingsProtocol {
     var assignmentFilterId: String?
@@ -420,6 +501,7 @@ struct AppAssignmentSettings: Codable {
     var macosVppSettings: MacOSVppAppAssignmentSettings?
     var macosDmgSettings: MacOSDmgAppAssignmentSettings?
     var windowsSettings: WindowsAppAssignmentSettings?
+    var androidSettings: AndroidManagedStoreAppAssignmentSettings?
 
     // Convenience initializers for each app type
     static func iosVpp(intent: Assignment.AssignmentIntent) -> AppAssignmentSettings {
@@ -452,6 +534,12 @@ struct AppAssignmentSettings: Codable {
         return settings
     }
 
+    static func android(intent: Assignment.AssignmentIntent) -> AppAssignmentSettings {
+        var settings = AppAssignmentSettings(intent: intent)
+        settings.androidSettings = AndroidManagedStoreAppAssignmentSettings()
+        return settings
+    }
+
     // Get the appropriate settings for the Graph API based on app type
     func getGraphSettings(for appType: Application.AppType) -> Any? {
         switch appType {
@@ -465,6 +553,8 @@ struct AppAssignmentSettings: Codable {
             return macosDmgSettings
         case .windowsWebApp, .win32LobApp, .winGetApp:
             return windowsSettings
+        case .androidStoreApp, .androidManagedStoreApp:
+            return androidSettings
         default:
             return nil
         }
@@ -520,6 +610,8 @@ struct GroupAssignmentSettings: Identifiable, Codable {
             self.settings = .macosDmg(intent: intent)
         case .windowsWebApp, .win32LobApp, .winGetApp:
             self.settings = .windows(intent: intent)
+        case .androidStoreApp, .androidManagedStoreApp:
+            self.settings = .android(intent: intent)
         default:
             self.settings = AppAssignmentSettings(intent: intent)
         }
@@ -608,6 +700,21 @@ struct AssignmentSettingDescription {
             title: "Detection rules",
             description: "Define rules to detect if the app is already installed. You can check for file/folder existence or version information. Detection rules prevent unnecessary reinstallation and help Intune report accurate compliance status.",
             helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/apps-macos-dmg#step-3-requirements"
+        )
+    ]
+
+    static let androidDescriptions: [String: AssignmentSettingDescription] = [
+        "autoUpdateMode": AssignmentSettingDescription(
+            key: "autoUpdateMode",
+            title: "App Update Priority",
+            description: "Controls how quickly updates are applied to this Android app. Default mode balances battery life and network usage by updating during optimal conditions. Postponed mode delays updates up to 90 days for controlled rollouts. High Priority mode updates as soon as possible, ideal for security patches and critical fixes.",
+            helpUrl: "https://learn.microsoft.com/en-us/graph/api/resources/intune-shared-androidmanagedstoreautoupdatemode"
+        ),
+        "androidManagedStoreAppTrackIds": AssignmentSettingDescription(
+            key: "androidManagedStoreAppTrackIds",
+            title: "App Tracks",
+            description: "Select which app version tracks to enable for this assignment. Tracks allow staged rollouts and beta testing. Common tracks include Production (stable releases), Beta (pre-release testing), Alpha (early testing), and Internal (private testing). Multiple tracks can be enabled to provide different versions to different groups.",
+            helpUrl: "https://learn.microsoft.com/en-us/mem/intune/apps/apps-add-android-for-work"
         )
     ]
 

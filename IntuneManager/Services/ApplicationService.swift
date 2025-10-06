@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SwiftData
 
 // MARK: - Notifications
 extension Notification.Name {
@@ -253,11 +254,24 @@ final class ApplicationService: ObservableObject {
 
         Logger.shared.info("Deleted application \(appId)")
 
-        // Remove from local cache
-        // Create a new array to avoid modifying detached models
-        let remainingApps = applications.filter { $0.id != appId }
-        applications = remainingApps
-        dataStore.replaceApplications(with: remainingApps)
+        // Remove from local cache by deleting from the model context
+        // This avoids issues with detached backing data and attribute faults
+        if let modelContext = dataStore.modelContext {
+            do {
+                let descriptor = FetchDescriptor<Application>(
+                    predicate: #Predicate { $0.id == appId }
+                )
+                if let appToDelete = try modelContext.fetch(descriptor).first {
+                    modelContext.delete(appToDelete)
+                    try modelContext.save()
+                }
+            } catch {
+                Logger.shared.error("Failed to delete app from local store: \(error)")
+            }
+        }
+
+        // Update in-memory array
+        applications.removeAll { $0.id == appId }
 
         // Post notification for UI updates
         NotificationCenter.default.post(name: .applicationDeleted, object: appId)
@@ -366,14 +380,24 @@ final class ApplicationService: ObservableObject {
         }
 
         // Remove successful deletions from local cache
-        // Create a new array to avoid modifying detached models
-        let remainingApps = applications.filter { app in
-            !allSuccessful.contains(app.id)
+        // Delete from model context to avoid issues with detached backing data
+        if let modelContext = dataStore.modelContext {
+            do {
+                let descriptor = FetchDescriptor<Application>(
+                    predicate: #Predicate { allSuccessful.contains($0.id) }
+                )
+                let appsToDelete = try modelContext.fetch(descriptor)
+                for app in appsToDelete {
+                    modelContext.delete(app)
+                }
+                try modelContext.save()
+            } catch {
+                Logger.shared.error("Failed to delete apps from local store: \(error)")
+            }
         }
-        applications = remainingApps
 
-        // Replace in data store with the filtered list
-        dataStore.replaceApplications(with: remainingApps)
+        // Update in-memory array
+        applications.removeAll { app in allSuccessful.contains(app.id) }
 
         // Post notification for UI updates
         if !allSuccessful.isEmpty {

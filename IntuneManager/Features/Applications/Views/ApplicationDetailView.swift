@@ -211,19 +211,7 @@ struct ApplicationDetailView: View {
         Section("Assignments") {
             if let assignments = viewModel.application.assignments, !assignments.isEmpty {
                 ForEach(assignments) { assignment in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(assignment.target.groupName ?? assignment.target.type.displayName)
-                            .font(.subheadline)
-                        HStack(spacing: 8) {
-                            Label(assignment.intent.displayName, systemImage: assignment.intent.icon)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text(assignment.target.type.displayName)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 4)
+                    AppAssignmentRow(assignment: assignment, appType: viewModel.application.appType)
                 }
             } else if viewModel.errorMessage != nil {
                 // Only show error message if there was an actual error fetching data
@@ -382,6 +370,126 @@ private struct KeyValueRow: View {
             Text(value)
                 .multilineTextAlignment(.trailing)
         }
+    }
+}
+
+// MARK: - App Assignment Row with Settings
+struct AppAssignmentRow: View {
+    let assignment: AppAssignment
+    let appType: Application.AppType
+    @State private var isExpanded = false
+
+    var intentColor: Color {
+        switch assignment.intent {
+        case .required:
+            return .red
+        case .available, .availableWithoutEnrollment:
+            return .blue
+        case .uninstall:
+            return .orange
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Header row
+            Button(action: { isExpanded.toggle() }) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(assignment.target.groupName ?? assignment.target.type.displayName)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+
+                        HStack(spacing: 8) {
+                            // Intent badge with color
+                            Label(assignment.intent.displayName, systemImage: assignment.intent.icon)
+                                .font(.caption)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(intentColor.opacity(0.15))
+                                .foregroundColor(intentColor)
+                                .cornerRadius(4)
+
+                            Text(assignment.target.type.displayName)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+
+                            // Filter badge if present
+                            if let filterId = getFilterId(from: assignment.settings) {
+                                let filterMode = getFilterMode(from: assignment.settings)
+
+                                HStack(spacing: 4) {
+                                    Image(systemName: "line.horizontal.3.decrease.circle.fill")
+                                        .font(.caption2)
+                                    Text("Filter")
+                                        .font(.caption2)
+                                }
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background((filterMode == .exclude ? Color.red : Color.green).opacity(0.15))
+                                .foregroundColor(filterMode == .exclude ? .red : .green)
+                                .cornerRadius(4)
+                            }
+                        }
+                    }
+
+                    Spacer()
+
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+
+            // Expandable settings
+            if isExpanded {
+                Divider()
+                    .padding(.vertical, 4)
+
+                AppAssignmentSettingsDetail(settings: assignment.settings, appType: appType)
+                    .padding(.leading, 8)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    // Helper to get filter ID from settings
+    private func getFilterId(from settings: AppAssignment.AssignmentSettings?) -> String? {
+        guard let settings = settings else { return nil }
+        // AppAssignment.AssignmentSettings is a protocol/wrapper, need to check the actual type
+        // For now, return nil - this will be populated when we have real assignment data
+        return nil
+    }
+
+    private func getFilterMode(from settings: AppAssignment.AssignmentSettings?) -> AssignmentFilterMode {
+        return .include
+    }
+}
+
+// MARK: - App Assignment Settings Detail
+struct AppAssignmentSettingsDetail: View {
+    let settings: AppAssignment.AssignmentSettings?
+    let appType: Application.AppType
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Assignment Settings")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundColor(.secondary)
+
+            // Since AppAssignment.AssignmentSettings is a nested type, we'll show
+            // a placeholder for now. In the future, we can decode the actual settings
+            // from the Graph API response.
+            Text("Settings details available after assignment")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .italic()
+        }
+        .padding(8)
+        .background(Color.gray.opacity(0.05))
+        .cornerRadius(6)
     }
 }
 

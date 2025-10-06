@@ -1,7 +1,314 @@
+# IntuneManager Implementation Plan & Progress Tracker
+# Last Updated: 2025-10-06
+# Format: [STATUS] Task Description | File(s) | Notes
+# STATUS: ✅ COMPLETED | 🔄 IN_PROGRESS | 📋 PLANNED | ⛔ BLOCKED
 
-  3. Copy assignments between apps - If a user wants to replicate assignment settings from one app to another, there's no easy way to do this currently.
-  6. Batch intent selection for new assignments - When adding multiple groups, setting a default intent for all would be faster than changing each one.
-  7. Assignment conflict detection - Warning when assigning conflicting intents to the same group.
-  8. Quick actions - Common patterns like "Assign to all user groups" or "Copy from another app"
-  9. Undo/redo stack - More comprehensive undo beyond just deletion marks.
-  10. Export/import assignments - For backup or sharing configurations.
+================================================================================
+NEXT UP - PHASE 3: MEDIUM IMPACT, HIGH VALUE
+================================================================================
+After each task: build_run_macos, test macOS + iOS, verify no new warnings
+Update this file as a long term task manager
+
+## 3.1 Assignment History & Audit Trail [📋 PLANNED]
+[📋] Create AssignmentHistoryView
+  - Files: Features/Assignments/Views/AssignmentHistoryView.swift (NEW)
+  - TODO: Create new view with list of past operations
+  - TODO: Show date, user, app count, group count, status
+  - TODO: Add search/filter functionality
+  - TODO: Support pagination for large datasets
+
+[📋] Create AssignmentHistoryViewModel
+  - Files: Features/Assignments/ViewModels/AssignmentHistoryViewModel.swift (NEW)
+  - TODO: Fetch history from LocalDataStore
+  - TODO: Implement filtering logic
+  - TODO: Add export history functionality
+  - TODO: Handle refresh/pagination
+
+[📋] Add tab/sheet for history
+  - Files: IntuneManager/App/UnifiedContentView.swift
+  - TODO: Add "Assignment History" tab to AppState.Tab
+  - TODO: Wire up navigation
+  - TODO: Add toolbar button in Applications view
+
+[📋] Implement retry from history
+  - Files: Services/AssignmentService.swift
+  - TODO: Add replayAssignment(from:) method
+  - TODO: Restore settings from history record
+  - TODO: Re-validate before execution
+  - TODO: Create new history entry for retry
+
+[📋] Undo last operation
+  - Files: Services/AssignmentService.swift
+  - TODO: Implement removeAssignments() method
+  - TODO: Confirm before deletion
+  - TODO: Track undo operations in history
+  - TODO: Add keyboard shortcut (⌘Z)
+
+---
+
+## 3.2 Settings Configuration Completion [📋 PLANNED]
+[📋] VPN Configuration Picker
+  - Files: Features/BulkAssignment/Views/AppTypeSettingsSections.swift:59-80, 136-160
+  - TODO: Create VPNProfileService for fetching VPN profiles
+  - TODO: Fetch available VPN configurations from Graph
+  - TODO: Replace placeholder Menu with real profile list
+  - TODO: Show profile details on selection
+
+[📋] Assignment Filters UI
+  - Files: Features/BulkAssignment/Views/AppTypeSettingsSections.swift:462-473
+  - TODO: Create AssignmentFilterService
+  - TODO: Fetch available filters from Graph API
+  - TODO: Build filter picker sheet
+  - TODO: Show filter rules/preview
+
+[📋] macOS DMG Detection Rules Editor
+  - Files: Features/BulkAssignment/Views/AppTypeSettingsSections.swift:304-321
+  - TODO: Create DetectionRuleEditorView
+  - TODO: Support file/folder existence checks
+  - TODO: Support registry key checks
+  - TODO: Support version comparisons
+  - TODO: Add rule validation
+
+[📋] Input validation
+  - Files: Features/BulkAssignment/Views/AppTypeSettingsSections.swift
+  - TODO: Validate macOS version format (regex)
+  - TODO: Validate date inputs for deadlines
+  - TODO: Validate grace period ranges
+  - TODO: Show inline error messages
+
+[📋] Preset templates system
+  - Files: Services/AssignmentTemplateService.swift (NEW)
+  - TODO: Create template model
+  - TODO: Implement save/load template
+  - TODO: Store templates in LocalDataStore
+  - TODO: Add template picker in settings UI
+
+---
+
+## 3.3 Enhanced Conflict Detection [📋 PLANNED]
+[📋] Intent conflict detection
+  - Files: Core/Utilities/AssignmentConflictDetector.swift
+  - TODO: Detect Required + Uninstall to same group
+  - TODO: Detect Available + Required conflicts
+  - TODO: Warn about intent overrides
+
+[📋] Settings conflict detection
+  - Files: Core/Utilities/AssignmentConflictDetector.swift
+  - TODO: Detect contradictory VPN settings
+  - TODO: Detect licensing conflicts
+  - TODO: Warn about incompatible update modes
+
+[📋] Platform mismatch detection
+  - Files: Core/Utilities/AssignmentConflictDetector.swift
+  - TODO: Block iOS app → Windows-only group
+  - TODO: Block Android app → macOS-only group
+  - TODO: Validate platform compatibility early
+
+[📋] Duplicate detection within batch
+  - Files: Core/Utilities/AssignmentConflictDetector.swift
+  - TODO: Check for same app+group+intent in current batch
+  - TODO: Prevent creating duplicates
+  - TODO: Offer merge option
+
+[📋] Override existing option
+  - Files: Services/AssignmentService.swift
+  - TODO: Add override mode flag
+  - TODO: Delete existing before creating new
+  - TODO: Track overridden assignments
+  - TODO: Add UI toggle in review screen
+
+================================================================================
+PHASE 4: POLISH & ADVANCED FEATURES
+================================================================================
+
+## 4.1 Bulk Operations & Templates [📋 PLANNED]
+[📋] Bulk modify assignments
+  - Files: Features/Applications/Views/ApplicationSelectionView.swift
+  - TODO: Add "Modify Selected" toolbar button
+  - TODO: Support changing intent for multiple apps
+  - TODO: Support updating settings across assignments
+  - TODO: Confirm before bulk changes
+
+[📋] Template system
+  - Files: Services/AssignmentTemplateService.swift
+  - TODO: Implement template CRUD operations
+  - TODO: Support template import/export (JSON)
+  - TODO: Add template library view
+  - TODO: Support template sharing
+
+[📋] Copy settings between groups
+  - Files: Features/BulkAssignment/Views/GroupAssignmentSettingsView.swift
+  - TODO: Add "Copy from..." button
+  - TODO: Select source group
+  - TODO: Copy all settings to target group(s)
+  - TODO: Confirm before overwrite
+
+[📋] Schedule assignments
+  - Files: Core/DataLayer/Models/Assignment.swift
+  - TODO: Add scheduledDate field
+  - TODO: Implement scheduled execution
+  - TODO: Add date/time picker in UI
+  - TODO: Show scheduled assignments in queue
+
+[📋] Staged rollout
+  - Files: Services/AssignmentService.swift
+  - TODO: Add rollout configuration
+  - TODO: Support sequential group deployment
+  - TODO: Add delays between batches
+  - TODO: Automatic rollback on failures
+
+---
+
+## 4.2 Pre-flight Validation [📋 PLANNED]
+[📋] Create PreflightValidator utility
+  - Files: Core/Utilities/PreflightValidator.swift (NEW)
+  - TODO: Define validation interface
+  - TODO: Implement setting validators
+  - TODO: Implement dependency checks
+  - TODO: Implement permission checks
+
+[📋] Settings validation
+  - Files: Core/Utilities/PreflightValidator.swift
+  - TODO: Validate OS version format
+  - TODO: Validate date logic (deadline > grace period)
+  - TODO: Validate numeric ranges
+  - TODO: Return structured validation results
+
+[📋] Dependency checks
+  - Files: Core/Utilities/PreflightValidator.swift
+  - TODO: Verify VPN profiles exist before assignment
+  - TODO: Check for required app dependencies
+  - TODO: Validate assignment filter existence
+  - TODO: Warn about missing resources
+
+[📋] Permission pre-check
+  - Files: Core/Utilities/PreflightValidator.swift
+  - TODO: Query current Graph API permissions
+  - TODO: Map operations to required scopes
+  - TODO: Warn about insufficient permissions
+  - TODO: Suggest permission request workflow
+
+[📋] Test mode
+  - Files: Services/AssignmentService.swift
+  - TODO: Add dryRun flag
+  - TODO: Skip actual Graph API calls in test mode
+  - TODO: Return simulated results
+  - TODO: Show "TEST MODE" banner in UI
+
+---
+
+## 4.3 Keyboard Shortcuts & Navigation [📋 PLANNED]
+[📋] Implement keyboard shortcuts
+  - Files: Multiple views
+  - TODO: ⌘F for search in all lists
+  - TODO: ⌘A for select all
+  - TODO: ⌘R for refresh
+  - TODO: Space/Enter for toggle selection
+  - TODO: Escape to cancel dialogs
+  - TODO: Arrow keys for navigation
+
+[📋] Add keyboard shortcut hints
+  - Files: Multiple views
+  - TODO: Show shortcuts in menus
+  - TODO: Add tooltip hints
+  - TODO: Create keyboard shortcuts help sheet
+
+---
+
+## 4.4 Drag & Drop Support [📋 PLANNED]
+[📋] Drag apps to groups
+  - Files: Features/Applications/Views/ApplicationSelectionView.swift
+  - TODO: Add .draggable() to app rows
+  - TODO: Add .dropDestination() to group list
+  - TODO: Handle drop action (quick-assign)
+  - TODO: Show visual feedback during drag
+
+[📋] Drag files to import
+  - Files: Features/BulkAssignment/Views/BulkAssignmentView.swift
+  - TODO: Add drop zone for JSON files
+  - TODO: Parse dropped assignment files
+  - TODO: Import assignments on drop
+
+[📋] Reorder groups by dragging
+  - Files: Features/Groups/Views/GroupSelectionView.swift
+  - TODO: Add drag handles to group rows
+  - TODO: Support reordering
+  - TODO: Persist order preference
+
+---
+
+## 4.5 Export & Reporting [📋 PLANNED]
+[📋] Create ExportService
+  - Files: Services/ExportService.swift (NEW)
+  - TODO: Implement PDF export (macOS)
+  - TODO: Implement CSV export
+  - TODO: Implement JSON export
+  - TODO: Support multiple export formats
+
+[📋] Export review summary
+  - Files: Features/BulkAssignment/Views/ReviewAssignmentView.swift
+  - TODO: Add "Export Summary" button
+  - TODO: Generate formatted PDF report
+  - TODO: Include settings, warnings, estimates
+  - TODO: Save to user-selected location
+
+[📋] Export application list
+  - Files: Features/Applications/Views/ApplicationSelectionView.swift
+  - TODO: Add "Export List" toolbar button
+  - TODO: Include assignment details
+  - TODO: Support filtering exported data
+
+[📋] Export assignment matrix
+  - Files: Features/BulkAssignment/Views/ReviewAssignmentView.swift
+  - TODO: Generate app/group matrix spreadsheet
+  - TODO: Include settings in separate sheet
+  - TODO: Format for printing
+
+[📋] Generate compliance reports
+  - Files: Features/Reports (NEW module)
+  - TODO: Create reporting infrastructure
+  - TODO: Generate assignment coverage reports
+  - TODO: Show unassigned apps/groups
+  - TODO: Export to PDF/CSV
+
+================================================================================
+IMPLEMENTATION NOTES & PATTERNS
+================================================================================
+
+## Architecture Patterns
+- Follow existing MVVM pattern (Views + ViewModels)
+- Use @MainActor for UI-facing classes
+- Services use singleton pattern (shared instance)
+- Publish state via @Published properties
+- Keep business logic in Services, not Views
+
+## File Organization
+- Models: Core/DataLayer/Models/
+- Services: Services/
+- Views: Features/[Module]/Views/
+- ViewModels: Features/[Module]/ViewModels/
+- Utilities: Core/Utilities/
+
+## Testing Requirements
+- Add unit tests for new service methods
+- Test error handling paths
+- Use fixtures for Graph API responses
+- Validate edge cases
+
+## Documentation
+- Update CLAUDE.md files when adding new patterns
+- Document new services in Services/CLAUDE.md
+- Add inline comments for complex logic
+- Update README for new features
+
+================================================================================
+COMPLETED PHASES
+================================================================================
+
+
+
+
+
+================================================================================
+END OF TODOS
+================================================================================

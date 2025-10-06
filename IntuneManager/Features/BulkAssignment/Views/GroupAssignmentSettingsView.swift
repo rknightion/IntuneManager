@@ -387,6 +387,24 @@ struct GroupSettingsPanel: View {
                             }
                         }
 
+                    case .androidStoreApp, .androidManagedStoreApp:
+                        AndroidSettingsSection(
+                            settings: Binding(
+                                get: {
+                                    settings.settings.androidSettings ?? AndroidManagedStoreAppAssignmentSettings()
+                                },
+                                set: {
+                                    settings.settings.androidSettings = $0
+                                }
+                            ),
+                            onShowHelp: onShowHelp
+                        )
+                        .onAppear {
+                            if settings.settings.androidSettings == nil {
+                                settings.settings.androidSettings = AndroidManagedStoreAppAssignmentSettings()
+                            }
+                        }
+
                     default:
                         Text("No specific settings available for this app type")
                             .foregroundColor(.secondary)

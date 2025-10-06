@@ -14,10 +14,12 @@ struct IntuneManagerApp: App {
     @StateObject private var authManager = AuthManagerV2.shared
     @StateObject private var credentialManager = CredentialManager.shared
     @StateObject private var appState = AppState()
+    @StateObject private var permissionService = PermissionCheckService.shared
 
     @State private var showingConfiguration = false
     @State private var showingSplash = true
     @State private var initializationError: Error?
+    @State private var showingPermissionWarning = false
 
     private let modelContainer: ModelContainer = {
         do {
@@ -39,12 +41,14 @@ struct IntuneManagerApp: App {
                 showingConfiguration: $showingConfiguration,
                 showingSplash: $showingSplash,
                 initializationError: $initializationError,
+                showingPermissionWarning: $showingPermissionWarning,
                 initializeApp: initializeApp,
                 configurePlatformSpecifics: configurePlatformSpecifics
             )
             .environmentObject(authManager)
             .environmentObject(appState)
             .environmentObject(credentialManager)
+            .environmentObject(permissionService)
         }
         .modelContainer(modelContainer)
         #if os(macOS)
@@ -175,6 +179,16 @@ struct IntuneManagerApp: App {
                 try await authManager.initializeMSAL()
 
                 if await authManager.validateToken() {
+                    // Check Graph API permissions
+                    await permissionService.checkPermissions()
+
+                    // Show warning if permissions are missing, but continue loading
+                    if !permissionService.missingPermissions.isEmpty {
+                        await MainActor.run {
+                            showingPermissionWarning = true
+                        }
+                    }
+
                     await appState.loadInitialData()
                 }
             } catch {
@@ -233,10 +247,12 @@ private struct RootScene: View {
     @EnvironmentObject private var authManager: AuthManagerV2
     @EnvironmentObject private var appState: AppState
     @EnvironmentObject private var credentialManager: CredentialManager
+    @EnvironmentObject private var permissionService: PermissionCheckService
 
     @Binding var showingConfiguration: Bool
     @Binding var showingSplash: Bool
     @Binding var initializationError: Error?
+    @Binding var showingPermissionWarning: Bool
     let initializeApp: () async -> Void
     let configurePlatformSpecifics: () -> Void
 
@@ -253,6 +269,7 @@ private struct RootScene: View {
                     .environmentObject(authManager)
                     .environmentObject(appState)
                     .environmentObject(credentialManager)
+                    .environmentObject(permissionService)
                     .transition(.opacity)
             }
         }
@@ -287,8 +304,32 @@ private struct RootScene: View {
                 Text(error.localizedDescription)
             }
         }
+        .alert("Missing Permissions", isPresented: $showingPermissionWarning) {
+            Button("Continue Anyway") {
+                showingPermissionWarning = false
+            }
+            #if os(macOS)
+            Button("Copy Permission List") {
+                copyPermissionsToClipboard()
+            }
+            #endif
+            Button("View Details") {
+                appState.selectedTab = .settings
+                showingPermissionWarning = false
+            }
+        } message: {
+            Text(permissionService.missingSummary)
+        }
         .preferredColorScheme(appState.preferredColorScheme)
     }
+
+    #if os(macOS)
+    private func copyPermissionsToClipboard() {
+        let missingScopes = permissionService.missingPermissions.map { $0.scope }.joined(separator: "\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(missingScopes, forType: .string)
+    }
+    #endif
 }
 
 // MARK: - Splash Screen

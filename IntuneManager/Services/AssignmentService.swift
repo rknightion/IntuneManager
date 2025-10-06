@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SwiftUI
 
 // Flexible assignment request struct for Graph API
 struct FlexibleAppAssignment: Encodable {
@@ -73,6 +74,8 @@ final class AssignmentService: ObservableObject {
     @Published var isProcessing = false
     @Published var currentProgress: AssignmentProgress?
     @Published var error: Error?
+    @Published var assignmentLogs: [AssignmentLogEntry] = []
+    @Published var perAppProgress: [String: AppProgress] = [:]
 
     private let apiClient = GraphAPIClient.shared
     private let appService = ApplicationService.shared
@@ -93,8 +96,116 @@ final class AssignmentService: ObservableObject {
         }
     }
 
+    struct AppProgress: Identifiable {
+        let id: String  // appId
+        let appName: String
+        var status: AppStatus
+        var groupsTotal: Int
+        var groupsCompleted: Int
+        var groupsFailed: Int
+
+        enum AppStatus {
+            case pending
+            case processing
+            case completed
+            case failed
+        }
+
+        var percentComplete: Double {
+            guard groupsTotal > 0 else { return 0 }
+            return Double(groupsCompleted + groupsFailed) / Double(groupsTotal) * 100
+        }
+
+        var isComplete: Bool {
+            groupsCompleted + groupsFailed >= groupsTotal
+        }
+    }
+
+    struct AssignmentLogEntry: Identifiable {
+        let id = UUID()
+        let timestamp: Date
+        let level: LogLevel
+        let appName: String?
+        let groupName: String?
+        let message: String
+
+        enum LogLevel: String {
+            case info = "Info"
+            case success = "Success"
+            case warning = "Warning"
+            case error = "Error"
+
+            var color: Color {
+                switch self {
+                case .info: return .blue
+                case .success: return .green
+                case .warning: return .orange
+                case .error: return .red
+                }
+            }
+
+            var icon: String {
+                switch self {
+                case .info: return "info.circle.fill"
+                case .success: return "checkmark.circle.fill"
+                case .warning: return "exclamationmark.triangle.fill"
+                case .error: return "xmark.circle.fill"
+                }
+            }
+        }
+    }
+
     private init() {
         assignmentHistory = dataStore.fetchAssignments()
+    }
+
+    // MARK: - Per-App Progress Tracking
+
+    private func updateAppProgress(appId: String, success: Bool) {
+        guard var progress = perAppProgress[appId] else { return }
+
+        if success {
+            progress.groupsCompleted += 1
+        } else {
+            progress.groupsFailed += 1
+        }
+
+        // Update status based on progress
+        if progress.isComplete {
+            if progress.groupsFailed == 0 {
+                progress.status = .completed
+            } else if progress.groupsCompleted == 0 {
+                progress.status = .failed
+            } else {
+                progress.status = .completed  // Partial success still counts as completed
+            }
+        } else if progress.groupsCompleted > 0 || progress.groupsFailed > 0 {
+            progress.status = .processing
+        }
+
+        perAppProgress[appId] = progress
+    }
+
+    // MARK: - Logging
+
+    private func log(_ level: AssignmentLogEntry.LogLevel, _ message: String, appName: String? = nil, groupName: String? = nil) {
+        let entry = AssignmentLogEntry(
+            timestamp: Date(),
+            level: level,
+            appName: appName,
+            groupName: groupName,
+            message: message
+        )
+        assignmentLogs.append(entry)
+
+        // Keep logs limited to last 500 entries to avoid memory issues
+        if assignmentLogs.count > 500 {
+            assignmentLogs.removeFirst(assignmentLogs.count - 500)
+        }
+    }
+
+    func clearLogs() {
+        assignmentLogs.removeAll()
     }
 
     // MARK: - Bulk Assignment Operations
@@ -105,6 +216,26 @@ final class AssignmentService: ObservableObject {
 
         let assignments = operation.createAssignments()
         activeAssignments = assignments
+
+        // Clear old logs and start fresh
+        clearLogs()
+        log(.info, "Starting bulk assignment operation")
+        log(.info, "Total assignments to process: \(assignments.count)")
+
+        // Initialize per-app progress tracking
+        perAppProgress.removeAll()
+        let assignmentsByApp = Dictionary(grouping: assignments) { $0.applicationId }
+        for (appId, appAssignments) in assignmentsByApp {
+            let appName = appAssignments.first?.applicationName ?? "Unknown App"
+            perAppProgress[appId] = AppProgress(
+                id: appId,
+                appName: appName,
+                status: .pending,
+                groupsTotal: appAssignments.count,
+                groupsCompleted: 0,
+                groupsFailed: 0
+            )
+        }
 
         // Check if we already have cached assignment data for all apps
         let allAppsHaveCachedAssignments = operation.applications.allSatisfy { app in
@@ -133,6 +264,12 @@ final class AssignmentService: ObservableObject {
                 Logger.shared.info("Skipped \(skippedCount) existing assignments (from cache)")
                 currentProgress?.completed = skippedCount
                 currentProgress?.currentOperation = "Processing new assignments..."
+
+                // Update per-app progress for skipped assignments
+                let skippedAssignments = assignments.filter { !validatedAssignments.contains($0) }
+                for skipped in skippedAssignments {
+                    updateAppProgress(appId: skipped.applicationId, success: true)
+                }
             }
         } else {
             // Need to fetch assignment data from API
@@ -145,6 +282,12 @@ final class AssignmentService: ObservableObject {
                 Logger.shared.info("Skipped \(skippedCount) existing assignments")
                 currentProgress?.completed = skippedCount
                 currentProgress?.currentOperation = "Processing new assignments..."
+
+                // Update per-app progress for skipped assignments
+                let skippedAssignments = assignments.filter { !validatedAssignments.contains($0) }
+                for skipped in skippedAssignments {
+                    updateAppProgress(appId: skipped.applicationId, success: true)
+                }
             }
         }
 
@@ -274,7 +417,9 @@ final class AssignmentService: ObservableObject {
                 assignment.status = .completed
                 assignment.completedDate = Date()
                 successful.append(assignment)
+                updateAppProgress(appId: assignment.applicationId, success: true)
                 Logger.shared.info("Assignment successful: \(assignment.applicationName) -> \(assignment.groupName)")
+                log(.success, "Assignment completed successfully", appName: assignment.applicationName, groupName: assignment.groupName)
             } else {
                 // Parse error details from response body if available
                 let errorDetail = parseErrorFromResponse(response)
@@ -287,11 +432,13 @@ final class AssignmentService: ObservableObject {
                     assignment.status = .completed
                     assignment.errorMessage = "Assignment already exists (skipped)"
                     successful.append(assignment)
+                    updateAppProgress(appId: assignment.applicationId, success: true)
                     Logger.shared.info("Assignment already exists: \(assignment.applicationName) -> \(assignment.groupName)")
 
                 case 429:
                     // Rate limited - add to retry list
                     assignment.status = .pending
+                    assignment.errorCategory = "rateLimit"
                     rateLimitedAssignments.append(assignment)
                     if let retryAfter = parseRetryAfter(from: response) {
                         maxRetryAfter = max(maxRetryAfter, retryAfter)
@@ -302,25 +449,38 @@ final class AssignmentService: ObservableObject {
                     // Bad request - don't retry
                     assignment.status = .failed
                     assignment.errorMessage = "Invalid request: \(errorDetail.message)"
+                    assignment.errorCategory = "validation"
+                    assignment.failureTimestamp = Date()
                     failed.append(assignment)
+                    updateAppProgress(appId: assignment.applicationId, success: false)
                     Logger.shared.error("Bad request for: \(assignment.applicationName) -> \(assignment.groupName): \(errorDetail.message)")
+                    log(.error, "Invalid request: \(errorDetail.message)", appName: assignment.applicationName, groupName: assignment.groupName)
 
                 case 403:
                     // Forbidden - insufficient permissions
                     assignment.status = .failed
                     assignment.errorMessage = "Insufficient permissions: \(errorDetail.message)"
+                    assignment.errorCategory = "permission"
+                    assignment.failureTimestamp = Date()
                     failed.append(assignment)
+                    updateAppProgress(appId: assignment.applicationId, success: false)
                     Logger.shared.error("Permission denied for: \(assignment.applicationName) -> \(assignment.groupName)")
+                    log(.error, "Insufficient permissions", appName: assignment.applicationName, groupName: assignment.groupName)
 
                 case 404:
                     // Not found - app or group doesn't exist
                     assignment.status = .failed
                     assignment.errorMessage = "App or group not found: \(errorDetail.message)"
+                    assignment.errorCategory = "validation"
+                    assignment.failureTimestamp = Date()
                     failed.append(assignment)
+                    updateAppProgress(appId: assignment.applicationId, success: false)
                     Logger.shared.error("Resource not found for: \(assignment.applicationName) -> \(assignment.groupName)")
+                    log(.error, "App or group not found", appName: assignment.applicationName, groupName: assignment.groupName)
 
                 default:
                     // Other errors - retry if under limit
+                    assignment.errorCategory = response.status >= 500 ? "network" : "unknown"
                     if assignment.retryCount < retryLimit {
                         assignment.retryCount += 1
                         assignment.status = .retrying
@@ -332,14 +492,20 @@ final class AssignmentService: ObservableObject {
                         do {
                             let retryResult = try await retrySingleAssignment(assignment)
                             successful.append(retryResult)
+                            updateAppProgress(appId: assignment.applicationId, success: true)
                         } catch {
                             assignment.status = .failed
                             assignment.errorMessage = error.localizedDescription
+                            assignment.errorCategory = "network"
+                            assignment.failureTimestamp = Date()
                             failed.append(assignment)
+                            updateAppProgress(appId: assignment.applicationId, success: false)
                         }
                     } else {
                         assignment.status = .failed
+                        assignment.failureTimestamp = Date()
                         failed.append(assignment)
+                        updateAppProgress(appId: assignment.applicationId, success: false)
                         Logger.shared.error("Assignment failed after \(retryLimit) attempts: \(assignment.applicationName) -> \(assignment.groupName)")
                     }
                 }
@@ -475,30 +641,123 @@ final class AssignmentService: ObservableObject {
         Logger.shared.info("Cancelled active assignments")
     }
 
-    func retryFailedAssignments() async throws -> [Assignment] {
+    /// Retry failed assignments with context-aware exponential backoff
+    /// - Parameters:
+    ///   - selective: If true, only retry transient errors (network, rateLimit). If false, retry all failed.
+    ///   - maxAttempts: Maximum retry attempts per assignment (default 5)
+    /// - Returns: Array of successfully retried assignments
+    func retryFailedAssignments(selective: Bool = true, maxAttempts: Int = 5) async throws -> [Assignment] {
         let failedAssignments = assignmentHistory.filter { $0.status == .failed }
 
         guard !failedAssignments.isEmpty else {
             throw AssignmentError.noFailedAssignments
         }
 
-        let retryOperation = BulkAssignmentOperation(
-            applications: [], // Will be resolved from assignment IDs
-            groups: [],       // Will be resolved from assignment IDs
-            intent: failedAssignments.first?.intent ?? .required
-        )
+        // Filter based on selective mode
+        let assignmentsToRetry: [Assignment]
+        if selective {
+            // Only retry transient errors (network, rateLimit, unknown)
+            assignmentsToRetry = failedAssignments.filter { assignment in
+                guard let category = assignment.errorCategory else { return true }
+                return category == "network" || category == "rateLimit" || category == "unknown"
+            }
 
-        // Reset failed assignments for retry
-        let resetAssignments = failedAssignments.map { assignment -> Assignment in
-            assignment.status = .pending
-            assignment.retryCount = 0
-            assignment.errorMessage = nil
-            return assignment
+            if assignmentsToRetry.isEmpty {
+                log(.warning, "No retryable assignments found (only permission/validation errors)")
+                throw AssignmentError.invalidConfiguration(reason: "All failed assignments have non-retryable errors (permission/validation)")
+            }
+        } else {
+            assignmentsToRetry = failedAssignments
         }
 
-        activeAssignments = resetAssignments
+        log(.info, "Starting retry of \(assignmentsToRetry.count) failed assignments (selective: \(selective))")
 
-        return try await performBulkAssignment(retryOperation)
+        // Filter out assignments that have exceeded max attempts
+        let eligibleAssignments = assignmentsToRetry.filter { $0.retryCount < maxAttempts }
+
+        if eligibleAssignments.isEmpty {
+            log(.warning, "All failed assignments have exceeded max retry attempts (\(maxAttempts))")
+            throw AssignmentError.invalidConfiguration(reason: "All assignments have exceeded maximum retry attempts")
+        }
+
+        // Calculate exponential backoff delays for each assignment
+        var successful: [Assignment] = []
+        var failed: [Assignment] = []
+
+        isProcessing = true
+        defer { isProcessing = false }
+
+        currentProgress = AssignmentProgress(
+            total: eligibleAssignments.count,
+            completed: 0,
+            failed: 0,
+            currentOperation: "Retrying failed assignments..."
+        )
+
+        // Process retries with exponential backoff
+        for assignment in eligibleAssignments {
+            // Calculate backoff delay: min(2^retryCount, 60) seconds
+            let backoffSeconds = min(pow(2.0, Double(assignment.retryCount)), 60.0)
+
+            // Check if we need to wait based on failure timestamp
+            if let failureTime = assignment.failureTimestamp {
+                let timeSinceFailure = Date().timeIntervalSince(failureTime)
+                let remainingWait = backoffSeconds - timeSinceFailure
+
+                if remainingWait > 0 {
+                    log(.info, "Waiting \(Int(remainingWait))s before retrying", appName: assignment.applicationName, groupName: assignment.groupName)
+                    currentProgress?.currentOperation = "Waiting \(Int(remainingWait))s before retry..."
+                    try await Task.sleep(nanoseconds: UInt64(remainingWait * 1_000_000_000))
+                }
+            }
+
+            // Increment retry count
+            assignment.retryCount += 1
+            assignment.status = .retrying
+
+            currentProgress?.currentOperation = "Retrying: \(assignment.applicationName) → \(assignment.groupName) (attempt \(assignment.retryCount))"
+            log(.info, "Retry attempt \(assignment.retryCount)/\(maxAttempts)", appName: assignment.applicationName, groupName: assignment.groupName)
+
+            do {
+                // Create single-assignment batch
+                let batch = [assignment]
+                let result = try await processBatch(batch)
+
+                if !result.successful.isEmpty {
+                    successful.append(contentsOf: result.successful)
+                    currentProgress?.completed += 1
+                    log(.success, "Retry successful on attempt \(assignment.retryCount)", appName: assignment.applicationName, groupName: assignment.groupName)
+                } else {
+                    failed.append(contentsOf: result.failed)
+                    currentProgress?.failed += 1
+                    log(.error, "Retry failed on attempt \(assignment.retryCount)", appName: assignment.applicationName, groupName: assignment.groupName)
+                }
+            } catch {
+                assignment.status = .failed
+                assignment.errorMessage = error.localizedDescription
+                assignment.failureTimestamp = Date()
+                failed.append(assignment)
+                currentProgress?.failed += 1
+                log(.error, "Retry attempt failed: \(error.localizedDescription)", appName: assignment.applicationName, groupName: assignment.groupName)
+            }
+        }
+
+        // Update history
+        assignmentHistory.append(contentsOf: successful)
+        assignmentHistory.append(contentsOf: failed)
+        persistAssignmentHistory()
+
+        currentProgress = nil
+
+        let successCount = successful.count
+        let failCount = failed.count
+        log(.info, "Retry operation completed: \(successCount) successful, \(failCount) failed")
+
+        if !failed.isEmpty {
+            throw AssignmentError.partialFailure(successful: successCount, failed: failCount, context: "Some retries failed")
+        }
+
+        return successful
     }
 
     // MARK: - History Management
@@ -622,18 +881,107 @@ struct AppIntentDetail: Identifiable {
 }
 
 enum AssignmentError: LocalizedError {
-    case partialFailure(successful: Int, failed: Int)
+    case partialFailure(successful: Int, failed: Int, context: String? = nil)
     case noFailedAssignments
-    case invalidConfiguration
+    case invalidConfiguration(reason: String? = nil)
+    case allAssignmentsFailed(count: Int, reason: String? = nil)
+    case permissionDenied(missingPermissions: [String]? = nil)
+    case conflictDetected(conflicts: Int, description: String? = nil)
 
     var errorDescription: String? {
         switch self {
-        case .partialFailure(let successful, let failed):
+        case .partialFailure(let successful, let failed, let context):
+            if let context = context {
+                return "Partial failure: \(successful) successful, \(failed) failed - \(context)"
+            }
             return "Partial failure: \(successful) successful, \(failed) failed"
+
         case .noFailedAssignments:
             return "No failed assignments to retry"
-        case .invalidConfiguration:
+
+        case .invalidConfiguration(let reason):
+            if let reason = reason {
+                return "Invalid assignment configuration: \(reason)"
+            }
             return "Invalid assignment configuration"
+
+        case .allAssignmentsFailed(let count, let reason):
+            if let reason = reason {
+                return "All \(count) assignments failed: \(reason)"
+            }
+            return "All \(count) assignments failed"
+
+        case .permissionDenied(let permissions):
+            if let permissions = permissions {
+                return "Permission denied. Missing required permissions:\n\(permissions.map { "• \($0)" }.joined(separator: "\n"))"
+            }
+            return "Permission denied. You don't have the required permissions for this operation."
+
+        case .conflictDetected(let conflicts, let description):
+            if let description = description {
+                return "\(conflicts) conflict\(conflicts == 1 ? "" : "s") detected: \(description)"
+            }
+            return "\(conflicts) assignment conflict\(conflicts == 1 ? "" : "s") detected"
+        }
+    }
+
+    var recoverySuggestion: String? {
+        switch self {
+        case .partialFailure(let successful, let failed, _):
+            if failed > successful {
+                return "Most assignments failed. Review the error details below and check your permissions. You can retry failed assignments after fixing the issues."
+            }
+            return "Most assignments succeeded. Review failed assignments below and retry them individually if needed."
+
+        case .noFailedAssignments:
+            return nil
+
+        case .invalidConfiguration(let reason):
+            if let reason = reason, reason.contains("settings") {
+                return "Review the assignment settings for each app type and ensure all required fields are filled correctly."
+            }
+            return "Check your assignment configuration and try again. Ensure all apps, groups, and intents are valid."
+
+        case .allAssignmentsFailed(_, let reason):
+            if let reason = reason, reason.contains("permission") || reason.contains("forbidden") {
+                return "Contact your administrator to grant the necessary Microsoft Graph permissions for app assignment management."
+            }
+            return "All assignments failed. This may indicate a permission issue or Microsoft Graph outage. Check your permissions and try again later."
+
+        case .permissionDenied:
+            return "Contact your Azure AD administrator to request the following permissions for this app:\n\n• DeviceManagementApps.ReadWrite.All\n• Group.Read.All\n\nThese permissions are required to manage Intune app assignments."
+
+        case .conflictDetected(let conflicts, _):
+            if conflicts == 1 {
+                return "This assignment already exists. You can modify it using the Applications tab or delete it and create a new one."
+            }
+            return "These assignments already exist. Review the conflict details and decide whether to skip them or modify the existing assignments."
+        }
+    }
+
+    var failureReason: String? {
+        switch self {
+        case .partialFailure:
+            return "Some assignments could not be created"
+        case .noFailedAssignments:
+            return "No assignments failed"
+        case .invalidConfiguration:
+            return "Configuration validation failed"
+        case .allAssignmentsFailed:
+            return "Assignment creation failed"
+        case .permissionDenied:
+            return "Insufficient permissions"
+        case .conflictDetected:
+            return "Duplicate assignments detected"
+        }
+    }
+
+    var isRetriable: Bool {
+        switch self {
+        case .partialFailure, .allAssignmentsFailed:
+            return true
+        case .permissionDenied, .invalidConfiguration, .noFailedAssignments, .conflictDetected:
+            return false
         }
     }
 }

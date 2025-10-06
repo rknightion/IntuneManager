@@ -139,93 +139,6 @@ final class ConfigurationService: ObservableObject {
         }
     }
 
-    // MARK: - Profile Management
-
-    /// Create a new configuration profile from a template
-    func createProfileFromTemplate(
-        templateId: String,
-        displayName: String,
-        description: String?,
-        settings: [ConfigurationSetting]
-    ) async throws -> ConfigurationProfile {
-        Logger.shared.info("Creating new configuration profile from template: \(templateId)", category: .network)
-
-        let endpoint = "/deviceManagement/configurationPolicies"
-
-        // Convert legacy settings to new format
-        let newSettings = settings.map { setting -> DeviceManagementConfigurationSetting in
-            let settingValue = setting.value ?? ""
-            let settingInstance = DeviceManagementConfigurationSettingInstance(
-                settingDefinitionId: setting.settingDefinitionId,
-                settingInstanceTemplateReference: nil,
-                choiceSettingValue: nil,
-                simpleSettingValue: SimpleSettingValue(value: .string(settingValue)),
-                groupSettingCollectionValue: nil,
-                simpleSettingCollectionValue: nil
-            )
-            return DeviceManagementConfigurationSetting(
-                id: nil,
-                settingInstance: settingInstance
-            )
-        }
-
-        let requestBody = CreateSettingsCatalogPolicyRequest(
-            displayName: displayName,
-            description: description,
-            templateReference: ConfigurationPolicyTemplateReference(
-                templateId: templateId,
-                templateFamily: .endpointSecurityAntivirus,
-                templateDisplayName: nil,
-                templateDisplayVersion: nil
-            ),
-            settings: newSettings
-        )
-
-        let response: SettingsCatalogPolicy = try await apiClient.postModel(
-            endpoint,
-            body: requestBody
-        )
-
-        let profile = response.toConfigurationProfile()
-        profiles.append(profile)
-        dataStore.addConfigurationProfile(profile)
-
-        Logger.shared.info("Successfully created configuration profile: \(profile.id)", category: .network)
-        return profile
-    }
-
-    /// Create a new Settings Catalog policy
-    func createSettingsCatalogPolicy(
-        displayName: String,
-        description: String?,
-        platforms: [DeviceManagementConfigurationPolicy.Platform],
-        technologies: [DeviceManagementConfigurationPolicy.Technology],
-        templateReference: ConfigurationPolicyTemplateReference?,
-        settings: [DeviceManagementConfigurationSetting]
-    ) async throws -> DeviceManagementConfigurationPolicy {
-        Logger.shared.info("Creating new Settings Catalog policy: \(displayName)", category: .network)
-
-        let endpoint = "/deviceManagement/configurationPolicies"
-
-        let requestBody = CreateSettingsCatalogPolicyRequest(
-            displayName: displayName,
-            description: description,
-            platforms: platforms,
-            technologies: technologies,
-            templateReference: templateReference,
-            settings: settings,
-            roleScopeTagIds: nil
-        )
-
-        let response: DeviceManagementConfigurationPolicy = try await apiClient.postModel(
-            endpoint,
-            body: requestBody
-        )
-
-        Logger.shared.info("Successfully created Settings Catalog policy: \(response.id)", category: .network)
-        return response
-    }
-
     /// Fetch Settings Catalog templates
     func fetchSettingsCatalogTemplates(
         platform: DeviceManagementConfigurationPolicy.Platform? = nil
@@ -301,86 +214,6 @@ final class ConfigurationService: ObservableObject {
         return response.value
     }
 
-    /// Update settings for a Settings Catalog policy
-    func updatePolicySettings(
-        policyId: String,
-        settings: [DeviceManagementConfigurationSetting]
-    ) async throws {
-        Logger.shared.info("Updating settings for policy: \(policyId)", category: .network)
-
-        let endpoint = "/deviceManagement/configurationPolicies/\(policyId)/settings"
-
-        // First, delete existing settings
-        try await apiClient.delete(endpoint)
-
-        // Then add new settings
-        for setting in settings {
-            let settingEndpoint = "/deviceManagement/configurationPolicies/\(policyId)/settings"
-            let _: DeviceManagementConfigurationSetting = try await apiClient.postModel(
-                settingEndpoint,
-                body: setting
-            )
-        }
-
-        Logger.shared.info("Successfully updated settings for policy", category: .network)
-    }
-
-    /// Update an existing configuration profile
-    func updateProfile(
-        profileId: String,
-        displayName: String,
-        description: String?,
-        isSettingsCatalog: Bool = false
-    ) async throws {
-        Logger.shared.info("Updating configuration profile: \(profileId)", category: .network)
-
-        let endpoint = isSettingsCatalog ?
-            "/deviceManagement/configurationPolicies/\(profileId)" :
-            "/deviceManagement/deviceConfigurations/\(profileId)"
-
-        let requestBody: Encodable
-        if isSettingsCatalog {
-            requestBody = UpdateConfigurationPolicyRequest(
-                name: displayName,
-                description: description
-            )
-        } else {
-            requestBody = UpdateDeviceConfigurationRequest(
-                displayName: displayName,
-                description: description
-            )
-        }
-
-        let _: EmptyResponse = try await apiClient.patchModel(endpoint, body: requestBody)
-
-        // Update local copy
-        if let index = profiles.firstIndex(where: { $0.id == profileId }) {
-            profiles[index].displayName = displayName
-            profiles[index].profileDescription = description
-            profiles[index].lastModifiedDateTime = Date()
-            dataStore.updateConfigurationProfile(profiles[index])
-        }
-
-        Logger.shared.info("Successfully updated configuration profile", category: .network)
-    }
-
-    /// Delete a configuration profile
-    func deleteProfile(profileId: String, isSettingsCatalog: Bool = false) async throws {
-        Logger.shared.info("Deleting configuration profile: \(profileId)", category: .network)
-
-        let endpoint = isSettingsCatalog ?
-            "/deviceManagement/configurationPolicies/\(profileId)" :
-            "/deviceManagement/deviceConfigurations/\(profileId)"
-
-        try await apiClient.delete(endpoint)
-
-        // Remove from local cache
-        profiles.removeAll { $0.id == profileId }
-        dataStore.deleteConfigurationProfile(profileId)
-
-        Logger.shared.info("Successfully deleted configuration profile", category: .network)
-    }
-
     // MARK: - Assignment Management
 
     /// Update assignments for a configuration profile
@@ -443,54 +276,6 @@ final class ConfigurationService: ObservableObject {
 
 // MARK: - Request/Response Models
 
-private struct CreateSettingsCatalogPolicyRequest: Encodable {
-    var displayName: String
-    var description: String?
-    var platforms: [DeviceManagementConfigurationPolicy.Platform]?
-    var technologies: [DeviceManagementConfigurationPolicy.Technology]?
-    var templateReference: ConfigurationPolicyTemplateReference?
-    var settings: [DeviceManagementConfigurationSetting]?
-    var roleScopeTagIds: [String]?
-
-    private enum CodingKeys: String, CodingKey {
-        case odataType = "@odata.type"
-        case displayName
-        case description
-        case platforms
-        case technologies
-        case templateReference
-        case settings
-        case roleScopeTagIds
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode("#microsoft.graph.deviceManagementConfigurationPolicy", forKey: .odataType)
-        try container.encode(displayName, forKey: .displayName)
-        try container.encodeIfPresent(description, forKey: .description)
-        try container.encodeIfPresent(platforms, forKey: .platforms)
-        try container.encodeIfPresent(technologies, forKey: .technologies)
-        try container.encodeIfPresent(templateReference, forKey: .templateReference)
-        try container.encodeIfPresent(settings, forKey: .settings)
-        try container.encodeIfPresent(roleScopeTagIds, forKey: .roleScopeTagIds)
-    }
-}
-
-private struct UpdateConfigurationPolicyRequest: Encodable {
-    let name: String
-    let description: String?
-}
-
-private struct UpdateDeviceConfigurationRequest: Encodable {
-    let displayName: String
-    let description: String?
-}
-
-private struct TemplateReference: Encodable {
-    let templateId: String
-    let templateFamily: String
-}
-
 private struct AssignmentRequest: Encodable {
     let assignments: [GraphAssignmentRequest]
 }
@@ -505,21 +290,6 @@ private struct GraphAssignmentRequest: Encodable {
         enum CodingKeys: String, CodingKey {
             case odataType = "@odata.type"
             case groupId
-        }
-    }
-}
-
-private struct GraphSettingInstance: Encodable {
-    let settingDefinitionId: String
-    let value: SettingValue
-
-    struct SettingValue: Encodable {
-        let odataType: String
-        let value: String?
-
-        enum CodingKeys: String, CodingKey {
-            case odataType = "@odata.type"
-            case value
         }
     }
 }
@@ -623,18 +393,6 @@ private struct SettingsCatalogPolicy: Codable {
 
 // MARK: - Extensions
 
-extension ConfigurationSetting {
-    fileprivate func toGraphSettingInstance() -> GraphSettingInstance {
-        GraphSettingInstance(
-            settingDefinitionId: settingDefinitionId,
-            value: GraphSettingInstance.SettingValue(
-                odataType: "#microsoft.graph.deviceManagementConfigurationStringSettingValue",
-                value: value
-            )
-        )
-    }
-}
-
 extension ConfigurationAssignment {
     fileprivate func toGraphAssignment() -> GraphAssignmentRequest {
         let odataType: String
@@ -681,15 +439,7 @@ extension LocalDataStore {
         // Implementation would replace in SwiftData
     }
 
-    func addConfigurationProfile(_ profile: ConfigurationProfile) {
-        // Implementation would add to SwiftData
-    }
-
     func updateConfigurationProfile(_ profile: ConfigurationProfile) {
         // Implementation would update in SwiftData
-    }
-
-    func deleteConfigurationProfile(_ profileId: String) {
-        // Implementation would delete from SwiftData
     }
 }

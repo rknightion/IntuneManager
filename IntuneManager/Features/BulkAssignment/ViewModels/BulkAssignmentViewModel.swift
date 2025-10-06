@@ -237,11 +237,11 @@ class BulkAssignmentViewModel: ObservableObject {
         progress = nil
     }
 
-    func retryFailedAssignments() async {
+    func retryFailedAssignments(selective: Bool = true) async {
         guard !failedAssignments.isEmpty else { return }
 
         do {
-            let retried = try await assignmentService.retryFailedAssignments()
+            let retried = try await assignmentService.retryFailedAssignments(selective: selective)
             completedAssignments.append(contentsOf: retried)
             failedAssignments.removeAll { assignment in
                 retried.contains { $0.id == assignment.id }

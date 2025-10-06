@@ -5,7 +5,7 @@ import SwiftData
 final class LocalDataStore {
     static let shared = LocalDataStore()
 
-    private var modelContext: ModelContext?
+    internal var modelContext: ModelContext?
 
     private init() {}
 
