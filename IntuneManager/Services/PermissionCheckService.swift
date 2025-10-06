@@ -59,7 +59,7 @@ final class PermissionCheckService: ObservableObject {
         GraphPermission(
             scope: "DeviceManagementApps.ReadWrite.All",
             description: "Read and write app assignments",
-            features: ["Bulk Assignment", "Assignment Management", "Application Updates"]
+            features: ["Bulk Assignment", "Assignment Management", "Application Updates", "Application Creation"]
         ),
 
         // Group Management

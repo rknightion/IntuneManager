@@ -15,6 +15,7 @@ struct ApplicationListView: View {
     @State private var isFeaturedFilter: Bool?
     @State private var selectedPlatform: Application.DevicePlatform?
     @State private var showingBackupRestore = false
+    @State private var showingAddApplication = false
 
     // Multi-selection and bulk delete
     @State private var isSelecting = false
@@ -259,6 +260,13 @@ struct ApplicationListView: View {
             }
 
             ToolbarItem(placement: .primaryAction) {
+                Button(action: { showingAddApplication = true }) {
+                    Label("Add Application", systemImage: "plus")
+                }
+                .help("Add a new application")
+            }
+
+            ToolbarItem(placement: .primaryAction) {
                 Button(action: {
                     withAnimation {
                         isSelecting.toggle()
@@ -313,6 +321,9 @@ struct ApplicationListView: View {
         }
         .sheet(isPresented: $showingBackupRestore) {
             AssignmentBackupRestoreView()
+        }
+        .sheet(isPresented: $showingAddApplication) {
+            AddApplicationView()
         }
         .confirmationDialog(
             "Delete Applications",

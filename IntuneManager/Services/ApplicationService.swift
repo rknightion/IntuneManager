@@ -493,6 +493,74 @@ final class ApplicationService: ObservableObject {
         }
     }
 
+    // MARK: - Create Applications
+
+    /// Creates a new Android Store app in Intune
+    func createAndroidStoreApp(_ request: AndroidStoreAppRequest) async throws -> Application {
+        Logger.shared.info("Creating Android Store app: \(request.displayName)", category: .data)
+
+        // Validate request
+        try request.validate()
+
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let endpoint = "/deviceAppManagement/mobileApps"
+
+            // Create the app via Graph API
+            let createdApp: Application = try await apiClient.postModel(endpoint, body: request)
+
+            Logger.shared.info("Successfully created Android Store app: \(createdApp.displayName) (ID: \(createdApp.id))", category: .data)
+
+            // Refresh the applications list to include the new app
+            _ = try await fetchApplications(forceRefresh: true)
+
+            return createdApp
+        } catch {
+            self.error = error
+            Logger.shared.error("Failed to create Android Store app: \(error.localizedDescription)", category: .data)
+            throw error
+        }
+    }
+
+    /// Creates a new Android Enterprise System app in Intune
+    func createAndroidEnterpriseSystemApp(_ request: AndroidManagedStoreAppRequest) async throws -> Application {
+        Logger.shared.info("Creating Android Enterprise System app: \(request.displayName)", category: .data)
+
+        // Validate request
+        try request.validate()
+
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let endpoint = "/deviceAppManagement/mobileApps"
+
+            // Log the request JSON for debugging
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            if let jsonData = try? encoder.encode(request),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                Logger.shared.info("Creating Android Enterprise System app with JSON:\n\(jsonString)", category: .network)
+            }
+
+            // Create the app via Graph API
+            let createdApp: Application = try await apiClient.postModel(endpoint, body: request)
+
+            Logger.shared.info("Successfully created Android Enterprise System app: \(createdApp.displayName) (ID: \(createdApp.id))", category: .data)
+
+            // Refresh the applications list to include the new app
+            _ = try await fetchApplications(forceRefresh: true)
+
+            return createdApp
+        } catch {
+            self.error = error
+            Logger.shared.error("Failed to create Android Enterprise System app: \(error.localizedDescription)", category: .data)
+            throw error
+        }
+    }
+
     // MARK: - Private Methods
 
     func hydrateFromStore() {

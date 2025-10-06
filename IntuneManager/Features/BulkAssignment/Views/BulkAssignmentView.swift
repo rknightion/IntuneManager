@@ -263,6 +263,7 @@ struct ApplicationSelectionView: View {
     @State private var showingDeleteAppsConfirmation = false
     @State private var isDeletingApps = false
     @State private var deleteAppsResult: (successful: [String], failed: [(id: String, error: String)])?
+    @State private var showingAddApplication = false
 
     enum AssignmentFilter: String, CaseIterable {
         case all = "All Apps"
@@ -397,6 +398,13 @@ struct ApplicationSelectionView: View {
                         .disabled(isDeletingApps)
                     }
 
+                    Button {
+                        showingAddApplication = true
+                    } label: {
+                        Label("Add Application", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderedProminent)
+
                     Button("Select All") {
                         selectedApps = Set(filteredApps)
                     }
@@ -487,6 +495,9 @@ struct ApplicationSelectionView: View {
         }
         .sheet(isPresented: $showingBulkEdit) {
             AssignmentEditView(applications: Array(selectedApps))
+        }
+        .sheet(isPresented: $showingAddApplication) {
+            AddApplicationView()
         }
         .confirmationDialog(
             "Delete App Assignments",
