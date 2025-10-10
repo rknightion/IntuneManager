@@ -339,6 +339,48 @@ final class Application: Identifiable, Codable, Hashable {
             }
             return trimmed
         }
+
+        // MARK: - Platform Categorization
+
+        /// Returns the primary platform category for this app type
+        var platformCategory: DevicePlatform {
+            switch self {
+            case .macOS, .macOSLobApp, .macOSVppApp, .managedMacOSStoreApp,
+                 .macOSOfficeSuiteApp, .macOSPkgApp, .macOSDmgApp, .macOSMicrosoftDefenderApp:
+                return .macOS
+            case .iOS, .iosLobApp, .iosVppApp, .managedIOSStoreApp, .iosStoreApp:
+                return .iOS
+            case .androidStoreApp, .androidManagedStoreApp:
+                return .android
+            case .windowsMobileMSI, .winAppX, .win32LobApp, .microsoftEdgeApp,
+                 .microsoftStoreForBusinessApp, .windowsUniversalAppX, .winGetApp,
+                 .officeSuiteApp, .windowsWebApp, .win32CatalogApp, .microsoftDefenderForEndpoint:
+                return .windows
+            case .webApp:
+                return .unknown // Web apps are cross-platform
+            case .unknown:
+                return .unknown
+            }
+        }
+
+        /// Returns all app types filtered by platform
+        static func types(for platform: DevicePlatform?) -> [AppType] {
+            guard let platform = platform else {
+                return allCases.filter { $0 != .unknown }
+            }
+
+            return allCases.filter { type in
+                type.platformCategory == platform && type != .unknown
+            }
+        }
+
+        /// Returns app types grouped by platform for display in menus
+        static var groupedByPlatform: [(platform: DevicePlatform, types: [AppType])] {
+            let platforms: [DevicePlatform] = [.macOS, .iOS, .android, .windows]
+            return platforms.map { platform in
+                (platform: platform, types: types(for: platform))
+            }
+        }
     }
 
     struct MinimumOS: Codable, Sendable {
