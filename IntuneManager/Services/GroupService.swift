@@ -96,6 +96,13 @@ final class GroupService: ObservableObject {
             Logger.shared.info("Fetching member counts for groups...", category: .data)
             await fetchMemberCounts(for: self.groups)
 
+            // Persist the updated member counts back to the data store
+            Logger.shared.info("Persisting member counts to data store...", category: .data)
+            dataStore.replaceGroups(with: self.groups)
+
+            // Refresh groups from store to ensure UI observes the changes
+            self.groups = dataStore.fetchGroups()
+
             return filteredGroups
         } catch {
             self.error = error
@@ -283,8 +290,27 @@ final class GroupService: ObservableObject {
     // MARK: - Private Methods
 
     private func fetchMemberCounts(for groups: [DeviceGroup]) async {
-        for group in groups {
-            await fetchMemberCount(for: group)
+        // Fetch member counts concurrently for better performance
+        await withTaskGroup(of: (String, Int?).self) { group in
+            for deviceGroup in groups {
+                group.addTask {
+                    do {
+                        let count = try await self.fetchMemberCount(groupId: deviceGroup.id)
+                        return (deviceGroup.id, count)
+                    } catch {
+                        Logger.shared.error("Failed to fetch member count for group \(deviceGroup.id): \(error)", category: .data)
+                        return (deviceGroup.id, nil)
+                    }
+                }
+            }
+
+            // Collect results and update groups
+            for await (groupId, count) in group {
+                if let count = count,
+                   let index = self.groups.firstIndex(where: { $0.id == groupId }) {
+                    self.groups[index].memberCount = count
+                }
+            }
         }
     }
 
@@ -293,9 +319,18 @@ final class GroupService: ObservableObject {
             let count = try await fetchMemberCount(groupId: group.id)
             if let index = groups.firstIndex(where: { $0.id == group.id }) {
                 groups[index].memberCount = count
+
+                // Persist the updated member count to the data store
+                dataStore.replaceGroups(with: [groups[index]])
+
+                // Refresh the specific group from store
+                let updatedGroups = dataStore.fetchGroups()
+                if let updatedIndex = updatedGroups.firstIndex(where: { $0.id == group.id }) {
+                    groups[index] = updatedGroups[updatedIndex]
+                }
             }
         } catch {
-            Logger.shared.error("Failed to fetch member count for group \(group.id): \(error)")
+            Logger.shared.error("Failed to fetch member count for group \(group.id): \(error)", category: .data)
         }
     }
 
