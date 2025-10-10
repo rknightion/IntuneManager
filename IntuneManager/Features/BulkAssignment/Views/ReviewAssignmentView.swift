@@ -36,7 +36,7 @@ struct ReviewAssignmentView: View {
             if let filterId = settings.macosVppSettings?.assignmentFilterId, !filterId.isEmpty {
                 filterIds.insert(filterId)
             }
-            if let filterId = settings.macosDmgSettings?.assignmentFilterId, !filterId.isEmpty {
+            if let filterId = settings.macosLobSettings?.assignmentFilterId, !filterId.isEmpty {
                 filterIds.insert(filterId)
             }
             if let filterId = settings.androidSettings?.assignmentFilterId, !filterId.isEmpty {
@@ -157,7 +157,7 @@ struct ReviewAssignmentView: View {
             groupSettings.settings.iosVppSettings?.assignmentFilterId != nil ||
             groupSettings.settings.iosLobSettings?.assignmentFilterId != nil ||
             groupSettings.settings.macosVppSettings?.assignmentFilterId != nil ||
-            groupSettings.settings.macosDmgSettings?.assignmentFilterId != nil ||
+            groupSettings.settings.macosLobSettings?.assignmentFilterId != nil ||
             groupSettings.settings.windowsSettings?.assignmentFilterId != nil ||
             groupSettings.settings.androidSettings?.assignmentFilterId != nil
         }
@@ -607,8 +607,8 @@ struct SettingsPreviewCard: View {
             iosLobSettingsView(iosLobSettings)
         } else if let macosVppSettings = settings.macosVppSettings {
             macosVppSettingsView(macosVppSettings)
-        } else if let macosDmgSettings = settings.macosDmgSettings {
-            macosDmgSettingsView(macosDmgSettings)
+        } else if let macosLobSettings = settings.macosLobSettings {
+            macosLobSettingsView(macosLobSettings)
         } else if let windowsSettings = settings.windowsSettings {
             windowsSettingsView(windowsSettings)
         } else if let androidSettings = settings.androidSettings {
@@ -648,11 +648,8 @@ struct SettingsPreviewCard: View {
 
     // macOS DMG Settings
     @ViewBuilder
-    private func macosDmgSettingsView(_ settings: MacOSDmgAppAssignmentSettings) -> some View {
-        if let minOS = settings.minimumOperatingSystem {
-            SimpleSettingRow(label: "Min macOS Version", value: minOS)
-        }
-        SimpleSettingRow(label: "Ignore Version Detection", value: settings.ignoreVersionDetection ? "Yes" : "No")
+    private func macosLobSettingsView(_ settings: MacOSLobAppAssignmentSettings) -> some View {
+        SimpleSettingRow(label: "Uninstall on Device Removal", value: settings.uninstallOnDeviceRemoval ? "Yes" : "No")
     }
 
     // Windows Settings
@@ -700,8 +697,8 @@ struct SettingsPreviewCard: View {
             summary += "-iosLob-\(iosLob.uninstallOnDeviceRemoval)"
         } else if let macosVpp = settings.macosVppSettings {
             summary += "-macosVpp-\(macosVpp.useDeviceLicensing)"
-        } else if let macosDmg = settings.macosDmgSettings {
-            summary += "-macosDmg-\(macosDmg.ignoreVersionDetection)"
+        } else if let macosLob = settings.macosLobSettings {
+            summary += "-macosLob-\(macosLob.uninstallOnDeviceRemoval)"
         } else if let windows = settings.windowsSettings {
             summary += "-windows-\(windows.notifications.rawValue)"
         } else if let android = settings.androidSettings {
@@ -1187,7 +1184,7 @@ struct FilterSummaryCard: View {
                       macVpp.assignmentFilterId == filterId,
                       let mode = macVpp.assignmentFilterMode {
                 result.append((groupSetting.groupId, groupSetting.groupName, mode))
-            } else if let macDmg = settings.macosDmgSettings,
+            } else if let macDmg = settings.macosLobSettings,
                       macDmg.assignmentFilterId == filterId,
                       let mode = macDmg.assignmentFilterMode {
                 result.append((groupSetting.groupId, groupSetting.groupName, mode))
