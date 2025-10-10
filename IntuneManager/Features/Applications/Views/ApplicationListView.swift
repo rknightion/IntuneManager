@@ -173,6 +173,14 @@ struct ApplicationListView: View {
         .padding()
         .background(Theme.Colors.secondaryBackground)
         .border(Color.secondary.opacity(0.2), width: 0.5)
+        .onChange(of: selectedPlatform) { _, newPlatform in
+            // Clear app type if it doesn't match the new platform
+            if let appType = selectedAppType,
+               let platform = newPlatform,
+               appType.platformCategory != platform && appType != .webApp {
+                selectedAppType = nil
+            }
+        }
     }
 
     var statusBar: some View {
@@ -487,12 +495,45 @@ struct ApplicationFiltersView: View {
                 // App Type Filter
                 Menu {
                     Button("Any", action: { selectedAppType = nil })
-                    ForEach(Application.AppType.allCases, id: \.self) { type in
-                        Button(action: { selectedAppType = type }) {
-                            if selectedAppType == type {
-                                Label(type.displayName, systemImage: "checkmark")
+
+                    // Filter types based on selected platform
+                    let typesToShow = Application.AppType.types(for: selectedPlatform)
+
+                    if selectedPlatform == nil {
+                        // Group by platform when no platform is selected
+                        ForEach(Application.AppType.groupedByPlatform, id: \.platform) { group in
+                            if !group.types.isEmpty {
+                                Section(header: Text(group.platform.displayName)) {
+                                    ForEach(group.types, id: \.self) { type in
+                                        Button(action: { selectedAppType = type }) {
+                                            if selectedAppType == type {
+                                                Label(type.displayName, systemImage: "checkmark")
+                                            } else {
+                                                Text(type.displayName)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // Add web apps separately as they're cross-platform
+                        Divider()
+                        Button(action: { selectedAppType = .webApp }) {
+                            if selectedAppType == .webApp {
+                                Label(Application.AppType.webApp.displayName, systemImage: "checkmark")
                             } else {
-                                Text(type.displayName)
+                                Text(Application.AppType.webApp.displayName)
+                            }
+                        }
+                    } else {
+                        // Show filtered types when platform is selected
+                        ForEach(typesToShow, id: \.self) { type in
+                            Button(action: { selectedAppType = type }) {
+                                if selectedAppType == type {
+                                    Label(type.displayName, systemImage: "checkmark")
+                                } else {
+                                    Text(type.displayName)
+                                }
                             }
                         }
                     }

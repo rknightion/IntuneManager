@@ -430,13 +430,36 @@ struct ApplicationSelectionView: View {
                     Picker("Type", selection: $selectedFilter) {
                         Text("All Types").tag(Application.AppType?.none)
                         Divider()
-                        ForEach(Application.AppType.allCases, id: \.self) { type in
-                            Label(type.displayName, systemImage: type.icon)
-                                .tag(Application.AppType?.some(type))
+
+                        // Filter types based on selected platform
+                        if platformFilter == nil {
+                            // Group by platform when no platform is selected
+                            ForEach(Application.AppType.groupedByPlatform, id: \.platform) { group in
+                                if !group.types.isEmpty {
+                                    Section(header: Text(group.platform.displayName)) {
+                                        ForEach(group.types, id: \.self) { type in
+                                            Label(type.displayName, systemImage: type.icon)
+                                                .tag(Application.AppType?.some(type))
+                                        }
+                                    }
+                                }
+                            }
+                            // Add web apps separately as they're cross-platform
+                            Section(header: Text("Cross-Platform")) {
+                                Label(Application.AppType.webApp.displayName, systemImage: Application.AppType.webApp.icon)
+                                    .tag(Application.AppType?.some(.webApp))
+                            }
+                        } else {
+                            // Show filtered types when platform is selected
+                            let typesToShow = Application.AppType.types(for: platformFilter)
+                            ForEach(typesToShow, id: \.self) { type in
+                                Label(type.displayName, systemImage: type.icon)
+                                    .tag(Application.AppType?.some(type))
+                            }
                         }
                     }
                     .pickerStyle(.menu)
-                    .frame(width: 150)
+                    .frame(width: 200)
 
                     Picker("Sort", selection: $sortOrder) {
                         ForEach(SortOrder.allCases, id: \.self) { order in
@@ -491,6 +514,14 @@ struct ApplicationSelectionView: View {
                 } catch {
                     Logger.shared.error("Failed to load applications: \(error)")
                 }
+            }
+        }
+        .onChange(of: platformFilter) { _, newPlatform in
+            // Clear app type filter if it doesn't match the new platform
+            if let appType = selectedFilter,
+               let platform = newPlatform,
+               appType.platformCategory != platform && appType != .webApp {
+                selectedFilter = nil
             }
         }
         .sheet(isPresented: $showingBulkEdit) {
