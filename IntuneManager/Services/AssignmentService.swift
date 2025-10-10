@@ -545,8 +545,8 @@ final class AssignmentService: ObservableObject {
                     settingsValue = iosLobSettings
                 } else if let macosVppSettings = graphSettings.macosVppSettings {
                     settingsValue = macosVppSettings
-                } else if let macosDmgSettings = graphSettings.macosDmgSettings {
-                    settingsValue = macosDmgSettings
+                } else if let macosLobSettings = graphSettings.macosLobSettings {
+                    settingsValue = macosLobSettings
                 } else if let windowsSettings = graphSettings.windowsSettings {
                     settingsValue = windowsSettings
                 }
