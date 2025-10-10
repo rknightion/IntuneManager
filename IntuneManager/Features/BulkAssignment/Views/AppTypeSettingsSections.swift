@@ -264,60 +264,52 @@ struct MacOSVppSettingsSection: View {
     }
 }
 
-// MARK: - macOS DMG Settings Section
-struct MacOSDmgSettingsSection: View {
-    @Binding var settings: MacOSDmgAppAssignmentSettings
+// MARK: - macOS LOB (DMG/PKG) Settings Section
+// Note: All macOS LOB-based apps (DMG, PKG, LOB) use the same assignment settings.
+// Detection rules, version detection, and minimum OS are properties of the APP itself during creation, not assignment.
+struct MacOSLobSettingsSection: View {
+    @Binding var settings: MacOSLobAppAssignmentSettings
     let onShowHelp: (String, String, String?) -> Void
     @State private var hoveredSetting: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("macOS DMG App Settings", systemImage: "macbook")
+            Label("macOS Line-of-Business App Settings", systemImage: "macbook")
                 .font(.headline)
 
-            // Minimum OS Version
-            SettingRow(
-                title: "Minimum operating system",
-                description: AssignmentSettingDescription.macosDescriptions["minimumOperatingSystem"]?.description ?? "",
-                hoveredSetting: $hoveredSetting,
-                settingKey: "minimumOperatingSystem",
-                onShowHelp: onShowHelp
-            ) {
-                TextField("e.g., 10.15", text: Binding(
-                    get: { settings.minimumOperatingSystem ?? "" },
-                    set: { settings.minimumOperatingSystem = $0.isEmpty ? nil : $0 }
-                ))
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 150)
-            }
+            Text("Settings apply to DMG, PKG, and LOB apps")
+                .font(.caption)
+                .foregroundColor(.secondary)
 
-            // Version Detection
+            // Uninstall on Device Removal
             ToggleSettingRow(
-                title: "Ignore version detection",
-                description: "Install the app even if a different version is already installed",
-                isOn: $settings.ignoreVersionDetection,
+                title: "Uninstall on device removal",
+                description: "Automatically uninstall when device is removed from management",
+                isOn: $settings.uninstallOnDeviceRemoval,
                 hoveredSetting: $hoveredSetting,
-                settingKey: "ignoreVersionDetection",
+                settingKey: "uninstallOnDeviceRemoval",
                 onShowHelp: onShowHelp
             )
 
-            // Detection Rules - placeholder for now
+            // Informational note about app creation properties
             VStack(alignment: .leading, spacing: 8) {
-                Label("Detection Rules", systemImage: "magnifyingglass")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-
-                Text("Detection rules help determine if the app is already installed")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                Button(action: {
-                    // TODO: Implement detection rules editor
-                }) {
-                    Label("Configure Detection Rules", systemImage: "plus.circle")
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "info.circle")
                         .font(.caption)
+                        .foregroundColor(.blue)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("App Creation Properties")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                        Text("Detection rules, version detection, and minimum OS version are configured when creating or updating the app itself, not during assignment.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-                .buttonStyle(.bordered)
+                .padding(8)
+                .background(Color.blue.opacity(0.05))
+                .cornerRadius(6)
             }
         }
     }
@@ -651,7 +643,7 @@ struct AssignmentFiltersSection: View {
         if let mode = settings.macosVppSettings?.assignmentFilterMode {
             return mode
         }
-        if let mode = settings.macosDmgSettings?.assignmentFilterMode {
+        if let mode = settings.macosLobSettings?.assignmentFilterMode {
             return mode
         }
         if let mode = settings.windowsSettings?.assignmentFilterMode {
@@ -673,8 +665,8 @@ struct AssignmentFiltersSection: View {
         if settings.macosVppSettings != nil {
             settings.macosVppSettings?.assignmentFilterMode = mode
         }
-        if settings.macosDmgSettings != nil {
-            settings.macosDmgSettings?.assignmentFilterMode = mode
+        if settings.macosLobSettings != nil {
+            settings.macosLobSettings?.assignmentFilterMode = mode
         }
         if settings.windowsSettings != nil {
             settings.windowsSettings?.assignmentFilterMode = mode
@@ -694,7 +686,7 @@ struct AssignmentFiltersSection: View {
         if let id = settings.macosVppSettings?.assignmentFilterId {
             return id
         }
-        if let id = settings.macosDmgSettings?.assignmentFilterId {
+        if let id = settings.macosLobSettings?.assignmentFilterId {
             return id
         }
         if let id = settings.windowsSettings?.assignmentFilterId {
@@ -716,8 +708,8 @@ struct AssignmentFiltersSection: View {
         if settings.macosVppSettings != nil {
             settings.macosVppSettings?.assignmentFilterId = nil
         }
-        if settings.macosDmgSettings != nil {
-            settings.macosDmgSettings?.assignmentFilterId = nil
+        if settings.macosLobSettings != nil {
+            settings.macosLobSettings?.assignmentFilterId = nil
         }
         if settings.windowsSettings != nil {
             settings.windowsSettings?.assignmentFilterId = nil

@@ -351,21 +351,21 @@ struct GroupSettingsPanel: View {
                             }
                         }
 
-                    case .macOSDmgApp:
-                        MacOSDmgSettingsSection(
+                    case .macOSDmgApp, .macOSPkgApp, .macOSLobApp:
+                        MacOSLobSettingsSection(
                             settings: Binding(
                                 get: {
-                                    settings.settings.macosDmgSettings ?? MacOSDmgAppAssignmentSettings()
+                                    settings.settings.macosLobSettings ?? MacOSLobAppAssignmentSettings()
                                 },
                                 set: {
-                                    settings.settings.macosDmgSettings = $0
+                                    settings.settings.macosLobSettings = $0
                                 }
                             ),
                             onShowHelp: onShowHelp
                         )
                         .onAppear {
-                            if settings.settings.macosDmgSettings == nil {
-                                settings.settings.macosDmgSettings = MacOSDmgAppAssignmentSettings()
+                            if settings.settings.macosLobSettings == nil {
+                                settings.settings.macosLobSettings = MacOSLobAppAssignmentSettings()
                             }
                         }
 
