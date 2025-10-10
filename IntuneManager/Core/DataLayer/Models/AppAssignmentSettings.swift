@@ -242,60 +242,42 @@ struct MacOSVppAppAssignmentSettings: AppAssignmentSettingsProtocol {
     }
 }
 
-// MARK: - macOS DMG App Assignment Settings
-struct MacOSDmgAppAssignmentSettings: AppAssignmentSettingsProtocol {
+// MARK: - macOS LOB/DMG/PKG App Assignment Settings
+// Per Microsoft Graph API docs, all macOS LOB-based apps (DMG, PKG, LOB) use the same assignment settings type
+// Detection rules, version detection, and minimum OS are properties of the APP itself during creation, not assignment
+struct MacOSLobAppAssignmentSettings: AppAssignmentSettingsProtocol {
     var assignmentFilterId: String?
     var assignmentFilterMode: AssignmentFilterMode?
 
-    // macOS DMG specific settings
-    var minimumOperatingSystem: String? // e.g., "10.15"
-    var ignoreVersionDetection: Bool = false
-
-    // Detection rules
-    var detectionRules: [DetectionRule]?
-
-    struct DetectionRule: Codable {
-        var ruleType: DetectionRuleType
-        var check32BitOn64System: Bool = false
-        var detectionValue: String?
-        var fileOrFolderPath: String?
-
-        enum DetectionRuleType: String, Codable {
-            case file = "fileExistence"
-            case folder = "folderExistence"
-            case version = "fileVersion"
-        }
-    }
+    // macOS LOB specific settings - following validated Intune defaults:
+    var uninstallOnDeviceRemoval: Bool = false // ✓ Defaults to No
 
     enum CodingKeys: String, CodingKey {
         case odataType = "@odata.type"
         case assignmentFilterId = "deviceAndAppManagementAssignmentFilterId"
         case assignmentFilterMode = "deviceAndAppManagementAssignmentFilterType"
-        case minimumOperatingSystem
-        case ignoreVersionDetection
-        case detectionRules
+        case uninstallOnDeviceRemoval
     }
 
     var odataType: String {
-        return "#microsoft.graph.macOsDmgAppAssignmentSettings"
+        return "#microsoft.graph.macOsLobAppAssignmentSettings"
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(odataType, forKey: .odataType)
-        // Only encode assignment filter fields if they have values
+
+        // Only send if true (different from default false)
+        if uninstallOnDeviceRemoval {  // Default is false
+            try container.encode(uninstallOnDeviceRemoval, forKey: .uninstallOnDeviceRemoval)
+        }
+
+        // Assignment filters only if set
         if let filterId = assignmentFilterId {
             try container.encode(filterId, forKey: .assignmentFilterId)
             if let filterMode = assignmentFilterMode {
                 try container.encode(filterMode.rawValue, forKey: .assignmentFilterMode)
             }
-        }
-        if let minOS = minimumOperatingSystem {
-            try container.encode(minOS, forKey: .minimumOperatingSystem)
-        }
-        try container.encode(ignoreVersionDetection, forKey: .ignoreVersionDetection)
-        if let rules = detectionRules {
-            try container.encode(rules, forKey: .detectionRules)
         }
     }
 
@@ -304,9 +286,7 @@ struct MacOSDmgAppAssignmentSettings: AppAssignmentSettingsProtocol {
         // Skip @odata.type during decode
         self.assignmentFilterId = try container.decodeIfPresent(String.self, forKey: .assignmentFilterId)
         self.assignmentFilterMode = try container.decodeIfPresent(AssignmentFilterMode.self, forKey: .assignmentFilterMode)
-        self.minimumOperatingSystem = try container.decodeIfPresent(String.self, forKey: .minimumOperatingSystem)
-        self.ignoreVersionDetection = try container.decodeIfPresent(Bool.self, forKey: .ignoreVersionDetection) ?? false
-        self.detectionRules = try container.decodeIfPresent([DetectionRule].self, forKey: .detectionRules)
+        self.uninstallOnDeviceRemoval = try container.decodeIfPresent(Bool.self, forKey: .uninstallOnDeviceRemoval) ?? false
     }
 
     init() {
@@ -499,7 +479,7 @@ struct AppAssignmentSettings: Codable {
     var iosVppSettings: IOSVppAppAssignmentSettings?
     var iosLobSettings: IOSLobAppAssignmentSettings?
     var macosVppSettings: MacOSVppAppAssignmentSettings?
-    var macosDmgSettings: MacOSDmgAppAssignmentSettings?
+    var macosLobSettings: MacOSLobAppAssignmentSettings? // Used for DMG, PKG, and LOB apps
     var windowsSettings: WindowsAppAssignmentSettings?
     var androidSettings: AndroidManagedStoreAppAssignmentSettings?
 
@@ -522,9 +502,9 @@ struct AppAssignmentSettings: Codable {
         return settings
     }
 
-    static func macosDmg(intent: Assignment.AssignmentIntent) -> AppAssignmentSettings {
+    static func macosLob(intent: Assignment.AssignmentIntent) -> AppAssignmentSettings {
         var settings = AppAssignmentSettings(intent: intent)
-        settings.macosDmgSettings = MacOSDmgAppAssignmentSettings()
+        settings.macosLobSettings = MacOSLobAppAssignmentSettings()
         return settings
     }
 
@@ -549,8 +529,9 @@ struct AppAssignmentSettings: Codable {
             return iosLobSettings
         case .macOSVppApp:
             return macosVppSettings
-        case .macOSDmgApp:
-            return macosDmgSettings
+        case .macOSDmgApp, .macOSPkgApp, .macOSLobApp:
+            // All macOS LOB-based apps use the same assignment settings type
+            return macosLobSettings
         case .windowsWebApp, .win32LobApp, .winGetApp:
             return windowsSettings
         case .androidStoreApp, .androidManagedStoreApp:
@@ -606,8 +587,8 @@ struct GroupAssignmentSettings: Identifiable, Codable {
             self.settings = .iosLob(intent: intent)
         case .macOSVppApp:
             self.settings = .macosVpp(intent: intent)
-        case .macOSDmgApp:
-            self.settings = .macosDmg(intent: intent)
+        case .macOSDmgApp, .macOSPkgApp, .macOSLobApp:
+            self.settings = .macosLob(intent: intent)
         case .windowsWebApp, .win32LobApp, .winGetApp:
             self.settings = .windows(intent: intent)
         case .androidStoreApp, .androidManagedStoreApp:
