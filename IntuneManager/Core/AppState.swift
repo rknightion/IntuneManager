@@ -96,9 +96,14 @@ class AppState: ObservableObject {
         defer { isLoading = false }
 
         do {
-            _ = try await DeviceService.shared.fetchDevices(forceRefresh: true)
-            _ = try await ApplicationService.shared.fetchApplications(forceRefresh: true)
-            _ = try await GroupService.shared.fetchGroups(forceRefresh: true)
+            async let devicesTask = DeviceService.shared.fetchDevices(forceRefresh: true)
+            async let appsTask = ApplicationService.shared.fetchApplications(forceRefresh: true)
+            async let groupsTask = GroupService.shared.fetchGroups(forceRefresh: true)
+            _ = try await devicesTask
+            _ = try await appsTask
+            _ = try await groupsTask
+            await AssignmentFilterService.shared.fetchFilters(forceRefresh: true)
+
             AssignmentService.shared.activeAssignments.removeAll()
             error = nil
         } catch {
@@ -112,9 +117,15 @@ class AppState: ObservableObject {
         defer { isLoading = false }
 
         do {
-            _ = try await DeviceService.shared.fetchDevices()
-            _ = try await ApplicationService.shared.fetchApplications()
-            _ = try await GroupService.shared.fetchGroups()
+            async let devicesTask = DeviceService.shared.fetchDevices()
+            async let appsTask = ApplicationService.shared.fetchApplications()
+            async let groupsTask = GroupService.shared.fetchGroups()
+            async let filtersTask = AssignmentFilterService.shared.getFilters()
+
+            _ = try await devicesTask
+            _ = try await appsTask
+            _ = try await groupsTask
+            _ = await filtersTask
         } catch {
             Logger.shared.error("Failed to load initial data: \(error)")
             self.error = error

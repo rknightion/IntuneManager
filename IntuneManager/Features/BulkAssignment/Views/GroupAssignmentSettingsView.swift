@@ -164,10 +164,12 @@ struct GroupListSidebar: View {
             ScrollView {
                 VStack(spacing: 4) {
                     ForEach(groups.sorted(by: { $0.displayName < $1.displayName })) { group in
+                        let filterApplied = groupSettings.first(where: { $0.groupId == group.id })?.assignmentFilterId != nil
                         GroupSettingsRowView(
                             group: group,
                             isSelected: selectedGroupId == group.id,
                             hasCustomSettings: hasCustomSettings(for: group.id),
+                            hasFilter: filterApplied,
                             assignmentMode: getAssignmentMode(for: group.id),
                             onSelect: {
                                 selectedGroupId = group.id
@@ -189,7 +191,8 @@ struct GroupListSidebar: View {
             return false
         }
         // Check if settings differ from defaults
-        return settings.settings.iosVppSettings?.useDeviceLicensing ?? false ||
+        return settings.assignmentFilterId != nil ||
+               settings.settings.iosVppSettings?.useDeviceLicensing ?? false ||
                settings.settings.iosVppSettings?.uninstallOnDeviceRemoval ?? false ||
                settings.settings.iosVppSettings?.preventAutoAppUpdate ?? false ||
                settings.settings.iosVppSettings?.vpnConfigurationId != nil
@@ -210,6 +213,7 @@ struct GroupSettingsRowView: View {
     let group: DeviceGroup
     let isSelected: Bool
     let hasCustomSettings: Bool
+    let hasFilter: Bool
     let assignmentMode: GroupAssignmentSettings.AssignmentMode?
     let onSelect: () -> Void
     let onModeChange: ((GroupAssignmentSettings.AssignmentMode) -> Void)?
@@ -265,6 +269,13 @@ struct GroupSettingsRowView: View {
                     .font(.caption)
                     .foregroundColor(.orange)
                     .help("Has custom settings")
+            }
+
+            if hasFilter {
+                Image(systemName: "line.horizontal.3.decrease.circle")
+                    .font(.caption)
+                    .foregroundColor(.blue)
+                    .help("Assignment filter applied")
             }
         }
         .padding(.horizontal, 12)
@@ -413,7 +424,7 @@ struct GroupSettingsPanel: View {
                 }
 
                 // Assignment Filters Section
-                AssignmentFiltersSection(settings: $settings.settings)
+                AssignmentFiltersSection(groupSettings: $settings, appType: appType)
             }
             .padding()
     }

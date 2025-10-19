@@ -4,6 +4,7 @@ struct ApplicationListView: View {
     @StateObject private var appService = ApplicationService.shared
     @State private var searchText = ""
     @State private var assignmentFilter: AssignmentFilter = .all
+    @State private var selectedAssignmentIntent: AssignmentIntentFilter = .any
     @State private var showFilters = false
 
     // Filter states
@@ -39,6 +40,67 @@ struct ApplicationListView: View {
         }
     }
 
+    enum AssignmentIntentFilter: String, CaseIterable, Identifiable {
+        case any
+        case install
+        case uninstall
+        case available
+        case availableWithoutEnrollment
+
+        var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .any: return "Any"
+            case .install: return "Install (Required)"
+            case .uninstall: return "Uninstall"
+            case .available: return "Available"
+            case .availableWithoutEnrollment: return "Available w/o Enrollment"
+            }
+        }
+
+        var chipLabel: String {
+            switch self {
+            case .any: return "Any"
+            default: return displayName
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .any: return "line.3.horizontal.decrease.circle"
+            case .install: return AppAssignment.AssignmentIntent.required.icon
+            case .uninstall: return AppAssignment.AssignmentIntent.uninstall.icon
+            case .available: return AppAssignment.AssignmentIntent.available.icon
+            case .availableWithoutEnrollment: return AppAssignment.AssignmentIntent.availableWithoutEnrollment.icon
+            }
+        }
+
+        var matchingIntents: [AppAssignment.AssignmentIntent] {
+            switch self {
+            case .any:
+                return []
+            case .install:
+                return [.required]
+            case .uninstall:
+                return [.uninstall]
+            case .available:
+                return [.available]
+            case .availableWithoutEnrollment:
+                return [.availableWithoutEnrollment]
+            }
+        }
+
+        var requiresGroupTarget: Bool {
+            switch self {
+            case .install, .uninstall:
+                return true
+            default:
+                return false
+            }
+        }
+    }
+
     var availablePublishers: [String] {
         var publishers = Set<String>()
         publishers.insert("All")
@@ -63,6 +125,7 @@ struct ApplicationListView: View {
     var activeFilterCount: Int {
         var count = 0
         if assignmentFilter != .all { count += 1 }
+        if selectedAssignmentIntent != .any { count += 1 }
         if selectedAppType != nil { count += 1 }
         if selectedPublisher != nil && selectedPublisher != "All" { count += 1 }
         if selectedOwner != nil && selectedOwner != "All" { count += 1 }
@@ -75,6 +138,7 @@ struct ApplicationListView: View {
 
     func clearFilters() {
         assignmentFilter = .all
+        selectedAssignmentIntent = .any
         selectedAppType = nil
         selectedPublisher = nil
         selectedOwner = nil
@@ -96,6 +160,14 @@ struct ApplicationListView: View {
             apps = apps.filter { !$0.hasAssignments }
         case .assigned:
             apps = apps.filter { $0.hasAssignments }
+        }
+
+        if selectedAssignmentIntent != .any {
+            let intents = selectedAssignmentIntent.matchingIntents
+            let requireGroup = selectedAssignmentIntent.requiresGroupTarget
+            apps = apps.filter { app in
+                intents.first(where: { app.hasAssignment(intent: $0, groupOnly: requireGroup) }) != nil
+            }
         }
 
         // App type filter
@@ -157,6 +229,7 @@ struct ApplicationListView: View {
     var filtersSection: some View {
         ApplicationFiltersView(
             assignmentFilter: $assignmentFilter,
+            selectedAssignmentIntent: $selectedAssignmentIntent,
             selectedAppType: $selectedAppType,
             selectedPublisher: $selectedPublisher,
             selectedOwner: $selectedOwner,
@@ -181,6 +254,13 @@ struct ApplicationListView: View {
                 selectedAppType = nil
             }
         }
+        .onChange(of: selectedAssignmentIntent) { _, newValue in
+            if newValue == .any {
+                // leave assignment filter as-is
+            } else if assignmentFilter == .unassigned {
+                assignmentFilter = .assigned
+            }
+        }
     }
 
     var statusBar: some View {
@@ -188,16 +268,35 @@ struct ApplicationListView: View {
             Text("\(filteredApplications.count) of \(appService.applications.count) applications")
                 .font(.caption)
                 .foregroundColor(.secondary)
+            if isSelecting {
+                Divider()
+                    .frame(height: 12)
+                Text("\(selectedApplications.count) selected")
+                    .font(.caption)
+                    .foregroundColor(selectedApplications.isEmpty ? .secondary : .accentColor)
+            }
             Spacer()
             HStack(spacing: 12) {
                 let unassignedCount = appService.applications.filter { !$0.hasAssignments }.count
                 let assignedCount = appService.applications.filter { $0.hasAssignments }.count
+                let installGroupCount = appService.applications.filter {
+                    $0.hasAssignment(intent: .required, groupOnly: true)
+                }.count
+                let uninstallGroupCount = appService.applications.filter {
+                    $0.hasAssignment(intent: .uninstall, groupOnly: true)
+                }.count
                 Label("\(unassignedCount) unassigned", systemImage: "square")
                     .font(.caption)
                     .foregroundColor(.orange)
                 Label("\(assignedCount) assigned", systemImage: "checkmark.square")
                     .font(.caption)
                     .foregroundColor(.green)
+                Label("\(installGroupCount) install", systemImage: AppAssignment.AssignmentIntent.required.icon)
+                    .font(.caption)
+                    .foregroundColor(.blue)
+                Label("\(uninstallGroupCount) uninstall", systemImage: AppAssignment.AssignmentIntent.uninstall.icon)
+                    .font(.caption)
+                    .foregroundColor(.red)
                 Text("(\(appService.applications.count) total)")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -460,6 +559,7 @@ struct ApplicationListView: View {
 
 struct ApplicationFiltersView: View {
     @Binding var assignmentFilter: ApplicationListView.AssignmentFilter
+    @Binding var selectedAssignmentIntent: ApplicationListView.AssignmentIntentFilter
     @Binding var selectedAppType: Application.AppType?
     @Binding var selectedPublisher: String?
     @Binding var selectedOwner: String?
@@ -492,6 +592,17 @@ struct ApplicationFiltersView: View {
 
             // Second row: Filter chips that can wrap
             FlowLayout(spacing: 8) {
+                Menu {
+                    Picker("Assignment Intent", selection: $selectedAssignmentIntent) {
+                        ForEach(ApplicationListView.AssignmentIntentFilter.allCases) { intent in
+                            Label(intent.displayName, systemImage: intent.systemImage)
+                                .tag(intent)
+                        }
+                    }
+                } label: {
+                    AppFilterChip(title: "Intent", value: selectedAssignmentIntent.chipLabel)
+                }
+
                 // App Type Filter
                 Menu {
                     Button("Any", action: { selectedAppType = nil })
@@ -703,6 +814,7 @@ struct ApplicationListRowView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
+                    assignmentIntentBadges
                 }
             }
 
@@ -727,6 +839,29 @@ struct ApplicationListRowView: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
+    }
+
+    @ViewBuilder
+    private var assignmentIntentBadges: some View {
+        let intents = application.assignmentIntents().sorted { lhs, rhs in
+            lhs.displayOrder < rhs.displayOrder
+        }
+
+        if !intents.isEmpty {
+            HStack(spacing: 6) {
+                ForEach(intents, id: \.self) { intent in
+                    let colors = intent.badgeColors
+                    Label(intent.badgeTitle, systemImage: intent.icon)
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .background(colors.background)
+                        .foregroundColor(colors.foreground)
+                        .cornerRadius(6)
+                        .help(intent.detailedDescription)
+                }
+            }
+        }
     }
 }
 
@@ -753,5 +888,60 @@ struct AppFilterChip: View {
         .padding(.vertical, 5)
         .background(Color.gray.opacity(0.1))
         .cornerRadius(8)
+    }
+}
+
+// MARK: - Helpers
+
+private extension Application {
+    func assignmentIntents(groupOnly: Bool = false) -> [AppAssignment.AssignmentIntent] {
+        guard let assignments = assignments else { return [] }
+        let intents = assignments.compactMap { assignment -> AppAssignment.AssignmentIntent? in
+            if groupOnly && assignment.target.type != .group {
+                return nil
+            }
+            return assignment.intent
+        }
+        let unique = Set(intents)
+        return AppAssignment.AssignmentIntent.allCases.filter { unique.contains($0) }
+    }
+
+    func hasAssignment(intent: AppAssignment.AssignmentIntent, groupOnly: Bool = false) -> Bool {
+        assignments?.contains(where: { assignment in
+            (!groupOnly || assignment.target.type == .group) && assignment.intent == intent
+        }) ?? false
+    }
+}
+
+private extension AppAssignment.AssignmentIntent {
+    var badgeTitle: String {
+        switch self {
+        case .required: return "Install"
+        case .available: return "Available"
+        case .uninstall: return "Uninstall"
+        case .availableWithoutEnrollment: return "Optional"
+        }
+    }
+
+    var displayOrder: Int {
+        switch self {
+        case .required: return 0
+        case .available: return 1
+        case .availableWithoutEnrollment: return 2
+        case .uninstall: return 3
+        }
+    }
+
+    var badgeColors: (background: Color, foreground: Color) {
+        switch self {
+        case .required:
+            return (Color.green.opacity(0.15), Color.green)
+        case .available:
+            return (Color.blue.opacity(0.15), Color.blue)
+        case .availableWithoutEnrollment:
+            return (Color.purple.opacity(0.15), Color.purple)
+        case .uninstall:
+            return (Color.red.opacity(0.15), Color.red)
+        }
     }
 }

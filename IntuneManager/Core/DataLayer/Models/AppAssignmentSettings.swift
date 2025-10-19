@@ -548,6 +548,8 @@ struct GroupAssignmentSettings: Identifiable, Codable {
     var groupId: String
     var groupName: String
     var assignmentMode: AssignmentMode = .include  // Include or exclude this group
+    var assignmentFilterId: String?
+    var assignmentFilterMode: AssignmentFilterMode?
     var settings: AppAssignmentSettings
 
     enum AssignmentMode: String, Codable, CaseIterable {

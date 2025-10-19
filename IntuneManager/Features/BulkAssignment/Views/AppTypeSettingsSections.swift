@@ -566,8 +566,24 @@ struct WindowsSettingsSection: View {
 
 // MARK: - Assignment Filters Section
 struct AssignmentFiltersSection: View {
-    @Binding var settings: AppAssignmentSettings
+    @Binding var groupSettings: GroupAssignmentSettings
+    let appType: Application.AppType
+
+    @ObservedObject private var filterService = AssignmentFilterService.shared
     @State private var showingFilterPicker = false
+
+    private var selectedFilter: AssignmentFilter? {
+        filterService.filter(withId: groupSettings.assignmentFilterId)
+    }
+
+    private var filterModeBinding: Binding<AssignmentFilterMode> {
+        Binding(
+            get: { groupSettings.assignmentFilterMode ?? .include },
+            set: { newValue in
+                groupSettings.assignmentFilterMode = newValue
+            }
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -576,147 +592,114 @@ struct AssignmentFiltersSection: View {
             Label("Assignment Filters", systemImage: "line.horizontal.3.decrease.circle")
                 .font(.headline)
 
-            Text("Use filters to include or exclude devices based on properties")
+            Text("Target this group with an Intune assignment filter.")
                 .font(.caption)
                 .foregroundColor(.secondary)
 
-            // Mode selector (Include/Exclude)
-            if let filterMode = getFilterMode() {
-                Picker("Filter Mode", selection: Binding(
-                    get: { filterMode },
-                    set: { newMode in
-                        setFilterMode(newMode)
-                    }
-                )) {
-                    Text("Included").tag(AssignmentFilterMode.include)
-                    Text("Excluded").tag(AssignmentFilterMode.exclude)
+            if filterService.isLoading && filterService.filters.isEmpty {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.75)
+                    Text("Loading filters…")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            if let filter = selectedFilter {
+                filterSummary(filter)
+
+                Picker("Filter Mode", selection: filterModeBinding) {
+                    Text("Include").tag(AssignmentFilterMode.include)
+                    Text("Exclude").tag(AssignmentFilterMode.exclude)
                 }
                 .pickerStyle(.segmented)
-                .frame(maxWidth: 200)
-            }
+                .frame(maxWidth: 220)
 
-            // Filter selection
-            HStack {
-                if let filterId = getFilterId() {
-                    Label(filterId, systemImage: "line.horizontal.3.decrease.circle")
-                        .font(.caption)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(6)
-
-                    Button("Remove") {
-                        clearFilter()
-                    }
-                    .font(.caption)
-                    .foregroundColor(.red)
-                } else {
-                    Button("Add Filter") {
+                HStack(spacing: 12) {
+                    Button {
                         showingFilterPicker = true
+                    } label: {
+                        Label("Change Filter", systemImage: "arrow.triangle.2.circlepath")
                     }
-                    .buttonStyle(.bordered)
-                    .font(.caption)
+
+                    Button(role: .destructive) {
+                        clearSelection()
+                    } label: {
+                        Label("Remove Filter", systemImage: "trash")
+                    }
                 }
+                .buttonStyle(.bordered)
+            } else {
+                Button {
+                    showingFilterPicker = true
+                } label: {
+                    Label("Add Filter", systemImage: "plus.circle")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+                Text("No filter selected. The assignment will target all devices in the group.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
+        }
+        .task {
+            await filterService.fetchFilters()
         }
         .sheet(isPresented: $showingFilterPicker) {
-            // TODO: Implement filter picker
-            VStack {
-                Text("Assignment Filters")
-                    .font(.headline)
-                    .padding()
-                Text("Coming soon")
-                    .foregroundColor(.secondary)
+            AssignmentFilterPickerView(
+                appType: appType,
+                selectedFilterId: groupSettings.assignmentFilterId
+            ) { filter in
+                groupSettings.assignmentFilterId = filter.id
+                if groupSettings.assignmentFilterMode == nil {
+                    groupSettings.assignmentFilterMode = .include
+                }
+            }
+            .frame(minWidth: 360, minHeight: 420)
+        }
+    }
+
+    private func filterSummary(_ filter: AssignmentFilter) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "line.horizontal.3.decrease.circle.fill")
+                    .foregroundColor(.accentColor)
+                    .font(.title3)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(filter.displayName)
+                        .font(.headline)
+                    Text(filter.platform.displayName)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
                 Spacer()
             }
-            .frame(minWidth: 300, idealWidth: 400, maxWidth: 500, minHeight: 250, idealHeight: 300)
+
+            if !filter.rule.isEmpty {
+                Text(filter.rule)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .padding(8)
+                    .background(Color.gray.opacity(0.08))
+                    .cornerRadius(6)
+            }
+
+            if let description = filter.filterDescription, !description.isEmpty {
+                Text(description)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
         }
+        .padding(8)
+        .background(Color.accentColor.opacity(0.08))
+        .cornerRadius(8)
     }
 
-    func getFilterMode() -> AssignmentFilterMode? {
-        if let mode = settings.iosVppSettings?.assignmentFilterMode {
-            return mode
-        }
-        if let mode = settings.iosLobSettings?.assignmentFilterMode {
-            return mode
-        }
-        if let mode = settings.macosVppSettings?.assignmentFilterMode {
-            return mode
-        }
-        if let mode = settings.macosLobSettings?.assignmentFilterMode {
-            return mode
-        }
-        if let mode = settings.windowsSettings?.assignmentFilterMode {
-            return mode
-        }
-        if let mode = settings.androidSettings?.assignmentFilterMode {
-            return mode
-        }
-        return nil
-    }
-
-    func setFilterMode(_ mode: AssignmentFilterMode) {
-        if settings.iosVppSettings != nil {
-            settings.iosVppSettings?.assignmentFilterMode = mode
-        }
-        if settings.iosLobSettings != nil {
-            settings.iosLobSettings?.assignmentFilterMode = mode
-        }
-        if settings.macosVppSettings != nil {
-            settings.macosVppSettings?.assignmentFilterMode = mode
-        }
-        if settings.macosLobSettings != nil {
-            settings.macosLobSettings?.assignmentFilterMode = mode
-        }
-        if settings.windowsSettings != nil {
-            settings.windowsSettings?.assignmentFilterMode = mode
-        }
-        if settings.androidSettings != nil {
-            settings.androidSettings?.assignmentFilterMode = mode
-        }
-    }
-
-    func getFilterId() -> String? {
-        if let id = settings.iosVppSettings?.assignmentFilterId {
-            return id
-        }
-        if let id = settings.iosLobSettings?.assignmentFilterId {
-            return id
-        }
-        if let id = settings.macosVppSettings?.assignmentFilterId {
-            return id
-        }
-        if let id = settings.macosLobSettings?.assignmentFilterId {
-            return id
-        }
-        if let id = settings.windowsSettings?.assignmentFilterId {
-            return id
-        }
-        if let id = settings.androidSettings?.assignmentFilterId {
-            return id
-        }
-        return nil
-    }
-
-    func clearFilter() {
-        if settings.iosVppSettings != nil {
-            settings.iosVppSettings?.assignmentFilterId = nil
-        }
-        if settings.iosLobSettings != nil {
-            settings.iosLobSettings?.assignmentFilterId = nil
-        }
-        if settings.macosVppSettings != nil {
-            settings.macosVppSettings?.assignmentFilterId = nil
-        }
-        if settings.macosLobSettings != nil {
-            settings.macosLobSettings?.assignmentFilterId = nil
-        }
-        if settings.windowsSettings != nil {
-            settings.windowsSettings?.assignmentFilterId = nil
-        }
-        if settings.androidSettings != nil {
-            settings.androidSettings?.assignmentFilterId = nil
-        }
+    private func clearSelection() {
+        groupSettings.assignmentFilterId = nil
+        groupSettings.assignmentFilterMode = nil
     }
 }
 

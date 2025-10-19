@@ -21,6 +21,7 @@ final class LocalDataStore {
             try deleteAll(Application.self, in: context)
             try deleteAll(DeviceGroup.self, in: context)
             try deleteAll(Assignment.self, in: context)
+            try deleteAll(AssignmentFilter.self, in: context)
             try context.save()
         } catch {
             Logger.shared.error("Failed to reset LocalDataStore: \(error.localizedDescription)")
@@ -334,6 +335,18 @@ final class LocalDataStore {
 
     func storeAssignments(_ assignments: [Assignment]) {
         replace(models: assignments)
+    }
+
+    // MARK: - Assignment Filters
+
+    func fetchAssignmentFilters() -> [AssignmentFilter] {
+        guard let context = modelContext else { return [] }
+        let descriptor = FetchDescriptor<AssignmentFilter>(sortBy: [SortDescriptor(\.displayName, comparator: .localizedStandard)])
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    func replaceAssignmentFilters(with filters: [AssignmentFilter]) {
+        replace(models: filters)
     }
 
     // MARK: - Helpers

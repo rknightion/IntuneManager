@@ -256,6 +256,7 @@ struct ApplicationSelectionView: View {
     @State private var searchText = ""
     @State private var selectedFilter: Application.AppType?
     @State private var assignmentFilter: AssignmentFilter = .all
+    @State private var assignmentIntentFilter: AssignmentIntentFilter = .any
     @State private var sortOrder: SortOrder = .name
     @State private var platformFilter: Application.DevicePlatform?
     @State private var showingBulkEdit = false
@@ -275,6 +276,60 @@ struct ApplicationSelectionView: View {
             case .all: return "square.grid.2x2"
             case .unassigned: return "square"
             case .assigned: return "person.2.square.stack"
+            }
+        }
+    }
+
+    enum AssignmentIntentFilter: String, CaseIterable, Identifiable {
+        case any
+        case install
+        case uninstall
+        case available
+        case availableWithoutEnrollment
+
+        var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .any: return "Any Intent"
+            case .install: return "Install (Required)"
+            case .uninstall: return "Uninstall"
+            case .available: return "Available"
+            case .availableWithoutEnrollment: return "Available w/o Enrollment"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .any: return "line.3.horizontal.decrease.circle"
+            case .install: return AppAssignment.AssignmentIntent.required.icon
+            case .uninstall: return AppAssignment.AssignmentIntent.uninstall.icon
+            case .available: return AppAssignment.AssignmentIntent.available.icon
+            case .availableWithoutEnrollment: return AppAssignment.AssignmentIntent.availableWithoutEnrollment.icon
+            }
+        }
+
+        var matchingIntents: [AppAssignment.AssignmentIntent] {
+            switch self {
+            case .any:
+                return []
+            case .install:
+                return [.required]
+            case .uninstall:
+                return [.uninstall]
+            case .available:
+                return [.available]
+            case .availableWithoutEnrollment:
+                return [.availableWithoutEnrollment]
+            }
+        }
+
+        var requiresGroupTarget: Bool {
+            switch self {
+            case .install, .uninstall:
+                return true
+            default:
+                return false
             }
         }
     }
@@ -310,6 +365,18 @@ struct ApplicationSelectionView: View {
             apps = apps.filter { !$0.hasAssignments }
         case .assigned:
             apps = apps.filter { $0.hasAssignments }
+        }
+
+        if assignmentIntentFilter != .any {
+            let intents = assignmentIntentFilter.matchingIntents
+            let requireGroup = assignmentIntentFilter.requiresGroupTarget
+            apps = apps.filter { app in
+                guard let assignments = app.assignments else { return false }
+                return assignments.contains { assignment in
+                    intents.contains(assignment.intent) &&
+                    (!requireGroup || assignment.target.type == .group)
+                }
+            }
         }
 
         // Apply platform filter
@@ -416,6 +483,23 @@ struct ApplicationSelectionView: View {
                 }
 
                 HStack {
+                    Picker("Intent", selection: $assignmentIntentFilter) {
+                        ForEach(AssignmentIntentFilter.allCases) { intent in
+                            Label(intent.displayName, systemImage: intent.systemImage)
+                                .tag(intent)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 220)
+                    .onChange(of: assignmentIntentFilter) { _, newValue in
+                        if newValue == .any {
+                            return
+                        }
+                        if assignmentFilter == .unassigned {
+                            assignmentFilter = .assigned
+                        }
+                    }
+
                     Picker("Platform", selection: $platformFilter) {
                         Text("All Platforms").tag(Application.DevicePlatform?.none)
                         Divider()
@@ -473,12 +557,27 @@ struct ApplicationSelectionView: View {
 
                     // Summary statistics
                     HStack(spacing: 16) {
-                        Label("\(appService.applications.filter { !$0.hasAssignments }.count) unassigned", systemImage: "square")
+                        let unassignedCount = appService.applications.filter { !$0.hasAssignments }.count
+                        let assignedCount = appService.applications.filter { $0.hasAssignments }.count
+                        let installCount = appService.applications.filter {
+                            $0.assignments?.contains(where: { $0.intent == .required && $0.target.type == .group }) == true
+                        }.count
+                        let uninstallCount = appService.applications.filter {
+                            $0.assignments?.contains(where: { $0.intent == .uninstall && $0.target.type == .group }) == true
+                        }.count
+
+                        Label("\(unassignedCount) unassigned", systemImage: "square")
                             .font(.caption)
                             .foregroundColor(.orange)
-                        Label("\(appService.applications.filter { $0.hasAssignments }.count) assigned", systemImage: "person.2.square.stack")
+                        Label("\(assignedCount) assigned", systemImage: "person.2.square.stack")
                             .font(.caption)
                             .foregroundColor(.green)
+                        Label("\(installCount) install", systemImage: AppAssignment.AssignmentIntent.required.icon)
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                        Label("\(uninstallCount) uninstall", systemImage: AppAssignment.AssignmentIntent.uninstall.icon)
+                            .font(.caption)
+                            .foregroundColor(.red)
                         Text("(\(appService.applications.count) total)")
                             .font(.caption)
                             .foregroundColor(.secondary)

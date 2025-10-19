@@ -21,33 +21,11 @@ struct ReviewAssignmentView: View {
 
     /// Extract unique filter IDs from all group assignment settings
     var uniqueFilterIds: Set<String> {
-        var filterIds = Set<String>()
-
-        for groupSettings in viewModel.groupAssignmentSettings {
-            let settings = groupSettings.settings
-
-            // Check all platform-specific settings for filter IDs
-            if let filterId = settings.iosVppSettings?.assignmentFilterId, !filterId.isEmpty {
-                filterIds.insert(filterId)
-            }
-            if let filterId = settings.iosLobSettings?.assignmentFilterId, !filterId.isEmpty {
-                filterIds.insert(filterId)
-            }
-            if let filterId = settings.macosVppSettings?.assignmentFilterId, !filterId.isEmpty {
-                filterIds.insert(filterId)
-            }
-            if let filterId = settings.macosLobSettings?.assignmentFilterId, !filterId.isEmpty {
-                filterIds.insert(filterId)
-            }
-            if let filterId = settings.androidSettings?.assignmentFilterId, !filterId.isEmpty {
-                filterIds.insert(filterId)
-            }
-            if let filterId = settings.windowsSettings?.assignmentFilterId, !filterId.isEmpty {
-                filterIds.insert(filterId)
-            }
-        }
-
-        return filterIds
+        Set(
+            viewModel.groupAssignmentSettings
+                .compactMap { $0.assignmentFilterId }
+                .filter { !$0.isEmpty }
+        )
     }
 
     // MARK: - Enhanced Validation Warnings
@@ -153,14 +131,7 @@ struct ReviewAssignmentView: View {
         }
 
         // Assignment filter validation
-        let settingsWithFilters = viewModel.groupAssignmentSettings.filter { groupSettings in
-            groupSettings.settings.iosVppSettings?.assignmentFilterId != nil ||
-            groupSettings.settings.iosLobSettings?.assignmentFilterId != nil ||
-            groupSettings.settings.macosVppSettings?.assignmentFilterId != nil ||
-            groupSettings.settings.macosLobSettings?.assignmentFilterId != nil ||
-            groupSettings.settings.windowsSettings?.assignmentFilterId != nil ||
-            groupSettings.settings.androidSettings?.assignmentFilterId != nil
-        }
+        let settingsWithFilters = viewModel.groupAssignmentSettings.filter { $0.assignmentFilterId != nil }
 
         if !settingsWithFilters.isEmpty {
             warnings.append(ValidationWarning(
@@ -1096,7 +1067,7 @@ struct FilterPreviewSection: View {
     let groupSettings: [GroupAssignmentSettings]
     @Binding var assignmentFilters: [AssignmentFilter]
     @Binding var isLoadingFilters: Bool
-    @EnvironmentObject var authManager: AuthManagerV2
+    @ObservedObject private var filterService = AssignmentFilterService.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1139,20 +1110,11 @@ struct FilterPreviewSection: View {
         isLoadingFilters = true
         defer { isLoadingFilters = false }
 
-        do {
-            let client = GraphAPIClient.shared
+        let filters = await filterService.getFilters()
+        let relevantFilters = filters.filter { filterIds.contains($0.id) }
 
-            // Fetch all filters (we'll filter by IDs we need)
-            let endpoint = "/deviceManagement/assignmentFilters"
-
-            let response: AssignmentFilterResponse = try await client.getModel(endpoint)
-            let relevantFilters = response.value.filter { filterIds.contains($0.id) }
-
-            await MainActor.run {
-                assignmentFilters = relevantFilters
-            }
-        } catch {
-            Logger.shared.error("Failed to load assignment filter details: \(error.localizedDescription)", category: .network)
+        await MainActor.run {
+            assignmentFilters = relevantFilters
         }
     }
 }
@@ -1166,40 +1128,12 @@ struct FilterSummaryCard: View {
 
     /// Find groups using this filter
     private var groupsUsingFilter: [(groupId: String, groupName: String, mode: AssignmentFilterMode)] {
-        var result: [(String, String, AssignmentFilterMode)] = []
-
-        for groupSetting in groupSettings {
-            let settings = groupSetting.settings
-
-            // Check each platform setting
-            if let iosVpp = settings.iosVppSettings,
-               iosVpp.assignmentFilterId == filterId,
-               let mode = iosVpp.assignmentFilterMode {
-                result.append((groupSetting.groupId, groupSetting.groupName, mode))
-            } else if let iosLob = settings.iosLobSettings,
-                      iosLob.assignmentFilterId == filterId,
-                      let mode = iosLob.assignmentFilterMode {
-                result.append((groupSetting.groupId, groupSetting.groupName, mode))
-            } else if let macVpp = settings.macosVppSettings,
-                      macVpp.assignmentFilterId == filterId,
-                      let mode = macVpp.assignmentFilterMode {
-                result.append((groupSetting.groupId, groupSetting.groupName, mode))
-            } else if let macDmg = settings.macosLobSettings,
-                      macDmg.assignmentFilterId == filterId,
-                      let mode = macDmg.assignmentFilterMode {
-                result.append((groupSetting.groupId, groupSetting.groupName, mode))
-            } else if let android = settings.androidSettings,
-                      android.assignmentFilterId == filterId,
-                      let mode = android.assignmentFilterMode {
-                result.append((groupSetting.groupId, groupSetting.groupName, mode))
-            } else if let windows = settings.windowsSettings,
-                      windows.assignmentFilterId == filterId,
-                      let mode = windows.assignmentFilterMode {
-                result.append((groupSetting.groupId, groupSetting.groupName, mode))
-            }
+        groupSettings.compactMap { setting in
+            guard let id = setting.assignmentFilterId,
+                  id == filterId else { return nil }
+            let mode = setting.assignmentFilterMode ?? .include
+            return (setting.groupId, setting.groupName, mode)
         }
-
-        return result
     }
 
     var body: some View {

@@ -554,14 +554,17 @@ final class AssignmentService: ObservableObject {
         }
 
         // Create flexible assignment with proper settings
+        let filterId = assignment.filter?.filterId
+        let filterType = filterId != nil ? assignment.filter?.filterType?.rawValue : nil
+
         let flexibleAssignment = FlexibleAppAssignment(
             id: UUID().uuidString,
             intent: assignment.intent.rawValue,
             target: FlexibleAppAssignment.Target(
                 odataType: targetType.rawValue,  // targetType.rawValue already includes the full type string
                 groupId: targetType.requiresGroupId ? assignment.groupId : nil,
-                deviceAndAppManagementAssignmentFilterId: nil,  // Set to nil for now
-                deviceAndAppManagementAssignmentFilterType: nil  // Set to nil for now
+                deviceAndAppManagementAssignmentFilterId: filterId,
+                deviceAndAppManagementAssignmentFilterType: filterType
             ),
             settings: settingsValue,
             source: nil,  // Remove source field - might not be valid for /assign endpoint
@@ -600,6 +603,8 @@ final class AssignmentService: ObservableObject {
         let updatedAssignment = assignment
 
         let targetType = assignment.targetType
+        let filterId = assignment.filter?.filterId
+        let filterType = filterId != nil ? assignment.filter?.filterType?.rawValue : nil
         let appAssignment = AppAssignment(
             id: assignment.id,
             intent: AppAssignment.AssignmentIntent(rawValue: assignment.intent.rawValue) ?? .required,
@@ -607,8 +612,8 @@ final class AssignmentService: ObservableObject {
                 type: targetType,
                 groupId: targetType.requiresGroupId ? assignment.groupId : nil,
                 groupName: targetType.requiresGroupId ? assignment.groupName : nil,
-                deviceAndAppManagementAssignmentFilterId: nil,
-                deviceAndAppManagementAssignmentFilterType: nil
+                deviceAndAppManagementAssignmentFilterId: filterId,
+                deviceAndAppManagementAssignmentFilterType: filterType
             ),
             settings: nil,
             source: "IntuneManager",
@@ -1030,12 +1035,7 @@ enum AssignmentError: LocalizedError {
             let existingAssignments = appAssignmentsMap[assignment.applicationId] ?? []
 
             let alreadyExists = existingAssignments.contains { existing in
-                // Check if there's already an assignment to the same group with same intent
-                if let existingGroupId = existing.target.groupId {
-                    return existingGroupId == assignment.groupId &&
-                           existing.intent.rawValue == assignment.intent.rawValue
-                }
-                return false
+                assignmentsMatch(existing: existing, newAssignment: assignment)
             }
 
             if alreadyExists {
@@ -1127,12 +1127,7 @@ enum AssignmentError: LocalizedError {
             let existingAssignments = existingAssignmentsCache[assignment.applicationId] ?? []
 
             let alreadyExists = existingAssignments.contains { existing in
-                // Check if there's already an assignment to the same group with same intent
-                if let existingGroupId = existing.target.groupId {
-                    return existingGroupId == assignment.groupId &&
-                           existing.intent.rawValue == assignment.intent.rawValue
-                }
-                return false
+                assignmentsMatch(existing: existing, newAssignment: assignment)
             }
 
             if alreadyExists {
@@ -1147,6 +1142,32 @@ enum AssignmentError: LocalizedError {
 
         Logger.shared.info("Validation complete: \(validatedAssignments.count) new assignments to create, \(assignments.count - validatedAssignments.count) skipped")
         return validatedAssignments
+    }
+
+    private func assignmentsMatch(existing: AppAssignment, newAssignment: Assignment) -> Bool {
+        guard let existingGroupId = existing.target.groupId else { return false }
+        guard existingGroupId == newAssignment.groupId else { return false }
+        guard existing.intent.rawValue == newAssignment.intent.rawValue else { return false }
+        guard existing.target.type == newAssignment.targetType else { return false }
+        return filtersMatch(existingTarget: existing.target, newFilter: newAssignment.filter)
+    }
+
+    private func filtersMatch(existingTarget: AppAssignment.AssignmentTarget, newFilter: Assignment.AssignmentFilter?) -> Bool {
+        let existingId = existingTarget.deviceAndAppManagementAssignmentFilterId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let existingType = existingTarget.deviceAndAppManagementAssignmentFilterType?.lowercased()
+
+        guard let newFilter else {
+            return existingId == nil || existingId?.isEmpty == true
+        }
+
+        guard let newId = newFilter.filterId?.trimmingCharacters(in: .whitespacesAndNewlines), !newId.isEmpty else {
+            return existingId == nil || existingId?.isEmpty == true
+        }
+
+        guard existingId == newId else { return false }
+        let expectedType = newFilter.filterType?.rawValue ?? Assignment.AssignmentFilter.FilterType.include.rawValue
+        let actualType = existingType ?? Assignment.AssignmentFilter.FilterType.include.rawValue
+        return actualType == expectedType
     }
 
 // MARK: - Array Extension for Chunking

@@ -372,6 +372,18 @@ struct BulkAssignmentOperation: Identifiable {
                         // Store the settings for non-uninstall intents
                         assignment.graphSettings = groupSetting.settings
                     }
+
+                    if let filterId = groupSetting.assignmentFilterId, !filterId.isEmpty {
+                        let mode = groupSetting.assignmentFilterMode ?? .include
+                        let filterType = Assignment.AssignmentFilter.FilterType(rawValue: mode.rawValue) ?? .include
+                        assignment.filter = Assignment.AssignmentFilter(
+                            filterId: filterId,
+                            filterType: filterType,
+                            filterExpression: nil
+                        )
+                    } else {
+                        assignment.filter = nil
+                    }
                 } else {
                     assignment.settings = settings
 
@@ -382,6 +394,7 @@ struct BulkAssignmentOperation: Identifiable {
                         // Store settings for non-uninstall intents
                         assignment.graphSettings = settings != nil ? AppAssignmentSettings(intent: assignmentIntent) : nil
                     }
+                    assignment.filter = nil
                 }
 
                 assignment.scheduledDate = scheduledDate

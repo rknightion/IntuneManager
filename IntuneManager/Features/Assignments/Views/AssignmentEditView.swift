@@ -36,6 +36,100 @@ struct AssignmentEditView: View {
         Dictionary(grouping: filteredAssignments) { $0.appName }
     }
 
+    var sharedAssignmentGroups: [SharedAssignmentGroup] {
+        struct Builder {
+            var groupName: String
+            var assignments: [AssignmentWithApp] = []
+            var appIds: Set<String> = []
+            var appNames: Set<String> = []
+            var appTypes: Set<Application.AppType> = []
+            var referenceFilterId: String?
+            var referenceFilterMode: AssignmentFilterMode?
+            var filterIsMixed = false
+            var referenceInitialized = false
+        }
+
+        var groups: [SharedAssignmentKey: Builder] = [:]
+        let appTypeLookup = Dictionary(uniqueKeysWithValues: applications.map { ($0.id, $0.appType) })
+
+        for item in filteredAssignments {
+            if viewModel.isMarkedForDeletion(item) { continue }
+            guard let groupId = item.assignment.target.groupId,
+                  let groupName = item.assignment.target.groupName else { continue }
+
+            let assignmentKey = viewModel.compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+            let effectiveIntent = viewModel.assignmentsToUpdate[assignmentKey] ?? item.assignment.intent
+
+            let builderKey = SharedAssignmentKey(
+                groupId: groupId,
+                intent: effectiveIntent,
+                targetType: item.assignment.target.type
+            )
+
+            var builder = groups[builderKey] ?? Builder(groupName: groupName)
+            builder.assignments.append(item)
+            builder.appIds.insert(item.appId)
+            builder.appNames.insert(item.appName)
+            let appType = appTypeLookup[item.appId] ?? .unknown
+            builder.appTypes.insert(appType)
+
+            let filterId = viewModel.effectiveFilterId(for: item)
+            let filterMode = viewModel.effectiveFilterMode(for: item)
+
+            if !builder.referenceInitialized {
+                builder.referenceFilterId = filterId
+                builder.referenceFilterMode = filterMode
+                builder.referenceInitialized = true
+            } else if !builder.filterIsMixed {
+                switch (builder.referenceFilterId, filterId) {
+                case (nil, nil):
+                    break
+                case (nil, .some), (.some, nil):
+                    builder.filterIsMixed = true
+                case let (.some(reference), .some(current)):
+                    if reference != current {
+                        builder.filterIsMixed = true
+                    } else {
+                        let refMode = builder.referenceFilterMode ?? .include
+                        let currentMode = filterMode ?? .include
+                        if refMode != currentMode {
+                            builder.filterIsMixed = true
+                        }
+                    }
+                }
+            }
+
+            groups[builderKey] = builder
+        }
+
+        let sharedGroups = groups.compactMap { entry -> SharedAssignmentGroup? in
+            let (key, builder) = entry
+            guard builder.assignments.count > 1 else { return nil }
+            guard builder.appIds.count > 1 else { return nil }
+            guard builder.appTypes.count == 1,
+                  let appType = builder.appTypes.first,
+                  appType != .unknown else { return nil }
+
+            let filterId = builder.filterIsMixed ? nil : builder.referenceFilterId
+            let filterMode = builder.filterIsMixed ? nil : builder.referenceFilterMode
+
+            return SharedAssignmentGroup(
+                key: key,
+                groupName: builder.groupName,
+                appType: appType,
+                assignments: builder.assignments,
+                appNames: builder.appNames.sorted(),
+                filterId: filterId,
+                filterMode: filterMode,
+                filterIsMixed: builder.filterIsMixed
+            )
+        }
+
+        return sharedGroups.sorted {
+            $0.groupName.localizedCaseInsensitiveCompare($1.groupName) == .orderedAscending
+        }
+    }
+
     var bulkActionsBar: some View {
         HStack {
             if !viewModel.selectedAssignments.isEmpty {
@@ -180,11 +274,51 @@ struct AssignmentEditView: View {
 
     @ViewBuilder
     var assignmentsList: some View {
+        let sharedGroups = sharedAssignmentGroups
+
+        if !sharedGroups.isEmpty {
+            sharedAssignmentsSection(for: sharedGroups)
+        }
+
         if applications.count > 1 {
             groupedAssignmentsList
         } else {
             flatAssignmentsList
         }
+    }
+
+    @ViewBuilder
+    func sharedAssignmentsSection(for groups: [SharedAssignmentGroup]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("Shared Group Assignments", systemImage: "square.stack.3d.up.fill")
+                    .font(.headline)
+                Spacer()
+                Text("\(groups.count) group(s)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Text("These groups are assigned to multiple apps with the same intent. Update the filter once to apply it everywhere.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            ForEach(groups) { group in
+                SharedAssignmentGroupRow(
+                    group: group,
+                    onUpdateFilter: { filterId, mode in
+                        viewModel.updateFilters(for: group.assignments, filterId: filterId, mode: mode)
+                    }
+                )
+
+                if group.id != groups.last?.id {
+                    Divider()
+                }
+            }
+        }
+        .padding()
+        .background(Theme.Colors.secondaryBackground.opacity(0.6))
+        .cornerRadius(8)
     }
 
     @ViewBuilder
@@ -239,6 +373,8 @@ struct AssignmentEditView: View {
     func assignmentRow(for item: AssignmentWithApp, showAppName: Bool) -> some View {
         let appType = applications.first(where: { $0.id == item.appId })?.appType ?? .unknown
         let key = viewModel.compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+        let filterId = viewModel.effectiveFilterId(for: item)
+        let filterMode = viewModel.effectiveFilterMode(for: item)
 
         CurrentAssignmentRow(
             assignmentWithApp: item,
@@ -248,6 +384,8 @@ struct AssignmentEditView: View {
             pendingIntent: viewModel.assignmentsToUpdate[key],
             isSelected: viewModel.selectedAssignments.contains(item.id),
             showAppName: showAppName,
+            filterId: filterId,
+            filterMode: filterMode,
             onToggleSelection: {
                 viewModel.toggleSelection(item)
             },
@@ -256,6 +394,9 @@ struct AssignmentEditView: View {
             },
             onEditIntent: { newIntent in
                 viewModel.updateAssignmentIntent(item, intent: newIntent)
+            },
+            onUpdateFilter: { newFilterId, newMode in
+                viewModel.updateAssignmentFilter(item, filterId: newFilterId, mode: newMode)
             }
         )
     }
@@ -425,6 +566,9 @@ struct AssignmentEditView: View {
                         },
                         onEditIntent: { newIntent in
                             viewModel.updatePendingIntent(pending, intent: newIntent)
+                        },
+                        onUpdateFilter: { newFilterId, newMode in
+                            viewModel.updatePendingFilter(pending, filterId: newFilterId, mode: newMode)
                         }
                     )
                 }
@@ -661,11 +805,17 @@ struct CurrentAssignmentRow: View {
     let pendingIntent: AppAssignment.AssignmentIntent?
     let isSelected: Bool
     let showAppName: Bool
+    let filterId: String?
+    let filterMode: AssignmentFilterMode?
     let onToggleSelection: () -> Void
     let onToggleDelete: () -> Void
     let onEditIntent: (AppAssignment.AssignmentIntent) -> Void
+    let onUpdateFilter: (String?, AssignmentFilterMode?) -> Void
     @State private var selectedIntent: AppAssignment.AssignmentIntent
     @State private var showingInvalidIntentWarning = false
+    @State private var currentFilterMode: AssignmentFilterMode
+    @State private var showingFilterPicker = false
+    @ObservedObject private var filterService = AssignmentFilterService.shared
 
     init(assignmentWithApp: AssignmentWithApp,
          appType: Application.AppType,
@@ -674,9 +824,12 @@ struct CurrentAssignmentRow: View {
          pendingIntent: AppAssignment.AssignmentIntent? = nil,
          isSelected: Bool = false,
          showAppName: Bool = true,
+         filterId: String? = nil,
+         filterMode: AssignmentFilterMode? = nil,
          onToggleSelection: @escaping () -> Void = {},
          onToggleDelete: @escaping () -> Void,
-         onEditIntent: @escaping (AppAssignment.AssignmentIntent) -> Void) {
+         onEditIntent: @escaping (AppAssignment.AssignmentIntent) -> Void,
+         onUpdateFilter: @escaping (String?, AssignmentFilterMode?) -> Void) {
         self.assignmentWithApp = assignmentWithApp
         self.appType = appType
         self.isPendingDeletion = isPendingDeletion
@@ -684,11 +837,15 @@ struct CurrentAssignmentRow: View {
         self.pendingIntent = pendingIntent
         self.isSelected = isSelected
         self.showAppName = showAppName
+        self.filterId = filterId
+        self.filterMode = filterMode
         self.onToggleSelection = onToggleSelection
         self.onToggleDelete = onToggleDelete
         self.onEditIntent = onEditIntent
+        self.onUpdateFilter = onUpdateFilter
         // Use pending intent if available, otherwise use the original intent
         self._selectedIntent = State(initialValue: pendingIntent ?? assignmentWithApp.assignment.intent)
+        self._currentFilterMode = State(initialValue: filterMode ?? .include)
     }
 
     // Get valid intents for this app type and target
@@ -710,87 +867,83 @@ struct CurrentAssignmentRow: View {
     }
 
     var body: some View {
-        HStack {
-            // Selection checkbox
-            Image(systemName: isSelected ? "checkmark.square.fill" : "square")
-                .foregroundColor(isSelected ? .accentColor : .secondary)
-                .font(.system(size: 16))
-                .onTapGesture {
-                    onToggleSelection()
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                    .foregroundColor(isSelected ? .accentColor : .secondary)
+                    .font(.system(size: 16))
+                    .onTapGesture { onToggleSelection() }
 
-            Image(systemName: "person.2.fill")
-                .foregroundColor(isPendingDeletion ? .red : .accentColor)
+                Image(systemName: "person.2.fill")
+                    .foregroundColor(isPendingDeletion ? .red : .accentColor)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(assignmentWithApp.assignment.target.groupName ?? assignmentWithApp.assignment.target.type.displayName)
-                    .fontWeight(.medium)
-                    .strikethrough(isPendingDeletion)
-                    .foregroundColor(isPendingDeletion ? .secondary : .primary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(assignmentWithApp.assignment.target.groupName ?? assignmentWithApp.assignment.target.type.displayName)
+                        .fontWeight(.medium)
+                        .strikethrough(isPendingDeletion)
+                        .foregroundColor(isPendingDeletion ? .secondary : .primary)
 
-                HStack {
-                    Text(assignmentWithApp.assignment.target.type.displayName)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-
-                    if showAppName {
-                        Text("• \(assignmentWithApp.appName)")
+                    HStack {
+                        Text(assignmentWithApp.assignment.target.type.displayName)
                             .font(.caption)
-                            .foregroundColor(.blue)
-                    }
-
-                    if let groupId = assignmentWithApp.assignment.target.groupId {
-                        Text("• \(groupId.prefix(8))...")
-                            .font(.caption2)
                             .foregroundColor(.secondary)
+
+                        if showAppName {
+                            Text("• \(assignmentWithApp.appName)")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                        }
+
+                        if let groupId = assignmentWithApp.assignment.target.groupId {
+                            Text("• \(groupId.prefix(8))...")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
-            }
 
-            Spacer()
+                Spacer()
 
-            Text("Intent")
-                .font(.caption)
-                .foregroundColor(.secondary)
+                Text("Intent")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
 
-            Picker("", selection: $selectedIntent) {
-                ForEach(validIntents, id: \.self) { intent in
-                    Label(intent.displayName, systemImage: intent.icon)
-                        .tag(intent)
-                        .help(intent.detailedDescription)
+                Picker("", selection: $selectedIntent) {
+                    ForEach(validIntents, id: \.self) { intent in
+                        Label(intent.displayName, systemImage: intent.icon)
+                            .tag(intent)
+                            .help(intent.detailedDescription)
+                    }
                 }
-            }
-            .pickerStyle(.menu)
-            .frame(width: 140)
-            .disabled(isPendingDeletion || validIntents.isEmpty)
-            .help(validIntents.isEmpty ? "No valid intents available for this app type and target" : "Assignment intent determines how the app will be deployed to devices")
-            .onChange(of: selectedIntent) { _, newValue in
-                if validIntents.contains(newValue) {
-                    onEditIntent(newValue)
-                } else {
-                    // Reset to a valid intent if current selection is invalid
-                    if let firstValid = validIntents.first {
+                .pickerStyle(.menu)
+                .frame(width: 140)
+                .disabled(isPendingDeletion || validIntents.isEmpty)
+                .help(validIntents.isEmpty ? "No valid intents available for this app type and target" : "Assignment intent determines how the app will be deployed to devices")
+                .onChange(of: selectedIntent) { _, newValue in
+                    if validIntents.contains(newValue) {
+                        onEditIntent(newValue)
+                    } else if let firstValid = validIntents.first {
                         selectedIntent = firstValid
                         onEditIntent(firstValid)
                     }
                 }
-            }
-            .onAppear {
-                // Validate current intent on appear and adjust if needed
-                if !validIntents.contains(selectedIntent) {
-                    if let firstValid = validIntents.first {
+                .onAppear {
+                    if !validIntents.contains(selectedIntent), let firstValid = validIntents.first {
                         selectedIntent = firstValid
-                        // Don't trigger onEditIntent here to avoid marking unchanged assignments as updated
                     }
                 }
+
+                Button(action: onToggleDelete) {
+                    Image(systemName: isPendingDeletion ? "arrow.uturn.backward" : "trash")
+                        .foregroundColor(isPendingDeletion ? .orange : .red)
+                }
+                .buttonStyle(.plain)
+                .help(isPendingDeletion ? "Undo deletion" : "Mark for deletion")
             }
 
-            Button(action: onToggleDelete) {
-                Image(systemName: isPendingDeletion ? "arrow.uturn.backward" : "trash")
-                    .foregroundColor(isPendingDeletion ? .orange : .red)
+            if !isPendingDeletion {
+                filterControls
             }
-            .buttonStyle(.plain)
-            .help(isPendingDeletion ? "Undo deletion" : "Mark for deletion")
         }
         .padding(8)
         .background(backgroundColor)
@@ -801,11 +954,94 @@ struct CurrentAssignmentRow: View {
                        isPendingUpdate ? Color.yellow.opacity(0.3) :
                        isSelected ? Color.accentColor.opacity(0.3) : Color.clear, lineWidth: 1)
         )
+        .task { await filterService.fetchFilters() }
+        .sheet(isPresented: $showingFilterPicker) {
+            AssignmentFilterPickerView(
+                appType: appType,
+                selectedFilterId: filterId
+            ) { filter in
+                currentFilterMode = filterMode ?? currentFilterMode
+                onUpdateFilter(filter.id, currentFilterMode)
+            }
+            .frame(minWidth: 360, minHeight: 420)
+        }
         .onChange(of: pendingIntent) { newValue in
             if let newIntent = newValue {
                 selectedIntent = newIntent
             }
         }
+        .onChange(of: filterMode) { newValue in
+            currentFilterMode = newValue ?? .include
+        }
+    }
+
+    private var filterControls: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Label("Filter", systemImage: "line.horizontal.3.decrease.circle")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            if let filterId = filterId, let filter = filterService.filter(withId: filterId) {
+                Text(filter.displayName)
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.accentColor.opacity(0.1))
+                    .cornerRadius(6)
+            } else if let filterId = filterId {
+                Text(filterId)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.gray.opacity(0.08))
+                    .cornerRadius(6)
+            } else {
+                Text("None")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            if filterId != nil {
+                Text("Mode")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Picker("Filter mode", selection: Binding(
+                    get: { currentFilterMode },
+                    set: { newValue in
+                        currentFilterMode = newValue
+                        onUpdateFilter(filterId, newValue)
+                    }
+                )) {
+                    Text("Include").tag(AssignmentFilterMode.include)
+                    Text("Exclude").tag(AssignmentFilterMode.exclude)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(minWidth: 160, idealWidth: 200)
+                .accessibilityLabel("Filter mode")
+            }
+
+            Menu {
+                Button("Select Filter…") {
+                    showingFilterPicker = true
+                }
+                if filterId != nil {
+                    Button("Clear Filter", role: .destructive) {
+                        currentFilterMode = .include
+                        onUpdateFilter(nil, nil)
+                    }
+                }
+            } label: {
+                Label("Manage", systemImage: "slider.horizontal.3")
+                    .font(.caption)
+            }
+            .disabled(isPendingDeletion)
+        }
+        .padding(.horizontal, 4)
     }
 }
 
@@ -815,21 +1051,28 @@ struct PendingAssignmentRow: View {
     let applicationTypes: [Application.AppType]
     let onRemove: () -> Void
     let onEditIntent: (AppAssignment.AssignmentIntent) -> Void
+    let onUpdateFilter: (String?, AssignmentFilterMode?) -> Void
     @State private var selectedIntent: AppAssignment.AssignmentIntent
     @State private var showingInvalidIntentAlert = false
     @State private var invalidIntentMessage = ""
+    @State private var currentFilterMode: AssignmentFilterMode
+    @State private var showingFilterPicker = false
+    @ObservedObject private var filterService = AssignmentFilterService.shared
 
     init(assignment: PendingAssignment,
          applicationNames: [String],
          applicationTypes: [Application.AppType],
          onRemove: @escaping () -> Void,
-         onEditIntent: @escaping (AppAssignment.AssignmentIntent) -> Void) {
+         onEditIntent: @escaping (AppAssignment.AssignmentIntent) -> Void,
+         onUpdateFilter: @escaping (String?, AssignmentFilterMode?) -> Void) {
         self.assignment = assignment
         self.applicationNames = applicationNames
         self.applicationTypes = applicationTypes
         self.onRemove = onRemove
         self.onEditIntent = onEditIntent
+        self.onUpdateFilter = onUpdateFilter
         self._selectedIntent = State(initialValue: assignment.intent)
+        self._currentFilterMode = State(initialValue: assignment.assignmentFilterMode ?? .include)
     }
 
     // Get valid intents for this combination of app types and target
@@ -848,86 +1091,85 @@ struct PendingAssignmentRow: View {
     }
 
     var body: some View {
-        HStack {
-            Image(systemName: assignment.isCopied ? "doc.on.doc.fill" : "plus.circle.fill")
-                .foregroundColor(.green)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: assignment.isCopied ? "doc.on.doc.fill" : "plus.circle.fill")
+                    .foregroundColor(.green)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(assignment.group.displayName)
-                    .fontWeight(.medium)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(assignment.group.displayName)
+                        .fontWeight(.medium)
 
-                HStack {
-                    if assignment.isCopied {
-                        Label("Copied", systemImage: "doc.on.doc")
-                            .font(.caption)
-                            .foregroundColor(.orange)
-                        if assignment.copySettings {
-                            Text("• with settings")
-                                .font(.caption2)
+                    HStack {
+                        if assignment.isCopied {
+                            Label("Copied", systemImage: "doc.on.doc")
+                                .font(.caption)
                                 .foregroundColor(.orange)
+                            if assignment.copySettings {
+                                Text("• with settings")
+                                    .font(.caption2)
+                                    .foregroundColor(.orange)
+                            }
+                        } else {
+                            Text("New assignment")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
-                    } else {
-                        Text("New assignment")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
 
-                    if applicationNames.count > 1 {
-                        Text("• \(applicationNames.count) apps")
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                    } else if let appName = applicationNames.first {
-                        Text("• \(appName)")
-                            .font(.caption)
-                            .foregroundColor(.blue)
+                        if applicationNames.count > 1 {
+                            Text("• \(applicationNames.count) apps")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                        } else if let appName = applicationNames.first {
+                            Text("• \(appName)")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                        }
                     }
                 }
-            }
 
-            Spacer()
+                Spacer()
 
-            Text("Intent")
-                .font(.caption)
-                .foregroundColor(.secondary)
+                Text("Intent")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
 
-            Picker("", selection: $selectedIntent) {
-                ForEach(validIntents, id: \.self) { intent in
-                    Label(intent.displayName, systemImage: intent.icon)
-                        .tag(intent)
-                        .help(intent.detailedDescription)
+                Picker("", selection: $selectedIntent) {
+                    ForEach(validIntents, id: \.self) { intent in
+                        Label(intent.displayName, systemImage: intent.icon)
+                            .tag(intent)
+                            .help(intent.detailedDescription)
+                    }
                 }
-            }
-            .pickerStyle(.menu)
-            .frame(width: 140)
-            .onChange(of: selectedIntent) { _, newValue in
-                // Double-check the intent is valid before applying
-                if validIntents.contains(newValue) {
-                    onEditIntent(newValue)
-                } else {
-                    // Show error if somehow an invalid intent was selected
-                    if let firstAppType = applicationTypes.first {
+                .pickerStyle(.menu)
+                .frame(width: 140)
+                .disabled(validIntents.isEmpty)
+                .help("Assignment intent determines how the app will be deployed to devices")
+                .onChange(of: selectedIntent) { _, newValue in
+                    if validIntents.contains(newValue) {
+                        onEditIntent(newValue)
+                    } else if let firstAppType = applicationTypes.first {
                         invalidIntentMessage = AssignmentIntentValidator.validationMessage(
                             for: newValue,
                             appType: firstAppType,
                             targetType: assignment.group.assignmentTargetType
                         ) ?? "This intent is not supported for the selected apps and target"
                         showingInvalidIntentAlert = true
-                    }
-                    // Reset to a valid intent
-                    if let firstValid = validIntents.first {
-                        selectedIntent = firstValid
-                        onEditIntent(firstValid)
+                        if let firstValid = validIntents.first {
+                            selectedIntent = firstValid
+                            onEditIntent(firstValid)
+                        }
                     }
                 }
-            }
-            .help("Assignment intent determines how the app will be deployed to devices")
-            .disabled(validIntents.isEmpty)
 
-            Button(action: onRemove) {
-                Image(systemName: "xmark.circle")
-                    .foregroundColor(.secondary)
+                Button(action: onRemove) {
+                    Image(systemName: "xmark.circle")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+
+            filterControls
         }
         .padding(8)
         .background(Color.green.opacity(0.05))
@@ -941,19 +1183,237 @@ struct PendingAssignmentRow: View {
         } message: {
             Text(invalidIntentMessage)
         }
+        .task { await filterService.fetchFilters() }
+        .sheet(isPresented: $showingFilterPicker) {
+            AssignmentFilterPickerView(
+                appType: applicationTypes.first ?? .unknown,
+                selectedFilterId: assignment.assignmentFilterId
+            ) { filter in
+                onUpdateFilter(filter.id, currentFilterMode)
+            }
+            .frame(minWidth: 360, minHeight: 420)
+        }
         .onAppear {
-            // Validate current intent on appear and adjust if needed
-            if !validIntents.contains(selectedIntent) {
-                if let suggested = AssignmentIntentValidator.suggestedIntents(
+            if !validIntents.contains(selectedIntent),
+               let suggested = AssignmentIntentValidator.suggestedIntents(
                     for: applicationTypes.first ?? .unknown,
                     targetType: assignment.group.assignmentTargetType,
                     preferredIntent: selectedIntent
-                ).first {
-                    selectedIntent = suggested
-                    onEditIntent(suggested)
-                }
+               ).first {
+                selectedIntent = suggested
+                onEditIntent(suggested)
             }
         }
+        .onChange(of: assignment.assignmentFilterMode) { newMode in
+            currentFilterMode = newMode ?? .include
+        }
+    }
+
+    private var filterControls: some View {
+        HStack(spacing: 8) {
+            Label("Filter", systemImage: "line.horizontal.3.decrease.circle")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            if let filterId = assignment.assignmentFilterId,
+               let filter = filterService.filter(withId: filterId) {
+                Text(filter.displayName)
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.accentColor.opacity(0.1))
+                    .cornerRadius(6)
+            } else if let filterId = assignment.assignmentFilterId {
+                Text(filterId)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.gray.opacity(0.08))
+                    .cornerRadius(6)
+            } else {
+                Text("None")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            if assignment.assignmentFilterId != nil {
+                Text("Mode")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Picker("Filter mode", selection: Binding(
+                    get: { currentFilterMode },
+                    set: { newValue in
+                        currentFilterMode = newValue
+                        onUpdateFilter(assignment.assignmentFilterId, newValue)
+                    }
+                )) {
+                    Text("Include").tag(AssignmentFilterMode.include)
+                    Text("Exclude").tag(AssignmentFilterMode.exclude)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(minWidth: 160, idealWidth: 200)
+                .accessibilityLabel("Filter mode")
+            }
+
+            Menu {
+                Button("Select Filter…") {
+                    showingFilterPicker = true
+                }
+                if assignment.assignmentFilterId != nil {
+                    Button("Clear Filter", role: .destructive) {
+                        currentFilterMode = .include
+                        onUpdateFilter(nil, nil)
+                    }
+                }
+            } label: {
+                Label("Manage", systemImage: "slider.horizontal.3")
+                    .font(.caption)
+            }
+        }
+        .padding(.horizontal, 4)
+    }
+}
+
+struct SharedAssignmentGroupRow: View {
+    let group: SharedAssignmentGroup
+    let onUpdateFilter: (String?, AssignmentFilterMode?) -> Void
+
+    @ObservedObject private var filterService = AssignmentFilterService.shared
+    @State private var showingFilterPicker = false
+    @State private var workingMode: AssignmentFilterMode
+
+    init(group: SharedAssignmentGroup,
+         onUpdateFilter: @escaping (String?, AssignmentFilterMode?) -> Void) {
+        self.group = group
+        self.onUpdateFilter = onUpdateFilter
+        _workingMode = State(initialValue: group.filterMode ?? .include)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            header
+            appSummary
+            filterControls
+        }
+        .padding(12)
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(8)
+        .sheet(isPresented: $showingFilterPicker) {
+            AssignmentFilterPickerView(
+                appType: group.appType,
+                selectedFilterId: group.filterIsMixed ? nil : group.filterId
+            ) { filter in
+                if group.filterId == nil || group.filterIsMixed {
+                    workingMode = .include
+                }
+                onUpdateFilter(filter.id, workingMode)
+            }
+            .frame(minWidth: 360, minHeight: 420)
+        }
+        .onChange(of: group.filterMode) { _, newMode in
+            if let newMode {
+                workingMode = newMode
+            }
+        }
+        .onChange(of: group.filterId) { _, newId in
+            if newId == nil {
+                workingMode = .include
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            Label(group.groupName, systemImage: "person.2")
+                .font(.subheadline)
+
+            Spacer()
+
+            Label(group.intent.displayName, systemImage: group.intent.icon)
+                .font(.subheadline)
+
+            Text("\(group.assignments.count) apps")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private var appSummary: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "app.badge")
+                .foregroundColor(.secondary)
+            Text(group.appNames.joined(separator: ", "))
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private var filterControls: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Label("Filter", systemImage: "line.horizontal.3.decrease.circle")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            if group.filterIsMixed {
+                Text("Mixed filters")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(6)
+            } else if let filterId = group.filterId {
+                let displayName = filterService.filter(withId: filterId)?.displayName ?? filterId
+                Text(displayName)
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.accentColor.opacity(0.1))
+                    .cornerRadius(6)
+            } else {
+                Text("None")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            if !group.filterIsMixed, group.filterId != nil {
+                Picker("Filter mode", selection: Binding(
+                    get: { workingMode },
+                    set: { newMode in
+                        workingMode = newMode
+                        onUpdateFilter(group.filterId, newMode)
+                    }
+                )) {
+                    Text("Include").tag(AssignmentFilterMode.include)
+                    Text("Exclude").tag(AssignmentFilterMode.exclude)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(minWidth: 160, idealWidth: 200)
+                .accessibilityLabel("Filter mode")
+            }
+
+            Menu {
+                Button("Select Filter…") {
+                    showingFilterPicker = true
+                }
+                Button("Clear Filters", role: .destructive) {
+                    workingMode = .include
+                    onUpdateFilter(nil, nil)
+                }
+            } label: {
+                Label("Manage", systemImage: "slider.horizontal.3")
+                    .font(.caption)
+            }
+        }
+        .padding(.horizontal, 4)
     }
 }
 
@@ -1087,12 +1547,47 @@ struct AssignmentWithApp: Identifiable {
     let appName: String
 }
 
+struct SharedAssignmentKey: Hashable {
+    let groupId: String
+    let intent: AppAssignment.AssignmentIntent
+    let targetType: AppAssignment.AssignmentTarget.TargetType
+}
+
+struct SharedAssignmentGroup: Identifiable {
+    let key: SharedAssignmentKey
+    let groupName: String
+    let appType: Application.AppType
+    let assignments: [AssignmentWithApp]
+    let appNames: [String]
+    let filterId: String?
+    let filterMode: AssignmentFilterMode?
+    let filterIsMixed: Bool
+
+    var id: String {
+        "\(key.groupId)_\(key.intent.rawValue)_\(key.targetType.rawValue)"
+    }
+
+    var intent: AppAssignment.AssignmentIntent {
+        key.intent
+    }
+
+    var groupId: String {
+        key.groupId
+    }
+
+    var targetType: AppAssignment.AssignmentTarget.TargetType {
+        key.targetType
+    }
+}
+
 struct PendingAssignment: Identifiable {
     let id = UUID()
     let group: DeviceGroup
     var intent: AppAssignment.AssignmentIntent
     var copySettings: Bool = false
     var sourceAssignmentId: String? = nil
+    var assignmentFilterId: String?
+    var assignmentFilterMode: AssignmentFilterMode?
 
     var isCopied: Bool {
         sourceAssignmentId != nil
@@ -1109,6 +1604,11 @@ class AssignmentEditViewModel: ObservableObject {
     // Use composite keys (appId_assignmentId) for app-specific tracking during this edit session
     @Published var assignmentsToDelete: Set<String> = []
     @Published var assignmentsToUpdate: [String: AppAssignment.AssignmentIntent] = [:]
+    struct FilterOverride: Equatable {
+        var filterId: String?
+        var filterMode: AssignmentFilterMode?
+    }
+    @Published var assignmentFilterOverrides: [String: FilterOverride] = [:]
     @Published var selectedAssignments: Set<String> = []
     @Published var isLoading = false
     @Published var isSaving = false
@@ -1148,7 +1648,12 @@ class AssignmentEditViewModel: ObservableObject {
     var hasChanges: Bool {
         !assignmentsToDelete.isEmpty ||
         !assignmentsToUpdate.isEmpty ||
-        !pendingAssignments.isEmpty
+        !pendingAssignments.isEmpty ||
+        !assignmentFilterOverrides.isEmpty
+    }
+
+    private var assignmentsRequiringRecreation: Set<String> {
+        Set(assignmentsToUpdate.keys).union(assignmentFilterOverrides.keys)
     }
 
 
@@ -1161,8 +1666,8 @@ class AssignmentEditViewModel: ObservableObject {
         }
 
         // Count actual updates (composite keys already include app-specific info)
-        if assignmentsToUpdate.count > 0 {
-            messages.append("\(assignmentsToUpdate.count) assignment(s) will be updated")
+        if !assignmentsRequiringRecreation.isEmpty {
+            messages.append("\(assignmentsRequiringRecreation.count) assignment(s) will be updated")
         }
 
         if pendingAssignments.count > 0 {
@@ -1256,7 +1761,7 @@ class AssignmentEditViewModel: ObservableObject {
 
     func hasPendingUpdate(_ item: AssignmentWithApp) -> Bool {
         let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
-        return assignmentsToUpdate[key] != nil
+        return assignmentsRequiringRecreation.contains(key)
     }
 
     func toggleSelection(_ item: AssignmentWithApp) {
@@ -1291,6 +1796,7 @@ class AssignmentEditViewModel: ObservableObject {
                 let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
                 assignmentsToDelete.insert(key)
                 assignmentsToUpdate.removeValue(forKey: key)
+                assignmentFilterOverrides.removeValue(forKey: key)
             }
         }
         // Clear selection after bulk action
@@ -1305,6 +1811,7 @@ class AssignmentEditViewModel: ObservableObject {
             assignmentsToDelete.insert(key)
             // If marking for deletion, remove any pending updates
             assignmentsToUpdate.removeValue(forKey: key)
+            assignmentFilterOverrides.removeValue(forKey: key)
         }
         detectConflicts()
     }
@@ -1329,6 +1836,7 @@ class AssignmentEditViewModel: ObservableObject {
             let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
             assignmentsToDelete.insert(key)
             assignmentsToUpdate.removeValue(forKey: key)
+            assignmentFilterOverrides.removeValue(forKey: key)
         }
         // Clear selection when doing a bulk delete all
         selectedAssignments.removeAll()
@@ -1350,6 +1858,107 @@ class AssignmentEditViewModel: ObservableObject {
         detectConflicts()
     }
 
+    func updateAssignmentFilter(_ item: AssignmentWithApp, filterId: String?, mode: AssignmentFilterMode?) {
+        _ = applyFilterOverride(for: item, filterId: filterId, mode: mode)
+        detectConflicts()
+    }
+
+    func updateFilters(for items: [AssignmentWithApp], filterId: String?, mode: AssignmentFilterMode?) {
+        var didChange = false
+        for item in items {
+            if applyFilterOverride(for: item, filterId: filterId, mode: mode) {
+                didChange = true
+            }
+        }
+        if didChange {
+            detectConflicts()
+        }
+    }
+
+    @discardableResult
+    private func applyFilterOverride(for item: AssignmentWithApp, filterId: String?, mode: AssignmentFilterMode?) -> Bool {
+        let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+
+        guard !assignmentsToDelete.contains(key) else { return false }
+
+        let originalId = item.assignment.target.deviceAndAppManagementAssignmentFilterId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let originalType = item.assignment.target.deviceAndAppManagementAssignmentFilterType?.lowercased()
+        let originalMode = originalType.flatMap { AssignmentFilterMode(rawValue: $0) }
+
+        let normalizedId = filterId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedId = (normalizedId?.isEmpty ?? true) ? nil : normalizedId
+        let effectiveMode = cleanedId == nil ? nil : (mode ?? .include)
+
+        let matchesOriginal: Bool = {
+            if let newId = cleanedId {
+                guard let currentId = originalId, currentId == newId else { return false }
+                let newModeRaw = (effectiveMode ?? .include).rawValue
+                let originalModeRaw = (originalMode ?? .include).rawValue
+                return newModeRaw == originalModeRaw
+            } else {
+                return originalId == nil || originalId?.isEmpty == true
+            }
+        }()
+
+        let previous = assignmentFilterOverrides[key]
+
+        if matchesOriginal {
+            if previous != nil {
+                assignmentFilterOverrides.removeValue(forKey: key)
+                return true
+            }
+            return false
+        }
+
+        let newOverride = FilterOverride(filterId: cleanedId, filterMode: effectiveMode)
+        if previous == newOverride {
+            return false
+        }
+
+        assignmentFilterOverrides[key] = newOverride
+        return true
+    }
+
+    func effectiveFilterId(for item: AssignmentWithApp) -> String? {
+        let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+        if let override = assignmentFilterOverrides[key] {
+            return override.filterId
+        }
+        let original = item.assignment.target.deviceAndAppManagementAssignmentFilterId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return original?.isEmpty == true ? nil : original
+    }
+
+    func effectiveFilterMode(for item: AssignmentWithApp) -> AssignmentFilterMode? {
+        let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+        if let override = assignmentFilterOverrides[key] {
+            guard let filterId = override.filterId else { return nil }
+            return override.filterMode ?? .include
+        }
+        guard let type = item.assignment.target.deviceAndAppManagementAssignmentFilterType?.lowercased(),
+              let id = item.assignment.target.deviceAndAppManagementAssignmentFilterId,
+              !id.isEmpty else {
+            return nil
+        }
+        return AssignmentFilterMode(rawValue: type) ?? .include
+    }
+
+    private func resolveFilter(for assignment: AssignmentWithApp, override: FilterOverride?) -> (String?, String?) {
+        if let override = override {
+            if let filterId = override.filterId, !filterId.isEmpty {
+                let mode = override.filterMode ?? .include
+                return (filterId, mode.rawValue)
+            } else {
+                return (nil, nil)
+            }
+        }
+
+        let existingId = assignment.assignment.target.deviceAndAppManagementAssignmentFilterId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedId = (existingId?.isEmpty ?? true) ? nil : existingId
+        let existingType = assignment.assignment.target.deviceAndAppManagementAssignmentFilterType?.lowercased()
+        let cleanedType = cleanedId == nil ? nil : (existingType ?? AssignmentFilterMode.include.rawValue)
+        return (cleanedId, cleanedType)
+    }
+
     func removePendingAssignment(_ assignment: PendingAssignment) {
         pendingAssignments.removeAll { $0.id == assignment.id }
         detectConflicts()
@@ -1359,6 +1968,13 @@ class AssignmentEditViewModel: ObservableObject {
         if let index = pendingAssignments.firstIndex(where: { $0.id == assignment.id }) {
             pendingAssignments[index].intent = intent
         }
+        detectConflicts()
+    }
+
+    func updatePendingFilter(_ assignment: PendingAssignment, filterId: String?, mode: AssignmentFilterMode?) {
+        guard let index = pendingAssignments.firstIndex(where: { $0.id == assignment.id }) else { return }
+        pendingAssignments[index].assignmentFilterId = filterId
+        pendingAssignments[index].assignmentFilterMode = filterId == nil ? nil : (mode ?? .include)
         detectConflicts()
     }
 
@@ -1432,12 +2048,21 @@ class AssignmentEditViewModel: ObservableObject {
 
             if !hasExisting && !hasPending {
                 let intent = copyable.copyIntent ? assignment.intent : .required
-                pendingAssignments.append(PendingAssignment(
+                var pending = PendingAssignment(
                     group: group,
                     intent: intent,
                     copySettings: copyable.copySettings,
                     sourceAssignmentId: assignment.id
-                ))
+                )
+
+                if let sourceFilterId = assignment.target.deviceAndAppManagementAssignmentFilterId,
+                   !sourceFilterId.isEmpty {
+                    pending.assignmentFilterId = sourceFilterId
+                    let sourceType = assignment.target.deviceAndAppManagementAssignmentFilterType?.lowercased()
+                    pending.assignmentFilterMode = AssignmentFilterMode(rawValue: sourceType ?? "") ?? .include
+                }
+
+                pendingAssignments.append(pending)
             }
         }
     }
@@ -1454,8 +2079,9 @@ class AssignmentEditViewModel: ObservableObject {
         var createErrors: [(app: String, group: String, error: String)] = []
 
         // Calculate total operations for progress tracking
-        let totalDeletes = assignmentsToDelete.count + assignmentsToUpdate.count
-        let totalCreates = assignmentsToUpdate.count + (pendingAssignments.count * applicationIds.count)
+        let recreationCount = assignmentsRequiringRecreation.count
+        let totalDeletes = assignmentsToDelete.count + recreationCount
+        let totalCreates = recreationCount + (pendingAssignments.count * applicationIds.count)
         let totalOps = totalDeletes + totalCreates
 
         saveProgress = SaveProgress(
@@ -1467,9 +2093,15 @@ class AssignmentEditViewModel: ObservableObject {
         )
 
         // PHASE 1: Batch process all deletions first (including those for updates)
-        var deletedForUpdate: [(item: AssignmentWithApp, newIntent: AppAssignment.AssignmentIntent)] = []
+        struct AssignmentRecreation {
+            let item: AssignmentWithApp
+            let newIntent: AppAssignment.AssignmentIntent?
+            let filterOverride: FilterOverride?
+        }
+
+        var deletedForUpdate: [AssignmentRecreation] = []
         var deleteRequests: [BatchRequest] = []
-        var deleteMetadata: [(item: AssignmentWithApp, isForUpdate: Bool, newIntent: AppAssignment.AssignmentIntent?)] = []
+        var deleteMetadata: [(item: AssignmentWithApp, recreation: AssignmentRecreation?)] = []
 
         // Build delete requests for batching
         for item in currentAssignmentsWithApp {
@@ -1483,16 +2115,20 @@ class AssignmentEditViewModel: ObservableObject {
                     url: "/deviceAppManagement/mobileApps/\(item.appId)/assignments/\(item.assignment.id)"
                 )
                 deleteRequests.append(request)
-                deleteMetadata.append((item: item, isForUpdate: false, newIntent: nil))
-            } else if let newIntent = assignmentsToUpdate[key] {
-                // Delete for update (will recreate later)
+                deleteMetadata.append((item: item, recreation: nil))
+            } else if assignmentsRequiringRecreation.contains(key) {
+                let recreation = AssignmentRecreation(
+                    item: item,
+                    newIntent: assignmentsToUpdate[key],
+                    filterOverride: assignmentFilterOverrides[key]
+                )
                 let request = BatchRequest(
                     id: key,
                     method: "DELETE",
                     url: "/deviceAppManagement/mobileApps/\(item.appId)/assignments/\(item.assignment.id)"
                 )
                 deleteRequests.append(request)
-                deleteMetadata.append((item: item, isForUpdate: true, newIntent: newIntent))
+                deleteMetadata.append((item: item, recreation: recreation))
             }
         }
 
@@ -1519,8 +2155,8 @@ class AssignmentEditViewModel: ObservableObject {
                             // Success or already deleted
                             saveProgress?.completedOperations += 1
 
-                            if meta.isForUpdate, let newIntent = meta.newIntent {
-                                deletedForUpdate.append((item: meta.item, newIntent: newIntent))
+                            if let recreation = meta.recreation {
+                                deletedForUpdate.append(recreation)
                                 Logger.shared.info("Deleted assignment for update: \(meta.item.appName) - \(groupName)")
                             } else {
                                 Logger.shared.info("Deleted assignment for \(meta.item.appName) - \(groupName)")
@@ -1529,7 +2165,7 @@ class AssignmentEditViewModel: ObservableObject {
                             saveProgress?.failedOperations += 1
                             let errorMsg = "HTTP \(response.status)"
 
-                            if meta.isForUpdate {
+                            if meta.recreation != nil {
                                 updateErrors.append((
                                     app: meta.item.appName,
                                     group: groupName,
@@ -1548,7 +2184,7 @@ class AssignmentEditViewModel: ObservableObject {
                         saveProgress?.failedOperations += 1
                         let groupName = meta.item.assignment.target.groupName ?? meta.item.assignment.target.type.displayName
 
-                        if meta.isForUpdate {
+                        if meta.recreation != nil {
                             updateErrors.append((
                                 app: meta.item.appName,
                                 group: groupName,
@@ -1570,7 +2206,7 @@ class AssignmentEditViewModel: ObservableObject {
             saveProgress?.currentOperation = "Processing \(deletedForUpdate.count) updates..."
 
             // Group updates by app ID for efficient batching with /assign endpoint
-            var updatesByApp: [String: [(item: AssignmentWithApp, newIntent: AppAssignment.AssignmentIntent)]] = [:]
+            var updatesByApp: [String: [AssignmentRecreation]] = [:]
             for update in deletedForUpdate {
                 updatesByApp[update.item.appId, default: []].append(update)
             }
@@ -1590,10 +2226,28 @@ class AssignmentEditViewModel: ObservableObject {
                         struct Target: Encodable {
                             let type: String
                             let groupId: String?
+                            let deviceAndAppManagementAssignmentFilterId: String?
+                            let deviceAndAppManagementAssignmentFilterType: String?
 
                             enum CodingKeys: String, CodingKey {
                                 case type = "@odata.type"
                                 case groupId
+                                case deviceAndAppManagementAssignmentFilterId
+                                case deviceAndAppManagementAssignmentFilterType
+                            }
+
+                            func encode(to encoder: Encoder) throws {
+                                var container = encoder.container(keyedBy: CodingKeys.self)
+                                try container.encode(type, forKey: .type)
+                                if let groupId = groupId {
+                                    try container.encode(groupId, forKey: .groupId)
+                                }
+                                if let filterId = deviceAndAppManagementAssignmentFilterId {
+                                    try container.encode(filterId, forKey: .deviceAndAppManagementAssignmentFilterId)
+                                }
+                                if let filterType = deviceAndAppManagementAssignmentFilterType {
+                                    try container.encode(filterType, forKey: .deviceAndAppManagementAssignmentFilterType)
+                                }
                             }
                         }
 
@@ -1615,16 +2269,16 @@ class AssignmentEditViewModel: ObservableObject {
                 let appType = applicationData.first(where: { $0.id == appId })?.appType ?? .unknown
                 let appName = updates.first?.item.appName ?? appId
 
-                for (item, newIntent) in updates {
+                for recreation in updates {
+                    let item = recreation.item
                     let groupName = item.assignment.target.groupName ?? item.assignment.target.type.displayName
                     let targetType = item.assignment.target.type
 
-                    // Validate and adjust intent if needed
-                    var finalIntent = newIntent
-                    if !AssignmentIntentValidator.isIntentValid(intent: newIntent, appType: appType, targetType: targetType) {
+                    var finalIntent = recreation.newIntent ?? item.assignment.intent
+                    if !AssignmentIntentValidator.isIntentValid(intent: finalIntent, appType: appType, targetType: targetType) {
                         let validIntents = AssignmentIntentValidator.validIntents(for: appType, targetType: targetType)
                         if let suggestedIntent = validIntents.first {
-                            Logger.shared.warning("Intent '\(newIntent.rawValue)' not valid for \(appType.displayName). Using '\(suggestedIntent.rawValue)'.")
+                            Logger.shared.warning("Intent '\(finalIntent.rawValue)' not valid for \(appType.displayName). Using '\(suggestedIntent.rawValue)'.")
                             finalIntent = suggestedIntent
                         } else {
                             updateErrors.append((
@@ -1637,20 +2291,22 @@ class AssignmentEditViewModel: ObservableObject {
                         }
                     }
 
-                    // Build settings - IMPORTANT: For VPP apps being uninstalled, use device licensing
-                    // For uninstall intent, don't include ANY settings - let Intune use defaults
                     var settings: AssignRequest.AssignmentBody.Settings? = nil
                     if finalIntent != .uninstall {
                         // Only include settings for non-uninstall intents
                         // TODO: Add settings configuration for other intents if needed
                     }
 
+                    let (filterId, filterType) = resolveFilter(for: item, override: recreation.filterOverride)
+
                     let assignment = AssignRequest.AssignmentBody(
                         id: UUID().uuidString,
                         intent: finalIntent.rawValue,
                         target: AssignRequest.AssignmentBody.Target(
                             type: targetType.rawValue,
-                            groupId: targetType.requiresGroupId ? item.assignment.target.groupId : nil
+                            groupId: targetType.requiresGroupId ? item.assignment.target.groupId : nil,
+                            deviceAndAppManagementAssignmentFilterId: filterId,
+                            deviceAndAppManagementAssignmentFilterType: filterType
                         ),
                         settings: settings
                     )
@@ -1661,15 +2317,15 @@ class AssignmentEditViewModel: ObservableObject {
                 // Send batch request for this app
                 if !assignments.isEmpty {
                     do {
-                        struct LocalEmptyResponse: Decodable {}
                         let request = AssignRequest(mobileAppAssignments: assignments)
                         let endpoint = "/deviceAppManagement/mobileApps/\(appId)/assign"
 
-                        let _: LocalEmptyResponse = try await apiClient.postModel(endpoint, body: request, headers: ["Content-Type": "application/json"])
+                        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: request, headers: ["Content-Type": "application/json"])
                         Logger.shared.info("Batch recreated \(assignments.count) assignments for \(appName)")
                     } catch {
                         saveProgress?.failedOperations += assignments.count
-                        for (item, _) in updates {
+                        for recreation in updates {
+                            let item = recreation.item
                             let groupName = item.assignment.target.groupName ?? "Unknown"
                             updateErrors.append((
                                 app: item.appName,
@@ -1701,10 +2357,28 @@ class AssignmentEditViewModel: ObservableObject {
                     struct Target: Encodable {
                         let type: String
                         let groupId: String?
+                        let deviceAndAppManagementAssignmentFilterId: String?
+                        let deviceAndAppManagementAssignmentFilterType: String?
 
                         enum CodingKeys: String, CodingKey {
                             case type = "@odata.type"
                             case groupId
+                            case deviceAndAppManagementAssignmentFilterId
+                            case deviceAndAppManagementAssignmentFilterType
+                        }
+
+                        func encode(to encoder: Encoder) throws {
+                            var container = encoder.container(keyedBy: CodingKeys.self)
+                            try container.encode(type, forKey: .type)
+                            if let groupId = groupId {
+                                try container.encode(groupId, forKey: .groupId)
+                            }
+                            if let filterId = deviceAndAppManagementAssignmentFilterId {
+                                try container.encode(filterId, forKey: .deviceAndAppManagementAssignmentFilterId)
+                            }
+                            if let filterType = deviceAndAppManagementAssignmentFilterType {
+                                try container.encode(filterType, forKey: .deviceAndAppManagementAssignmentFilterType)
+                            }
                         }
                     }
 
@@ -1760,12 +2434,17 @@ class AssignmentEditViewModel: ObservableObject {
                         // TODO: Add settings configuration for other intents if needed
                     }
 
+                    let filterId = pending.assignmentFilterId
+                    let filterType = filterId == nil ? nil : (pending.assignmentFilterMode ?? .include).rawValue
+
                     let assignment = AssignRequest.AssignmentBody(
                         id: UUID().uuidString,
                         intent: finalIntent.rawValue,
                         target: AssignRequest.AssignmentBody.Target(
                             type: targetType.rawValue,
-                            groupId: targetType.requiresGroupId ? pending.group.id : nil
+                            groupId: targetType.requiresGroupId ? pending.group.id : nil,
+                            deviceAndAppManagementAssignmentFilterId: filterId,
+                            deviceAndAppManagementAssignmentFilterType: filterType
                         ),
                         settings: settings
                     )
@@ -1775,11 +2454,10 @@ class AssignmentEditViewModel: ObservableObject {
                 // Send batch request for this app
                 if !assignments.isEmpty {
                     do {
-                        struct LocalEmptyResponse: Decodable {}
                         let request = AssignRequest(mobileAppAssignments: assignments)
                         let endpoint = "/deviceAppManagement/mobileApps/\(appId)/assign"
 
-                        let _: LocalEmptyResponse = try await apiClient.postModel(endpoint, body: request, headers: ["Content-Type": "application/json"])
+                        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: request, headers: ["Content-Type": "application/json"])
                         saveProgress?.completedOperations += assignments.count
                         Logger.shared.info("Batch created \(assignments.count) assignments for \(appName)")
                     } catch {
@@ -1884,10 +2562,14 @@ class AssignmentEditViewModel: ObservableObject {
             struct TargetRequest: Encodable {
                 let type: String
                 let groupId: String?
+                let deviceAndAppManagementAssignmentFilterId: String?
+                let deviceAndAppManagementAssignmentFilterType: String?
 
                 enum CodingKeys: String, CodingKey {
                     case type = "@odata.type"
                     case groupId
+                    case deviceAndAppManagementAssignmentFilterId
+                    case deviceAndAppManagementAssignmentFilterType
                 }
 
                 func encode(to encoder: Encoder) throws {
@@ -1897,23 +2579,32 @@ class AssignmentEditViewModel: ObservableObject {
                     if let groupId = groupId {
                         try container.encode(groupId, forKey: .groupId)
                     }
+                    if let filterId = deviceAndAppManagementAssignmentFilterId {
+                        try container.encode(filterId, forKey: .deviceAndAppManagementAssignmentFilterId)
+                    }
+                    if let filterType = deviceAndAppManagementAssignmentFilterType {
+                        try container.encode(filterType, forKey: .deviceAndAppManagementAssignmentFilterType)
+                    }
                 }
             }
         }
 
         // Determine the target type based on the group
         let targetType = pending.group.assignmentTargetType
+        let filterId = pending.assignmentFilterId
+        let filterType = filterId == nil ? nil : (pending.assignmentFilterMode ?? .include).rawValue
 
         let createRequest = CreateRequest(
             intent: pending.intent.rawValue,
             target: CreateRequest.TargetRequest(
                 type: targetType.rawValue,
                 // Only include groupId for regular groups, not built-in targets
-                groupId: targetType.requiresGroupId ? pending.group.id : nil
+                groupId: targetType.requiresGroupId ? pending.group.id : nil,
+                deviceAndAppManagementAssignmentFilterId: filterId,
+                deviceAndAppManagementAssignmentFilterType: filterType
             )
         )
 
-        struct LocalEmptyResponse: Decodable {}
-        let _: LocalEmptyResponse = try await apiClient.postModel(endpoint, body: createRequest)
+        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: createRequest)
     }
 }
