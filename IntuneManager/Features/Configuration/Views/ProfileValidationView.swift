@@ -38,9 +38,6 @@ struct ProfileValidationView: View {
                 .padding()
             }
             .navigationTitle("Profile Validation")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {
@@ -407,9 +404,6 @@ struct ConflictDetailView: View {
             }
             .padding()
             .navigationTitle("Conflict Details")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") {

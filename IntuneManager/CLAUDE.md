@@ -5,7 +5,7 @@
 - Focus on keeping layering intact: App → Core → Services → Features → UI helpers.
 
 ## Layer Responsibilities
-- **App/**: Entry scenes only. Compose environment objects (`AuthManagerV2`, `CredentialManager`, `AppState`) and host the cross-platform shells (`UnifiedContentView`, `UnifiedSidebarView`). Navigation wiring belongs here—register new tabs in `AppState.Tab`, ensure permission alerts (`AppState.permissionErrorDetails`) route back to Settings, and keep this layer free of business logic.
+- **App/**: Entry scenes only. Compose environment objects (`AuthManagerV2`, `CredentialManager`, `AppState`) and host the macOS window scaffolding (`UnifiedContentView`, `UnifiedSidebarView`). Navigation wiring belongs here—register new tabs in `AppState.Tab`, ensure permission alerts (`AppState.permissionErrorDetails`) route back to Settings, and keep this layer free of business logic.
 - **Core/**: Reusable infrastructure. Keep dependencies pointing inward (Core should not import feature code). Split responsibilities across existing subfolders (Authentication, DataLayer, Networking, Security, CrossPlatform, UI). New shared helpers belong here only if they are platform-agnostic.
 - **Services/**: Bridge Graph + persistence to the UI. Services may rely on Core but should not reference SwiftUI types. Maintain singleton access (`static let shared`) and ensure public APIs are `async` and `@MainActor` when mutating shared state. Recent additions (configuration export/validation, assignment import/export, audit logs) all live here—extend them rather than duplicating logic in features.
 - **Features/**: House SwiftUI `Views/` plus lightweight `ViewModels/`. Views talk to services and `AppState`; view models own state and orchestrate async calls. Keep navigation registration in `AppState.Tab` and `UnifiedContentView`. Bulk Assignment, Configuration, and other wizards live here and should remain decomposed into `Views/` + `ViewModels/` pairs.
@@ -25,9 +25,8 @@
 - Configuration and Bulk Assignment flows rely on long-lived progress objects published by their services. Bind to those publishers instead of duplicating state in the view model; update the service if you need new progress fields.
 
 ## Platform Conditioning
-- Keep platform checks centralized. Prefer helper abstractions (`PlatformNavigation`, `PlatformHelper`) to limit scattered `#if os` blocks.
-- If a feature needs platform-specific UI, split the view into contained `#if os` sections or provide dedicated helper views per platform within the feature folder.
-- File import/export (assignments, configuration, mobileconfig) has platform-specific affordances. Use helpers in `CrossPlatform` for document pickers/exporters and test both macOS and iOS flows when modifying them.
+- We target macOS exclusively. Prefer helper abstractions (`PlatformNavigation`, `PlatformHelper`) for AppKit interop instead of scattering conditional compilation.
+- Keep file import/export (assignments, configuration, mobileconfig) routed through the mac-specific utilities in `Core/CrossPlatform` so save/open panels stay consistent.
 
 ## Key Workflows
 - **Bulk Assignment**: `BulkAssignmentViewModel` composes `AssignmentService` for execution and the import/export services for backup/restore. Keep validation logic in `AssignmentIntentValidator`/`AssignmentConflictDetector` (`Core/Utilities`) and extend those utilities if new rules emerge.

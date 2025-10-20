@@ -1,6 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 #if os(macOS)
+import AppKit
 import PDFKit
 #endif
 
@@ -408,11 +409,7 @@ struct ReviewAssignmentView: View {
             currentStep = .selectApps
         case .showHelp(let url):
             if let url = URL(string: url) {
-                #if os(macOS)
                 NSWorkspace.shared.open(url)
-                #else
-                UIApplication.shared.open(url)
-                #endif
             }
         }
     }

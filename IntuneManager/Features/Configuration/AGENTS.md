@@ -16,7 +16,7 @@
 - Keep Graph mutation logic in the services; view models should only coordinate calls and update published collections.
 - When introducing new validation checks, extend `ProfileValidationService` and ensure UI surfaces both errors and warnings clearly.
 - Mobileconfig ingestion should validate payload metadata before hitting Graph—use `MobileConfigService.validateMobileConfig` and surface results in the upload sheet.
-- File import/export must use cross-platform document helper APIs so macOS save panels and iOS document pickers behave consistently.
+- File import/export must use the shared document helper APIs so macOS save/open panels behave consistently.
 - Template-driven creation flows should map settings through the existing conversion helpers (`toConfigurationProfile`, `toGraphSettingInstance`). Add new helpers alongside the model definitions if needed.
 - Update `AppState.handlePermissionError` mappings when new configuration operations require additional Graph scopes.
 
@@ -27,4 +27,4 @@
 
 ## Testing Tips
 - Add unit tests for new validation rules or conversion helpers under `IntuneManagerTests/Configuration` with representative Graph payload fixtures.
-- UI automation should cover profile creation, validation, and mobileconfig upload on both macOS and iOS destinations.
+- UI automation should cover profile creation, validation, and mobileconfig upload on macOS.

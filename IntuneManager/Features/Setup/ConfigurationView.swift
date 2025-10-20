@@ -1,7 +1,5 @@
 import SwiftUI
-#if os(macOS)
 import AppKit
-#endif
 
 struct ConfigurationView: View {
     @StateObject private var credentialManager = CredentialManager.shared
@@ -26,18 +24,9 @@ struct ConfigurationView: View {
     }
 
     var body: some View {
-        #if os(iOS)
-        GeometryReader { geometry in
-            VStack(spacing: 0) {
-                configContent
-            }
-            .ignoresSafeArea(.keyboard)
-        }
-        #else
         VStack(spacing: 0) {
             configContent
         }
-        #endif
     }
 
     @ViewBuilder
@@ -92,7 +81,7 @@ struct ConfigurationView: View {
                             .fixedSize(horizontal: false, vertical: true)
 
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("1. Go to Azure Portal → App registrations → Your App")
+                        Text("1. Go to Azure Portal → App registrations → Your App")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                             Text("2. Navigate to Authentication → Platform configurations")
@@ -117,12 +106,8 @@ struct ConfigurationView: View {
 
                             Button(action: {
                                 let uri = useCustomRedirectUri && !customRedirectUri.isEmpty ? customRedirectUri : defaultRedirectUri
-                                #if os(macOS)
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(uri, forType: .string)
-                                #else
-                                UIPasteboard.general.string = uri
-                                #endif
                             }) {
                                 Image(systemName: "doc.on.doc")
                                     .font(.caption)
@@ -181,16 +166,9 @@ struct ConfigurationView: View {
                     .disabled(!isValid || isValidating)
                 }
                 .padding()
-                #if os(iOS)
-                .background(Color(UIColor.systemBackground))
-                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: -4)
-                #endif
             }
         }
         .navigationTitle("Setup")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
         .alert("Configuration Saved", isPresented: $showingSuccess) {
             Button("OK") {
                 dismiss()
@@ -428,12 +406,8 @@ struct PermissionRow: View {
                     .cornerRadius(4)
 
                 Button(action: {
-                    #if os(macOS)
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(permission, forType: .string)
-                    #else
-                    UIPasteboard.general.string = permission
-                    #endif
                 }) {
                     Image(systemName: "doc.on.doc")
                         .font(.caption2)

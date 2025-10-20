@@ -1,9 +1,5 @@
 import SwiftUI
-#if os(iOS)
-import UIKit
-#else
 import AppKit
-#endif
 
 /// Centralized theme configuration for consistent UI across the app
 struct Theme {
@@ -23,19 +19,11 @@ struct Theme {
         static let error = Color.red
 
         /// Background colors
-        #if os(iOS)
-        static let primaryBackground = Color(UIColor.systemBackground)
-        static let secondaryBackground = Color(UIColor.secondarySystemBackground)
-        static let tertiaryBackground = Color(UIColor.tertiarySystemBackground)
-        static let tertiaryText = Color(UIColor.tertiaryLabel)
-        static let cardBackground = Color(UIColor.systemBackground).opacity(0.95)
-        #else
         static let primaryBackground = Color(NSColor.windowBackgroundColor)
         static let secondaryBackground = Color(NSColor.controlBackgroundColor)
         static let tertiaryBackground = Color(NSColor.controlBackgroundColor)
         static let tertiaryText = Color(NSColor.tertiaryLabelColor)
         static let cardBackground = Color(NSColor.windowBackgroundColor).opacity(0.95)
-        #endif
 
         /// Text colors
         static let primaryText = Color.primary

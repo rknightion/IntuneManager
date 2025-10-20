@@ -40,13 +40,7 @@ struct BulkImportSystemAppsView: View {
                     // Add new package ID row
                     HStack(spacing: 8) {
                         TextField("Package ID", text: $newPackageId, prompt: Text("com.example.app"))
-                        #if os(iOS)
-                            .autocapitalization(.none)
-                            .autocorrectionDisabled()
-                        #endif
-                        #if os(macOS)
                             .textFieldStyle(.roundedBorder)
-                        #endif
                             .font(.system(.body, design: .monospaced))
                             .onSubmit {
                                 addPackageId()
@@ -81,17 +75,11 @@ struct BulkImportSystemAppsView: View {
                     ForEach(Array(packageIds.enumerated()), id: \.offset) { index, packageId in
                         HStack {
                             if editingIndex == index {
-                                TextField("Package ID", text: Binding(
-                                    get: { packageIds[index] },
-                                    set: { packageIds[index] = $0 }
-                                ))
-                                #if os(iOS)
-                                    .autocapitalization(.none)
-                                    .autocorrectionDisabled()
-                                #endif
-                                #if os(macOS)
+                            TextField("Package ID", text: Binding(
+                                get: { packageIds[index] },
+                                set: { packageIds[index] = $0 }
+                            ))
                                     .textFieldStyle(.roundedBorder)
-                                #endif
                                     .font(.system(.body, design: .monospaced))
 
                                 Button("Done") {
@@ -220,10 +208,6 @@ struct BulkImportSystemAppsView: View {
                         // Use TextEditor for proper multi-line input
                         TextEditor(text: $bulkPasteText)
                             .font(.system(.body, design: .monospaced))
-                            #if os(iOS)
-                            .autocapitalization(.none)
-                            .autocorrectionDisabled()
-                            #endif
                             .frame(minHeight: 150, maxHeight: 300)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6)
@@ -288,9 +272,7 @@ struct BulkImportSystemAppsView: View {
                 }
             }
         }
-        #if os(macOS)
         .frame(minWidth: 500, minHeight: 450)
-        #endif
     }
 
     private func validatePackageIdFormat(_ packageId: String) -> Bool {

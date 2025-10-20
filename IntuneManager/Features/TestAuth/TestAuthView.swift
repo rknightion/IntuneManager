@@ -173,16 +173,8 @@ struct TestAuthView: View {
     }
 
     private func signIn() {
-        #if os(iOS)
-        // For iOS, we need to pass the view controller
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootVC = windowScene.windows.first?.rootViewController {
-            authManager.signIn(from: rootVC)
-        }
-        #else
         // For macOS, we can call without view controller
         authManager.signIn()
-        #endif
     }
 }
 

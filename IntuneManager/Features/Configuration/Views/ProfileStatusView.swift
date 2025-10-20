@@ -42,9 +42,6 @@ struct ProfileStatusView: View {
             .padding()
         }
         .navigationTitle("Deployment Status")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { Task { await viewModel.refreshStatus() } }) {
@@ -369,9 +366,6 @@ struct DeviceComplianceListView: View {
             }
             .searchable(text: $searchText, prompt: "Search devices...")
             .navigationTitle("Device Compliance")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {

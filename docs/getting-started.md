@@ -1,6 +1,6 @@
 # Getting Started
 
-This guide walks Microsoft Intune administrators through the steps required to deploy, configure, and sign in to IntuneManager on macOS, iPadOS, or iOS. By the end you will have a signed-in session with live Intune data and understand the basics of the app layout.
+This guide walks Microsoft Intune administrators through the steps required to deploy, configure, and sign in to IntuneManager on macOS. By the end you will have a signed-in session with live Intune data and understand the basics of the app layout.
 
 ## Prerequisites
 
@@ -22,7 +22,7 @@ Before you launch IntuneManager make sure you have:
   - `AuditLog.Read.All`
   - `User.Read`
   - `offline_access`
-- macOS 15, iPadOS 18, or iOS 18 hardware
+- macOS 15 hardware
 
 > **Tip**: If you are testing from a managed device, make sure company portal policies allow third-party app installations.
 
@@ -32,9 +32,7 @@ IntuneManager relies on MSAL for authentication. You can reuse an existing publi
 
 1. Navigate to the [Azure Portal](https://portal.azure.com) → **Azure Active Directory** → **App registrations** → **New registration**.
 2. Choose a descriptive name such as `IntuneManager` and select **Accounts in this organizational directory only** unless you intend to manage multiple tenants.
-3. Set the redirect URI to `msauth.<bundle-id>://auth`. The default bundle identifiers are:
-   - macOS: `com.rknightion.IntuneManager.macOS`
-   - iOS/iPadOS: `com.rknightion.IntuneManager`
+3. Set the redirect URI to `msauth.<bundle-id>://auth`. The default bundle identifier is `com.rknightion.IntuneManager.macOS`.
 4. After creation, copy the **Application (client) ID** and **Directory (tenant) ID**.
 5. Go to **Authentication** → enable **Mobile and desktop applications** and confirm the redirect URI is listed.
 6. Under **API permissions**, add the delegated Microsoft Graph permissions listed in the prerequisites and grant admin consent.
@@ -51,18 +49,13 @@ Optional but recommended:
 2. Move the app to `/Applications`.
 3. Launch IntuneManager. The first run displays a splash screen while the local database is initialised.
 
-### iOS or iPadOS
-
-1. Install IntuneManager from your organisation's MDM catalog, TestFlight, or sideloaded build.
-2. Open the app. iOS will request permission to use Microsoft sign-in when the first authentication flow begins.
-
 ## Complete the setup wizard
 
 Before sign-in IntuneManager asks for registration details so that MSAL can initialise correctly.
 
 1. On the **Welcome** screen select **Configure Tenant**.
 2. Enter the **Client ID** and **Tenant ID** captured from Azure AD.
-3. Leave the redirect URI set to the displayed default unless your registration uses a custom URI. Tap **Copy** to store it in the clipboard if you need to verify Azure AD configuration.
+3. Leave the redirect URI set to the displayed default unless your registration uses a custom URI. Click **Copy** to store it in the clipboard if you need to verify Azure AD configuration.
 4. (Optional) Enable **Use client secret** if you configured a confidential client. For standard public clients leave this off.
 5. Choose **Save & Continue**. IntuneManager validates the input and writes it to the secure keychain.
 6. When prompted, select **Sign in with Microsoft**.
@@ -92,7 +85,7 @@ You can track progress via the loading overlay at the top of the window. The ini
 
 - **Sidebar / Tab bar**: Access Dashboard, Devices, Applications, Groups, Configuration, Reports, and Settings.
 - **Command bar (macOS)**: Use `⌘R` to refresh, `⌘⇧A` to jump straight to bulk assignments, and `⌘⇧C` to copy highlighted data (coming soon).
-- **Filters**: Many lists include a filter toggle in the toolbar. On iOS devices the filter drawer slides over the content; on macOS it appears inline.
+- **Filters**: Many lists include a filter toggle in the toolbar. On macOS the filter drawer appears inline alongside the primary content.
 
 Spend a few minutes exploring each area. The [Supported Entities](supported-entities.md) page explains what you can do in each section.
 

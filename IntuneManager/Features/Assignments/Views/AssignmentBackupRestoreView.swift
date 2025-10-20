@@ -34,9 +34,6 @@ struct AssignmentBackupRestoreView: View {
                 .padding()
             }
             .navigationTitle("Backup & Restore Assignments")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {

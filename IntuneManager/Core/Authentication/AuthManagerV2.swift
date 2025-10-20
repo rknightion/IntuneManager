@@ -1,15 +1,7 @@
 import Foundation
 import Combine
 import MSAL
-import Security
-
-#if canImport(UIKit)
-import UIKit
-#endif
-
-#if canImport(AppKit)
 import AppKit
-#endif
 
 /// Updated Authentication Manager using MSAL v2 with improved error handling and session management
 @MainActor
@@ -65,19 +57,7 @@ class AuthManagerV2: ObservableObject {
             msalConfig.clientApplicationCapabilities = ["CP1"] // Claims challenge capability
 
             // Configure keychain for token storage
-            #if os(macOS)
-            // macOS uses default keychain configuration
             Logger.shared.info("Using default keychain configuration for macOS")
-            #else
-            // iOS can use keychain normally
-            if let bundleIdentifier = Bundle.main.bundleIdentifier {
-                if let teamID = resolveTeamIdentifierPrefix() {
-                    let keychainGroup = "\(teamID).\(bundleIdentifier)"
-                    msalConfig.cacheConfig.keychainSharingGroup = keychainGroup
-                    Logger.shared.debug("MSAL Keychain Group: \(keychainGroup)")
-                }
-            }
-            #endif
 
             // Configure MSAL logging to only show warnings and errors
             MSALGlobalConfig.loggerConfig.logLevel = .warning
@@ -131,7 +111,7 @@ class AuthManagerV2: ObservableObject {
     }
 
     /// Interactive sign-in flow
-    func signIn(from viewController: Any? = nil) async throws {
+    func signIn() async throws {
         guard let application = applicationContext else {
             throw AuthError.msalNotInitialized
         }
@@ -153,12 +133,6 @@ class AuthManagerV2: ObservableObject {
         ]
 
         // Create interactive parameters with webview
-        #if os(iOS)
-        guard let presentingViewController = viewController as? UIViewController else {
-            throw AuthError.invalidViewController
-        }
-        let webviewParameters = MSALWebviewParameters(authPresentationViewController: presentingViewController)
-        #elseif os(macOS)
         // For macOS, get the main window's content view controller
         // If none exists, we'll pass nil and MSAL will use the default browser
         let contentViewController = NSApplication.shared.mainWindow?.contentViewController ?? NSApplication.shared.keyWindow?.contentViewController
@@ -174,7 +148,6 @@ class AuthManagerV2: ObservableObject {
 
         // Use authentication session which opens system browser
         webviewParameters.webviewType = .authenticationSession
-        #endif
 
         let interactiveParameters = MSALInteractiveTokenParameters(
             scopes: scopes,
@@ -286,19 +259,7 @@ class AuthManagerV2: ObservableObject {
         if let account = currentAccount {
             do {
                 // Remove account from cache
-                let signoutParameters: MSALSignoutParameters
-
-                #if os(iOS)
-                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                   let rootVC = (windowScene.windows.first { $0.isKeyWindow } ?? windowScene.windows.first)?.rootViewController {
-                    let webviewParameters = MSALWebviewParameters(authPresentationViewController: rootVC)
-                    signoutParameters = MSALSignoutParameters(webviewParameters: webviewParameters)
-                } else {
-                    signoutParameters = MSALSignoutParameters()
-                }
-                #else
-                signoutParameters = MSALSignoutParameters()
-                #endif
+                let signoutParameters = MSALSignoutParameters()
 
                 signoutParameters.signoutFromBrowser = true
 
@@ -454,28 +415,12 @@ class AuthManagerV2: ObservableObject {
     // MARK: - Lifecycle Management
 
     private func setupLifecycleObservers() {
-        #if os(iOS)
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleAppDidBecomeActive),
-            name: UIApplication.didBecomeActiveNotification,
-            object: nil
-        )
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleAppWillResignActive),
-            name: UIApplication.willResignActiveNotification,
-            object: nil
-        )
-        #elseif os(macOS)
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleAppDidBecomeActive),
             name: NSApplication.didBecomeActiveNotification,
             object: nil
         )
-        #endif
     }
 
     @objc private func handleAppDidBecomeActive() {
@@ -492,56 +437,4 @@ class AuthManagerV2: ObservableObject {
         }
     }
 
-    @objc private func handleAppWillResignActive() {
-        // Pause token refresh timer when app goes to background
-        tokenRefreshTimer?.invalidate()
-    }
-
-    private func resolveTeamIdentifierPrefix() -> String? {
-        if let prefixes = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? [String],
-           let prefix = prefixes.first {
-            return sanitizeTeamIdentifier(prefix)
-        }
-
-        if let prefix = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? String {
-            return sanitizeTeamIdentifier(prefix)
-        }
-
-        #if os(macOS)
-        if let prefix = fetchTeamIdentifierFromCodeSigning() {
-            return sanitizeTeamIdentifier(prefix)
-        }
-        #endif
-
-        return nil
-    }
-
-    private func sanitizeTeamIdentifier(_ identifier: String) -> String {
-        identifier.trimmingCharacters(in: CharacterSet(charactersIn: "."))
-    }
-
-    #if os(macOS)
-    private func fetchTeamIdentifierFromCodeSigning() -> String? {
-        var code: SecCode?
-        guard SecCodeCopySelf([], &code) == errSecSuccess, let code else {
-            return nil
-        }
-
-        var staticCode: SecStaticCode?
-        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else {
-            return nil
-        }
-
-        var signingInfo: CFDictionary?
-        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(), &signingInfo) == errSecSuccess,
-              let info = signingInfo as? [String: Any],
-              let entitlements = info[kSecCodeInfoEntitlementsDict as String] as? [String: Any],
-              let applicationIdentifier = entitlements["application-identifier"] as? String,
-              let prefix = applicationIdentifier.split(separator: ".").first else {
-            return nil
-        }
-
-        return String(prefix)
-    }
-    #endif
 }

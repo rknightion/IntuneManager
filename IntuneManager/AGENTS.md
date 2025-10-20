@@ -27,7 +27,7 @@
 ## Platform Conditioning
 - Keep platform checks centralized. Prefer helper abstractions (`PlatformNavigation`, `PlatformHelper`) to limit scattered `#if os` blocks.
 - If a feature needs platform-specific UI, split the view into contained `#if os` sections or provide dedicated helper views per platform within the feature folder.
-- File import/export (assignments, configuration, mobileconfig) has platform-specific affordances. Use helpers in `CrossPlatform` for document pickers/exporters and test both macOS and iOS flows when modifying them.
+- File import/export (assignments, configuration, mobileconfig) must route through the shared `CrossPlatform` helpers so macOS save/open panels stay consistent.
 
 ## Key Workflows
 - **Bulk Assignment**: `BulkAssignmentViewModel` composes `AssignmentService` for execution and the import/export services for backup/restore. Keep validation logic in `AssignmentIntentValidator`/`AssignmentConflictDetector` (`Core/Utilities`) and extend those utilities if new rules emerge.

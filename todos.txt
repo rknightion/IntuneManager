@@ -6,7 +6,7 @@
 ================================================================================
 NEXT UP - PHASE 3: MEDIUM IMPACT, HIGH VALUE
 ================================================================================
-After each task: build_run_macos, test macOS + iOS, verify no new warnings
+After each task: build_run_macos, verify no new warnings
 Update this file as a long term task manager
 
 ## 3.1 Assignment History & Audit Trail [📋 PLANNED]
@@ -100,7 +100,6 @@ Update this file as a long term task manager
 
 [📋] Platform mismatch detection
   - Files: Core/Utilities/AssignmentConflictDetector.swift
-  - TODO: Block iOS app → Windows-only group
   - TODO: Block Android app → macOS-only group
   - TODO: Validate platform compatibility early
 

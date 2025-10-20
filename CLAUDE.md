@@ -19,7 +19,7 @@
 - Surface risks, regressions, or open questions alongside your changes so humans can follow up.
 
 ## Architecture Overview
-- **App Layer (`IntuneManager/App`)**: `IntuneManagerApp` bootstraps global singletons (`AuthManagerV2`, `CredentialManager`, `AppState`) and wires platform-specific scenes. `UnifiedContentView` adapts navigation between macOS split-view and iOS/tab layouts.
+- **App Layer (`IntuneManager/App`)**: `IntuneManagerApp` bootstraps global singletons (`AuthManagerV2`, `CredentialManager`, `AppState`) and configures macOS scenes. `UnifiedContentView` presents a split-view driven workspace tailored exclusively for macOS.
 - **Core Layer (`IntuneManager/Core`)**: Shared infrastructure split into Authentication (MSAL glue), DataLayer (SwiftData models & `LocalDataStore` cache), Networking (`GraphAPIClient` + `RateLimiter`), Security (`CredentialManager`), CrossPlatform shims, and shared UI components.
 - **Services (`IntuneManager/Services`)**: Graph orchestration sits here. Core fetchers (`DeviceService`, `ApplicationService`, `GroupService`, `SyncService`) now work alongside assignment workflow helpers (`AssignmentService`, `AssignmentImportService`, `AssignmentExportService`), compliance/audit utilities (`AuditLogService`), and the configuration pipeline (`ConfigurationService`, `ProfileValidationService`, `ProfileExportService`, `MobileConfigService`). Keep them actor-isolated, expose async APIs, and let them own progress/error publishing for the UI.
 - **Features (`IntuneManager/Features`)**: Modules now cover Dashboard, Devices, Applications (Bulk Assignment workspace), Groups, Configuration (profiles/templates/mobileconfig), Reports, Settings, Setup, About, and TestAuth scaffolding. Views live under `Views/` with paired `ViewModels/` that compose services and `AppState`; extend existing folders instead of spawning ad-hoc navigation inside other features.
@@ -29,16 +29,13 @@
 
 Data flows from Microsoft Graph through `GraphAPIClient` → `RateLimiter` → domain services (assignments, configuration, audit logging, mobileconfig) → SwiftData caches (`LocalDataStore` plus per-service in-memory state) → view models and SwiftUI views. Configuration operations route through validation/export helpers before pushing back to Graph. Funnel logging through `Logger.shared` rather than `print`.
 
-## Multi-Platform Best Practices
-- Maintain feature parity: when updating a feature view, it should render acceptably on macOS, iPad, and iPhone. Use `platformGlassBackground`, `PlatformNavigation`, and other cross-platform modifiers instead of ad-hoc device checks when possible.
-- While we want compatability of our app for iOS and iPadOS the main target audience is MacOS and that should be prioritised where possible.
-- Keep platform-specific code behind `#if os(...)` guards and isolate it in `CrossPlatform` helpers to avoid scattering conditionals.
-- Respect concurrency annotations: UI-facing models stay `@MainActor`; background Graph work happens inside services actors or async functions with explicit `Sendable` models.
+## macOS UI Guidelines
+- Design primarily for desktop workflows: favor split views, tables, and Command menu accelerators that align with macOS conventions.
+- Prefer AppKit-backed helpers in `PlatformCompatibility` for window management, clipboard, and file dialogs; avoid residual UIKit dependencies.
+- Ensure new features respond correctly to window resizing, sidebar selection state, and toolbar command shortcuts.
+- Continue to respect concurrency annotations: UI-facing models stay `@MainActor`; background Graph work happens inside services actors or async functions with explicit `Sendable` models.
 - Reuse `AppState.Tab` to surface new sections; update sidebar/tab registration and provide consistent icons and labels.
 - When introducing new Graph endpoints, define Codable/`@Model` types in `Core/DataLayer/Models`, extend services to call them, and document required API permissions in the relevant feature README.
-- Test workflows that diverge per platform: profile import/export uses macOS save panels while iOS relies on `UIDocumentPicker`, so verify both paths and provide safe defaults.
-- Provide keyboard-friendly affordances for macOS-first flows (commands, menu items) and mirror them with touch UI so iPad/iPhone stay functional without duplicating views.
-- Validate dynamic type, pointer interactions, and compact width layouts when adding Bulk Assignment or Configuration screens—they must remain legible in split view and tab contexts.
 
 ## Implementation Guardrails
 - Prefer dependency injection through shared singletons already established (`DeviceService.shared`, etc.); if a new shared service is needed, expose it via the Services layer rather than from a view.

@@ -1,13 +1,6 @@
 import SwiftUI
 import SwiftData
-
-#if canImport(UIKit)
-import UIKit
-#endif
-
-#if canImport(AppKit)
 import AppKit
-#endif
 
 @main
 struct IntuneManagerApp: App {
@@ -51,7 +44,6 @@ struct IntuneManagerApp: App {
             .environmentObject(permissionService)
         }
         .modelContainer(modelContainer)
-        #if os(macOS)
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified(showsTitle: true))
         .defaultSize(width: 1200, height: 800)
@@ -144,9 +136,6 @@ struct IntuneManagerApp: App {
                 }
             }
         }
-        #endif
-
-        #if os(macOS)
         Settings {
             SettingsView()
                 .environmentObject(authManager)
@@ -154,9 +143,6 @@ struct IntuneManagerApp: App {
                 .environmentObject(appState)
         }
         .modelContainer(modelContainer)
-        #endif
-
-        #if os(macOS)
         WindowGroup("Assignments Overview") {
             AssignmentQuickLookView()
                 .environmentObject(authManager)
@@ -164,7 +150,6 @@ struct IntuneManagerApp: App {
                 .environmentObject(credentialManager)
         }
         .modelContainer(modelContainer)
-        #endif
     }
 
     // MARK: - Initialization
@@ -207,24 +192,9 @@ struct IntuneManagerApp: App {
     }
 
     private func configurePlatformSpecifics() {
-        #if os(iOS)
-        UIApplication.shared.isIdleTimerDisabled = false
-
-        let navAppearance = UINavigationBarAppearance()
-        navAppearance.configureWithDefaultBackground()
-        UINavigationBar.appearance().standardAppearance = navAppearance
-        UINavigationBar.appearance().scrollEdgeAppearance = navAppearance
-
-        let tabAppearance = UITabBarAppearance()
-        tabAppearance.configureWithDefaultBackground()
-        UITabBar.appearance().standardAppearance = tabAppearance
-        UITabBar.appearance().scrollEdgeAppearance = tabAppearance
-        #elseif os(macOS)
         NSApplication.shared.setActivationPolicy(.regular)
-        #endif
     }
 
-    #if os(macOS)
     private func exportLogs() {
         let logs = Logger.shared.getCriticalErrors()
         let data = logs.joined(separator: "\n").data(using: .utf8) ?? Data()
@@ -235,7 +205,6 @@ struct IntuneManagerApp: App {
             }
         }
     }
-    #endif
 }
 
 // MARK: - Root Scene
@@ -308,11 +277,9 @@ private struct RootScene: View {
             Button("Continue Anyway") {
                 showingPermissionWarning = false
             }
-            #if os(macOS)
             Button("Copy Permission List") {
                 copyPermissionsToClipboard()
             }
-            #endif
             Button("View Details") {
                 appState.selectedTab = .settings
                 showingPermissionWarning = false
@@ -323,13 +290,11 @@ private struct RootScene: View {
         .preferredColorScheme(appState.preferredColorScheme)
     }
 
-    #if os(macOS)
     private func copyPermissionsToClipboard() {
         let missingScopes = permissionService.missingPermissions.map { $0.scope }.joined(separator: "\n")
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(missingScopes, forType: .string)
     }
-    #endif
 }
 
 // MARK: - Splash Screen
@@ -351,7 +316,7 @@ struct SplashView: View {
             )
             .ignoresSafeArea()
 
-            if #available(iOS 18, macOS 15, *) {
+            if #available(macOS 15, *) {
                 Rectangle()
                     .fill(.ultraThinMaterial)
                     .blur(radius: 90)
@@ -371,7 +336,7 @@ struct SplashView: View {
                             value: isAnimating
                         )
 
-                    Image(systemName: "laptopcomputer.and.iphone")
+                    Image(systemName: "laptopcomputer")
                         .font(.system(size: 60))
                         .foregroundStyle(
                             LinearGradient(

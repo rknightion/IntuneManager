@@ -1,8 +1,5 @@
 import Foundation
 import UniformTypeIdentifiers
-#if os(iOS)
-import UIKit
-#endif
 
 @MainActor
 final class ProfileExportService {
@@ -167,19 +164,11 @@ struct ProfileExportData: Codable {
         self.profile = profile
         self.exportDate = exportDate
         self.version = version
-        #if os(macOS)
         self.metadata = ExportMetadata(
             exportedBy: ProcessInfo.processInfo.userName,
             platform: "macOS",
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
         )
-        #else
-        self.metadata = ExportMetadata(
-            exportedBy: "User",  // userName is not available on iOS
-            platform: UIDevice.current.userInterfaceIdiom == .pad ? "iPadOS" : "iOS",
-            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
-        )
-        #endif
     }
 }
 
@@ -195,19 +184,11 @@ struct ProfileBatchExportData: Codable {
         self.exportDate = exportDate
         self.version = version
         self.count = count
-        #if os(macOS)
         self.metadata = ExportMetadata(
             exportedBy: ProcessInfo.processInfo.userName,
             platform: "macOS",
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
         )
-        #else
-        self.metadata = ExportMetadata(
-            exportedBy: "User",  // userName is not available on iOS
-            platform: UIDevice.current.userInterfaceIdiom == .pad ? "iPadOS" : "iOS",
-            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
-        )
-        #endif
     }
 }
 

@@ -21,7 +21,7 @@ If you are comfortable with Swift and SwiftUI you can contribute directly:
 
 1. Fork the repository and clone it locally.
 2. Run `swift package resolve` to align dependencies.
-3. Build the app with the `IntuneManager` scheme for macOS or iOS.
+3. Build the app with the `IntuneManager` scheme targeting macOS.
 4. Add tests in `IntuneManagerTests` for new logic and run `xcodebuild test -scheme IntuneManager -destination 'platform=macOS,arch=arm64'`.
 5. Submit a pull request using the Conventional Commit format (for example `feat(devices): add remote wipe`).
 

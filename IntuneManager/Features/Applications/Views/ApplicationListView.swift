@@ -313,9 +313,6 @@ struct ApplicationListView: View {
                 ApplicationListRowView(application: app)
                     .tag(app.id)
             }
-            #if os(iOS)
-            .environment(\.editMode, .constant(.active))
-            #endif
         } else {
             List(filteredApplications) { app in
                 NavigationLink(destination: ApplicationDetailView(application: app)) {

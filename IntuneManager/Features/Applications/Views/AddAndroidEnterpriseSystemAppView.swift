@@ -25,24 +25,14 @@ struct AddAndroidEnterpriseSystemAppView: View {
         Form {
             Section {
                 TextField("Name", text: $displayName, prompt: Text("Enter app name"))
-                #if os(macOS)
                     .textFieldStyle(.roundedBorder)
-                #endif
 
                 TextField("Publisher", text: $publisher, prompt: Text("Enter publisher name"))
-                #if os(macOS)
                     .textFieldStyle(.roundedBorder)
-                #endif
 
                 VStack(alignment: .leading, spacing: 4) {
                     TextField("Package Name", text: $packageName, prompt: Text("com.example.app"))
-                    #if os(iOS)
-                        .autocapitalization(.none)
-                        .autocorrectionDisabled()
-                    #endif
-                    #if os(macOS)
                         .textFieldStyle(.roundedBorder)
-                    #endif
                         .onChange(of: packageName) { oldValue, newValue in
                             validatePackageName(newValue)
                         }

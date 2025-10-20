@@ -67,9 +67,7 @@ struct GroupDetailView: View {
                 .padding(.vertical)
             }
             .navigationTitle(viewModel.group.displayName)
-            #if os(macOS)
             .navigationSubtitle(viewModel.group.groupTypeDisplay)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Button {
@@ -80,14 +78,6 @@ struct GroupDetailView: View {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
                 }
-
-                #if os(iOS)
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-                #endif
             }
             .task {
                 // Load data for the initially selected tab

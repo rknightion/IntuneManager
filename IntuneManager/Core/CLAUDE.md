@@ -23,7 +23,7 @@
 - Keep keychain identifiers and access groups aligned with entitlements managed by Xcode (do not edit entitlements here).
 
 ## CrossPlatform & UI Helpers
-- Add cross-platform abstractions (`PlatformNavigation`, `PlatformFormStyle`, haptics, file presenters) in `CrossPlatform` to centralize OS branching. New file/import/export helpers should route through these shims so both macOS and iOS flows get exercised.
+- Maintain the macOS helper layer (`PlatformNavigation`, `PlatformFormStyle`, haptics, file presenters) in `CrossPlatform` so AppKit interactions stay centralized. File/import/export helpers should route through these shims to keep macOS flows consistent.
 - Shared SwiftUI components (empty states, theming) belong under `UI/` and should avoid feature-specific knowledge.
 
 ## Utilities

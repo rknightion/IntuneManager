@@ -14,7 +14,7 @@
 ## Implementation Guidelines
 - Keep selection UI (`ApplicationSelectionView`, `GroupSelectionView`, etc.) declarative; mutations belong in the view model.
 - When adding new progress phases, extend `AssignmentService.AssignmentProgress` and surface them through the view model rather than adding local timers.
-- File import/export must use the cross-platform helpers (`fileImporter`, `fileExporter`) so macOS save panels and iOS document pickers stay consistent.
+- File import/export must use the shared helpers (`fileImporter`, `fileExporter`) so macOS save/open panels stay consistent.
 - Respect platform affordances: provide keyboard shortcuts for macOS (toolbar buttons or `Commands`) and touch-friendly labels for iPad/iPhone.
 - After successful operations, call `AppState.refreshAll()` or targeted service fetches so other tabs reflect changes.
 

@@ -134,9 +134,6 @@ struct ConfigurationAssignmentView: View {
                 }
             }
             .navigationTitle("Manage Assignments")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {

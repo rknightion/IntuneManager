@@ -660,8 +660,8 @@ struct AssignmentEditView: View {
                                               systemImage: "minus.circle.fill")
                                             .foregroundColor(.red)
                                     }
-                                    if viewModel.assignmentsToUpdate.count > 0 {
-                                        Label("\(viewModel.assignmentsToUpdate.count) assignments to update",
+                                    if viewModel.assignmentsNeedingUpdateCount > 0 {
+                                        Label("\(viewModel.assignmentsNeedingUpdateCount) assignments to update",
                                               systemImage: "arrow.triangle.2.circlepath")
                                             .foregroundColor(.orange)
                                     }
@@ -723,11 +723,7 @@ struct AssignmentEditView: View {
             if errorMessage.contains("CRITICAL") {
                 Button("Open Intune", role: .none) {
                     if let url = URL(string: "https://intune.microsoft.com") {
-                        #if os(macOS)
                         NSWorkspace.shared.open(url)
-                        #else
-                        UIApplication.shared.open(url)
-                        #endif
                     }
                 }
             }
@@ -1652,8 +1648,12 @@ class AssignmentEditViewModel: ObservableObject {
         !assignmentFilterOverrides.isEmpty
     }
 
-    private var assignmentsRequiringRecreation: Set<String> {
+    private var assignmentsNeedingUpdate: Set<String> {
         Set(assignmentsToUpdate.keys).union(assignmentFilterOverrides.keys)
+    }
+
+    var assignmentsNeedingUpdateCount: Int {
+        assignmentsNeedingUpdate.count
     }
 
 
@@ -1666,8 +1666,8 @@ class AssignmentEditViewModel: ObservableObject {
         }
 
         // Count actual updates (composite keys already include app-specific info)
-        if !assignmentsRequiringRecreation.isEmpty {
-            messages.append("\(assignmentsRequiringRecreation.count) assignment(s) will be updated")
+        if !assignmentsNeedingUpdate.isEmpty {
+            messages.append("\(assignmentsNeedingUpdate.count) assignment(s) will be updated")
         }
 
         if pendingAssignments.count > 0 {
@@ -1761,7 +1761,7 @@ class AssignmentEditViewModel: ObservableObject {
 
     func hasPendingUpdate(_ item: AssignmentWithApp) -> Bool {
         let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
-        return assignmentsRequiringRecreation.contains(key)
+        return assignmentsNeedingUpdate.contains(key)
     }
 
     func toggleSelection(_ item: AssignmentWithApp) {
@@ -1931,7 +1931,7 @@ class AssignmentEditViewModel: ObservableObject {
     func effectiveFilterMode(for item: AssignmentWithApp) -> AssignmentFilterMode? {
         let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
         if let override = assignmentFilterOverrides[key] {
-            guard let filterId = override.filterId else { return nil }
+            guard override.filterId != nil else { return nil }
             return override.filterMode ?? .include
         }
         guard let type = item.assignment.target.deviceAndAppManagementAssignmentFilterType?.lowercased(),
@@ -2075,14 +2075,18 @@ class AssignmentEditViewModel: ObservableObject {
         }
 
         var deleteErrors: [(app: String, group: String, error: String)] = []
-        var updateErrors: [(app: String, group: String, error: String, wasDeleted: Bool)] = []
+        var updateErrors: [(app: String, group: String, error: String)] = []
         var createErrors: [(app: String, group: String, error: String)] = []
 
-        // Calculate total operations for progress tracking
-        let recreationCount = assignmentsRequiringRecreation.count
-        let totalDeletes = assignmentsToDelete.count + recreationCount
-        let totalCreates = recreationCount + (pendingAssignments.count * applicationIds.count)
-        let totalOps = totalDeletes + totalCreates
+        let updateKeys = assignmentsNeedingUpdate
+        let totalUpdates = updateKeys.count
+        let totalDeletes = assignmentsToDelete.count
+        let totalCreates = pendingAssignments.count * applicationIds.count
+        let totalOps = totalUpdates + totalDeletes + totalCreates
+
+        guard totalOps > 0 else {
+            return nil
+        }
 
         saveProgress = SaveProgress(
             phase: "Preparing",
@@ -2092,47 +2096,188 @@ class AssignmentEditViewModel: ObservableObject {
             currentOperation: "Calculating changes..."
         )
 
-        // PHASE 1: Batch process all deletions first (including those for updates)
-        struct AssignmentRecreation {
+        struct AssignmentUpdateMetadata {
             let item: AssignmentWithApp
             let newIntent: AppAssignment.AssignmentIntent?
             let filterOverride: FilterOverride?
         }
 
-        var deletedForUpdate: [AssignmentRecreation] = []
-        var deleteRequests: [BatchRequest] = []
-        var deleteMetadata: [(item: AssignmentWithApp, recreation: AssignmentRecreation?)] = []
+        struct AssignmentPatchRequest: Encodable {
+            let odataType: String = "#microsoft.graph.mobileAppAssignment"
+            let intent: String?
+            let target: Target?
 
-        // Build delete requests for batching
-        for item in currentAssignmentsWithApp {
-            let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+            enum CodingKeys: String, CodingKey {
+                case odataType = "@odata.type"
+                case intent
+                case target
+            }
 
-            if assignmentsToDelete.contains(key) {
-                // Simple deletion
-                let request = BatchRequest(
-                    id: key,
-                    method: "DELETE",
-                    url: "/deviceAppManagement/mobileApps/\(item.appId)/assignments/\(item.assignment.id)"
-                )
-                deleteRequests.append(request)
-                deleteMetadata.append((item: item, recreation: nil))
-            } else if assignmentsRequiringRecreation.contains(key) {
-                let recreation = AssignmentRecreation(
-                    item: item,
-                    newIntent: assignmentsToUpdate[key],
-                    filterOverride: assignmentFilterOverrides[key]
-                )
-                let request = BatchRequest(
-                    id: key,
-                    method: "DELETE",
-                    url: "/deviceAppManagement/mobileApps/\(item.appId)/assignments/\(item.assignment.id)"
-                )
-                deleteRequests.append(request)
-                deleteMetadata.append((item: item, recreation: recreation))
+            struct Target: Encodable {
+                enum FieldState<T: Encodable> {
+                    case omit
+                    case value(T)
+                    case null
+                }
+
+                let odataType: String
+                let groupId: String?
+                let filterIdState: FieldState<String>
+                let filterTypeState: FieldState<String>
+
+                enum CodingKeys: String, CodingKey {
+                    case odataType = "@odata.type"
+                    case groupId
+                    case deviceAndAppManagementAssignmentFilterId
+                    case deviceAndAppManagementAssignmentFilterType
+                }
+
+                func encode(to encoder: Encoder) throws {
+                    var container = encoder.container(keyedBy: CodingKeys.self)
+                    try container.encode(odataType, forKey: .odataType)
+                    if let groupId = groupId {
+                        try container.encode(groupId, forKey: .groupId)
+                    }
+                    switch filterIdState {
+                    case .omit:
+                        break
+                    case .value(let value):
+                        try container.encode(value, forKey: .deviceAndAppManagementAssignmentFilterId)
+                    case .null:
+                        try container.encodeNil(forKey: .deviceAndAppManagementAssignmentFilterId)
+                    }
+                    switch filterTypeState {
+                    case .omit:
+                        break
+                    case .value(let value):
+                        try container.encode(value, forKey: .deviceAndAppManagementAssignmentFilterType)
+                    case .null:
+                        try container.encodeNil(forKey: .deviceAndAppManagementAssignmentFilterType)
+                    }
+                }
             }
         }
 
-        // Process deletions in batches
+        func buildPatchRequest(for update: AssignmentUpdateMetadata) -> AssignmentPatchRequest? {
+            let current = update.item.assignment
+            let finalIntent = update.newIntent ?? current.intent
+            let intentChanged = finalIntent != current.intent
+
+            var targetPayload: AssignmentPatchRequest.Target? = nil
+
+            if let override = update.filterOverride {
+                let filterState: AssignmentPatchRequest.Target.FieldState<String>
+                let filterTypeState: AssignmentPatchRequest.Target.FieldState<String>
+
+                if let filterId = override.filterId, !filterId.isEmpty {
+                    filterState = .value(filterId)
+                    let mode = override.filterMode ?? .include
+                    filterTypeState = .value(mode.rawValue)
+                } else {
+                    filterState = .null
+                    filterTypeState = .null
+                }
+
+                let requiresGroupId = current.target.type.requiresGroupId
+                let groupId = requiresGroupId ? current.target.groupId : nil
+
+                targetPayload = AssignmentPatchRequest.Target(
+                    odataType: current.target.type.rawValue,
+                    groupId: groupId,
+                    filterIdState: filterState,
+                    filterTypeState: filterTypeState
+                )
+            }
+
+            if !intentChanged && targetPayload == nil {
+                return nil
+            }
+
+            return AssignmentPatchRequest(
+                intent: intentChanged ? finalIntent.rawValue : nil,
+                target: targetPayload
+            )
+        }
+
+        let updates: [AssignmentUpdateMetadata] = currentAssignmentsWithApp.compactMap { item in
+            let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+            guard updateKeys.contains(key) else { return nil }
+            return AssignmentUpdateMetadata(
+                item: item,
+                newIntent: assignmentsToUpdate[key],
+                filterOverride: assignmentFilterOverrides[key]
+            )
+        }
+
+        if !updates.isEmpty {
+            saveProgress?.phase = "Updating assignments"
+            saveProgress?.currentOperation = "Processing \(updates.count) updates..."
+
+            let updateBatches = updates.chunked(into: maxBatchSize)
+
+            for (batchIndex, batch) in updateBatches.enumerated() {
+                saveProgress?.currentOperation = "Update batch \(batchIndex + 1) of \(updateBatches.count)"
+
+                var requests: [BatchRequest] = []
+                var metadata: [AssignmentUpdateMetadata] = []
+
+                for update in batch {
+                    guard let payload = buildPatchRequest(for: update) else { continue }
+                    let request = BatchRequest(
+                        method: "PATCH",
+                        url: "/deviceAppManagement/mobileApps/\(update.item.appId)/assignments/\(update.item.assignment.id)",
+                        body: payload,
+                        headers: ["Content-Type": "application/json"]
+                    )
+                    requests.append(request)
+                    metadata.append(update)
+                }
+
+                if requests.isEmpty { continue }
+
+                do {
+                    let responses: [BatchResponse<EmptyResponse>] = try await apiClient.batchModels(requests)
+
+                    for (index, response) in responses.enumerated() {
+                        let meta = metadata[index]
+                        let groupName = meta.item.assignment.target.groupName ?? meta.item.assignment.target.type.displayName
+
+                        if response.status >= 200 && response.status < 300 {
+                            saveProgress?.completedOperations += 1
+                            Logger.shared.info("Updated assignment for \(meta.item.appName) - \(groupName)")
+                        } else {
+                            saveProgress?.failedOperations += 1
+                            let errorMsg = "HTTP \(response.status)"
+                            updateErrors.append((app: meta.item.appName, group: groupName, error: errorMsg))
+                            Logger.shared.error("Failed to update assignment for \(meta.item.appName): \(errorMsg)")
+                        }
+                    }
+                } catch {
+                    for meta in metadata {
+                        let groupName = meta.item.assignment.target.groupName ?? meta.item.assignment.target.type.displayName
+                        saveProgress?.failedOperations += 1
+                        updateErrors.append((app: meta.item.appName, group: groupName, error: error.localizedDescription))
+                    }
+                    Logger.shared.error("Batch update failed: \(error)")
+                }
+            }
+        }
+
+        // Deletion phase
+        var deleteRequests: [BatchRequest] = []
+        var deleteMetadata: [AssignmentWithApp] = []
+
+        for item in currentAssignmentsWithApp {
+            let key = compositeKey(appId: item.appId, assignmentId: item.assignment.id)
+            if assignmentsToDelete.contains(key) {
+                deleteRequests.append(BatchRequest(
+                    method: "DELETE",
+                    url: "/deviceAppManagement/mobileApps/\(item.appId)/assignments/\(item.assignment.id)"
+                ))
+                deleteMetadata.append(item)
+            }
+        }
+
         if !deleteRequests.isEmpty {
             saveProgress?.phase = "Deleting assignments"
             saveProgress?.currentOperation = "Processing \(deleteRequests.count) deletions..."
@@ -2146,200 +2291,32 @@ class AssignmentEditViewModel: ObservableObject {
                 do {
                     let responses: [BatchResponse<EmptyResponse>] = try await apiClient.batchModels(requests)
 
-                    // Process responses
                     for (index, response) in responses.enumerated() {
-                        let meta = metadata[index]
-                        let groupName = meta.item.assignment.target.groupName ?? meta.item.assignment.target.type.displayName
+                        let item = metadata[index]
+                        let groupName = item.assignment.target.groupName ?? item.assignment.target.type.displayName
 
                         if response.status >= 200 && response.status < 300 || response.status == 404 {
-                            // Success or already deleted
                             saveProgress?.completedOperations += 1
-
-                            if let recreation = meta.recreation {
-                                deletedForUpdate.append(recreation)
-                                Logger.shared.info("Deleted assignment for update: \(meta.item.appName) - \(groupName)")
-                            } else {
-                                Logger.shared.info("Deleted assignment for \(meta.item.appName) - \(groupName)")
-                            }
+                            Logger.shared.info("Deleted assignment for \(item.appName) - \(groupName)")
                         } else {
                             saveProgress?.failedOperations += 1
                             let errorMsg = "HTTP \(response.status)"
-
-                            if meta.recreation != nil {
-                                updateErrors.append((
-                                    app: meta.item.appName,
-                                    group: groupName,
-                                    error: errorMsg,
-                                    wasDeleted: false
-                                ))
-                            } else {
-                                deleteErrors.append((app: meta.item.appName, group: groupName, error: errorMsg))
-                            }
-                            Logger.shared.error("Failed to delete assignment for \(meta.item.appName): \(errorMsg)")
+                            deleteErrors.append((app: item.appName, group: groupName, error: errorMsg))
+                            Logger.shared.error("Failed to delete assignment for \(item.appName): \(errorMsg)")
                         }
                     }
                 } catch {
-                    // Batch failed - mark all as failed
-                    for meta in metadata {
+                    for item in metadata {
+                        let groupName = item.assignment.target.groupName ?? item.assignment.target.type.displayName
                         saveProgress?.failedOperations += 1
-                        let groupName = meta.item.assignment.target.groupName ?? meta.item.assignment.target.type.displayName
-
-                        if meta.recreation != nil {
-                            updateErrors.append((
-                                app: meta.item.appName,
-                                group: groupName,
-                                error: error.localizedDescription,
-                                wasDeleted: false
-                            ))
-                        } else {
-                            deleteErrors.append((app: meta.item.appName, group: groupName, error: error.localizedDescription))
-                        }
+                        deleteErrors.append((app: item.appName, group: groupName, error: error.localizedDescription))
                     }
                     Logger.shared.error("Batch delete failed: \(error)")
                 }
             }
         }
 
-        // PHASE 2: Batch recreate assignments that were deleted for updates
-        if !deletedForUpdate.isEmpty {
-            saveProgress?.phase = "Creating updated assignments"
-            saveProgress?.currentOperation = "Processing \(deletedForUpdate.count) updates..."
-
-            // Group updates by app ID for efficient batching with /assign endpoint
-            var updatesByApp: [String: [AssignmentRecreation]] = [:]
-            for update in deletedForUpdate {
-                updatesByApp[update.item.appId, default: []].append(update)
-            }
-
-            // Process each app's assignments as a batch
-            for (appId, updates) in updatesByApp {
-                // Build batch request for this app
-                struct AssignRequest: Encodable {
-                    let mobileAppAssignments: [AssignmentBody]
-
-                    struct AssignmentBody: Encodable {
-                        let id: String
-                        let intent: String
-                        let target: Target
-                        let settings: Settings?
-
-                        struct Target: Encodable {
-                            let type: String
-                            let groupId: String?
-                            let deviceAndAppManagementAssignmentFilterId: String?
-                            let deviceAndAppManagementAssignmentFilterType: String?
-
-                            enum CodingKeys: String, CodingKey {
-                                case type = "@odata.type"
-                                case groupId
-                                case deviceAndAppManagementAssignmentFilterId
-                                case deviceAndAppManagementAssignmentFilterType
-                            }
-
-                            func encode(to encoder: Encoder) throws {
-                                var container = encoder.container(keyedBy: CodingKeys.self)
-                                try container.encode(type, forKey: .type)
-                                if let groupId = groupId {
-                                    try container.encode(groupId, forKey: .groupId)
-                                }
-                                if let filterId = deviceAndAppManagementAssignmentFilterId {
-                                    try container.encode(filterId, forKey: .deviceAndAppManagementAssignmentFilterId)
-                                }
-                                if let filterType = deviceAndAppManagementAssignmentFilterType {
-                                    try container.encode(filterType, forKey: .deviceAndAppManagementAssignmentFilterType)
-                                }
-                            }
-                        }
-
-                        struct Settings: Encodable {
-                            let type: String
-                            let useDeviceLicensing: Bool?
-                            let uninstallOnDeviceRemoval: Bool?
-
-                            enum CodingKeys: String, CodingKey {
-                                case type = "@odata.type"
-                                case useDeviceLicensing
-                                case uninstallOnDeviceRemoval
-                            }
-                        }
-                    }
-                }
-
-                var assignments: [AssignRequest.AssignmentBody] = []
-                let appType = applicationData.first(where: { $0.id == appId })?.appType ?? .unknown
-                let appName = updates.first?.item.appName ?? appId
-
-                for recreation in updates {
-                    let item = recreation.item
-                    let groupName = item.assignment.target.groupName ?? item.assignment.target.type.displayName
-                    let targetType = item.assignment.target.type
-
-                    var finalIntent = recreation.newIntent ?? item.assignment.intent
-                    if !AssignmentIntentValidator.isIntentValid(intent: finalIntent, appType: appType, targetType: targetType) {
-                        let validIntents = AssignmentIntentValidator.validIntents(for: appType, targetType: targetType)
-                        if let suggestedIntent = validIntents.first {
-                            Logger.shared.warning("Intent '\(finalIntent.rawValue)' not valid for \(appType.displayName). Using '\(suggestedIntent.rawValue)'.")
-                            finalIntent = suggestedIntent
-                        } else {
-                            updateErrors.append((
-                                app: item.appName,
-                                group: groupName,
-                                error: "No valid intents available",
-                                wasDeleted: true
-                            ))
-                            continue
-                        }
-                    }
-
-                    var settings: AssignRequest.AssignmentBody.Settings? = nil
-                    if finalIntent != .uninstall {
-                        // Only include settings for non-uninstall intents
-                        // TODO: Add settings configuration for other intents if needed
-                    }
-
-                    let (filterId, filterType) = resolveFilter(for: item, override: recreation.filterOverride)
-
-                    let assignment = AssignRequest.AssignmentBody(
-                        id: UUID().uuidString,
-                        intent: finalIntent.rawValue,
-                        target: AssignRequest.AssignmentBody.Target(
-                            type: targetType.rawValue,
-                            groupId: targetType.requiresGroupId ? item.assignment.target.groupId : nil,
-                            deviceAndAppManagementAssignmentFilterId: filterId,
-                            deviceAndAppManagementAssignmentFilterType: filterType
-                        ),
-                        settings: settings
-                    )
-                    assignments.append(assignment)
-                    saveProgress?.completedOperations += 1
-                }
-
-                // Send batch request for this app
-                if !assignments.isEmpty {
-                    do {
-                        let request = AssignRequest(mobileAppAssignments: assignments)
-                        let endpoint = "/deviceAppManagement/mobileApps/\(appId)/assign"
-
-                        let _: EmptyResponse = try await apiClient.postModel(endpoint, body: request, headers: ["Content-Type": "application/json"])
-                        Logger.shared.info("Batch recreated \(assignments.count) assignments for \(appName)")
-                    } catch {
-                        saveProgress?.failedOperations += assignments.count
-                        for recreation in updates {
-                            let item = recreation.item
-                            let groupName = item.assignment.target.groupName ?? "Unknown"
-                            updateErrors.append((
-                                app: item.appName,
-                                group: groupName,
-                                error: "Failed to recreate: \(error.localizedDescription)",
-                                wasDeleted: true
-                            ))
-                        }
-                    }
-                }
-            }
-        }
-
-        // PHASE 3: Batch create new assignments
+        // Creation phase
         if !pendingAssignments.isEmpty && !applicationIds.isEmpty {
             saveProgress?.phase = "Creating new assignments"
             let totalNew = pendingAssignments.count * applicationIds.count
@@ -2426,12 +2403,9 @@ class AssignmentEditViewModel: ObservableObject {
                         }
                     }
 
-                    // Build settings - IMPORTANT: For VPP apps being uninstalled, use device licensing
-                    // For uninstall intent, don't include ANY settings - let Intune use defaults
-                    var settings: AssignRequest.AssignmentBody.Settings? = nil
+                    let settings: AssignRequest.AssignmentBody.Settings? = nil
                     if finalIntent != .uninstall {
                         // Only include settings for non-uninstall intents
-                        // TODO: Add settings configuration for other intents if needed
                     }
 
                     let filterId = pending.assignmentFilterId
@@ -2451,7 +2425,6 @@ class AssignmentEditViewModel: ObservableObject {
                     assignments.append(assignment)
                 }
 
-                // Send batch request for this app
                 if !assignments.isEmpty {
                     do {
                         let request = AssignRequest(mobileAppAssignments: assignments)
@@ -2474,7 +2447,6 @@ class AssignmentEditViewModel: ObservableObject {
             }
         }
 
-        // Report errors to user
         if !deleteErrors.isEmpty || !updateErrors.isEmpty || !createErrors.isEmpty {
             var errorSummary = "Assignment operation completed with errors:\n\n"
 
@@ -2486,20 +2458,9 @@ class AssignmentEditViewModel: ObservableObject {
                 errorSummary += "\n"
             }
 
-            let criticalUpdates = updateErrors.filter { $0.wasDeleted }
-            let failedUpdates = updateErrors.filter { !$0.wasDeleted }
-
-            if !criticalUpdates.isEmpty {
-                errorSummary += "⚠️ CRITICAL - Assignments in inconsistent state (deleted but not recreated):\n"
-                for error in criticalUpdates {
-                    errorSummary += "• \(error.app) - \(error.group)\n"
-                }
-                errorSummary += "Please manually check these assignments in Intune!\n\n"
-            }
-
-            if !failedUpdates.isEmpty {
+            if !updateErrors.isEmpty {
                 errorSummary += "❌ Failed Updates:\n"
-                for error in failedUpdates {
+                for error in updateErrors {
                     errorSummary += "• \(error.app) - \(error.group)\n"
                 }
                 errorSummary += "\n"
@@ -2545,7 +2506,6 @@ class AssignmentEditViewModel: ObservableObject {
 
         return nil
     }
-
     private func deleteAssignment(_ assignment: AppAssignment, fromAppId appId: String) async throws {
         let endpoint = "/deviceAppManagement/mobileApps/\(appId)/assignments/\(assignment.id)"
         try await apiClient.delete(endpoint)

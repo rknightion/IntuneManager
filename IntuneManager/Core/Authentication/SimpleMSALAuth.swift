@@ -1,14 +1,7 @@
 import Foundation
 import Combine
 import MSAL
-
-#if canImport(UIKit)
-import UIKit
-#endif
-
-#if canImport(AppKit)
 import AppKit
-#endif
 
 /// Simplified MSAL authentication manager following Microsoft's official documentation
 /// This implementation goes back to basics to avoid keychain issues
@@ -68,12 +61,8 @@ class SimpleMSALAuth: ObservableObject {
 
     /// Initialize web view parameters for authentication
     private func initWebViewParams() {
-        #if os(iOS)
-        // For iOS, we need a view controller - this will be set when sign-in is called
-        self.webViewParameters = nil
-        #elseif os(macOS)
-        // For macOS, create empty parameters
-        if let contentViewController = NSApplication.shared.mainWindow?.contentViewController ?? NSApplication.shared.keyWindow?.contentViewController {
+        if let contentViewController = NSApplication.shared.mainWindow?.contentViewController ??
+            NSApplication.shared.keyWindow?.contentViewController {
             self.webViewParameters = MSALWebviewParameters(authPresentationViewController: contentViewController)
         } else {
             // Create a minimal view controller if none exists
@@ -82,26 +71,21 @@ class SimpleMSALAuth: ObservableObject {
         }
         // Use authentication session (system browser) to avoid in-app browser issues
         self.webViewParameters?.webviewType = .authenticationSession
-        #endif
     }
 
     // MARK: - Sign In
 
     /// Sign in interactively - following documentation pattern exactly
-    func signIn(from viewController: Any? = nil) {
+    func signIn() {
         guard let applicationContext = self.applicationContext else {
             self.errorMessage = "MSAL not initialized"
             return
         }
 
-        // Setup web view parameters based on platform
-        #if os(iOS)
-        guard let vc = viewController as? UIViewController else {
-            self.errorMessage = "View controller required for iOS"
-            return
+        // Ensure web view parameters reflect the current window state
+        if webViewParameters == nil {
+            initWebViewParams()
         }
-        self.webViewParameters = MSALWebviewParameters(authPresentationViewController: vc)
-        #endif
 
         guard let webViewParameters = self.webViewParameters else {
             self.errorMessage = "Web view parameters not configured"

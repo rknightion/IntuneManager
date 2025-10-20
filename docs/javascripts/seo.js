@@ -15,7 +15,7 @@ function addStructuredData() {
     "@type": "SoftwareApplication",
     "name": "IntuneManager",
     "applicationCategory": "Device Management Software",
-    "operatingSystem": "macOS, iPadOS, iOS",
+    "operatingSystem": "macOS",
     "description": "A cross-platform companion app for Microsoft Intune administrators to triage devices, push applications, and review compliance reports.",
     "url": "https://github.com/rknightion/IntuneManager",
     "downloadUrl": "https://github.com/rknightion/IntuneManager",

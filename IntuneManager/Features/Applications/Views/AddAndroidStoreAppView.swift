@@ -48,30 +48,17 @@ struct AddAndroidStoreAppView: View {
             Section {
                 TextField("Name", text: $displayName, prompt: Text("Enter app name"))
                     .textFieldStyle(.roundedBorder)
-                #if os(macOS)
-                    .textFieldStyle(.roundedBorder)
-                #endif
 
                 TextField("Description", text: $description, prompt: Text("Enter app description"), axis: .vertical)
                     .lineLimit(3...6)
-                #if os(macOS)
                     .textFieldStyle(.roundedBorder)
-                #endif
 
                 TextField("Publisher", text: $publisher, prompt: Text("Enter publisher name"))
-                #if os(macOS)
                     .textFieldStyle(.roundedBorder)
-                #endif
 
                 VStack(alignment: .leading, spacing: 4) {
                     TextField("App Store URL", text: $appStoreUrl, prompt: Text("https://play.google.com/store/apps/details?id=..."))
-                    #if os(iOS)
-                        .autocapitalization(.none)
-                        .keyboardType(.URL)
-                    #endif
-                    #if os(macOS)
                         .textFieldStyle(.roundedBorder)
-                    #endif
                         .onChange(of: appStoreUrl) { oldValue, newValue in
                             validateAppStoreUrl(newValue)
                         }
@@ -112,38 +99,20 @@ struct AddAndroidStoreAppView: View {
 
             Section {
                 TextField("Information URL", text: $informationUrl, prompt: Text("https://..."))
-                #if os(iOS)
-                    .autocapitalization(.none)
-                    .keyboardType(.URL)
-                #endif
-                #if os(macOS)
                     .textFieldStyle(.roundedBorder)
-                #endif
 
                 TextField("Privacy URL", text: $privacyInformationUrl, prompt: Text("https://..."))
-                #if os(iOS)
-                    .autocapitalization(.none)
-                    .keyboardType(.URL)
-                #endif
-                #if os(macOS)
                     .textFieldStyle(.roundedBorder)
-                #endif
 
                 TextField("Developer", text: $developer, prompt: Text("Optional"))
-                #if os(macOS)
                     .textFieldStyle(.roundedBorder)
-                #endif
 
                 TextField("Owner", text: $owner, prompt: Text("Optional"))
-                #if os(macOS)
                     .textFieldStyle(.roundedBorder)
-                #endif
 
                 TextField("Notes", text: $notes, prompt: Text("Optional notes"), axis: .vertical)
                     .lineLimit(3...6)
-                #if os(macOS)
                     .textFieldStyle(.roundedBorder)
-                #endif
             } header: {
                 Text("Optional Information")
                     .font(.headline)

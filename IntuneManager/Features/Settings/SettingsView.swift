@@ -240,16 +240,8 @@ struct SettingsView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .padding()
-            #if os(iOS)
-            .background(Color(UIColor.systemBackground))
-            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: -4)
-            #endif
         }
-        #if os(macOS)
         .frame(width: 600, height: 700)
-        #else
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
         .alert("Sign Out", isPresented: $showingSignOutAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Sign Out", role: .destructive) {
@@ -292,11 +284,7 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                     }
                     .padding(24)
-                    #if os(iOS)
-                    .background(Color(UIColor.systemBackground))
-                    #else
                     .background(Color(NSColor.windowBackgroundColor))
-                    #endif
                     .cornerRadius(12)
                     .shadow(radius: 8)
                 }

@@ -25,12 +25,12 @@ All files have been successfully moved from `/Users/rob/repos/IntuneManager` to 
    - Make sure "Copy items if needed" is UNCHECKED
    - Add to both targets
 
-4. **[ ] Configure Both Targets**
+4. **[ ] Configure macOS Target**
 
-   For EACH target (iOS and macOS):
+   For the macOS target:
 
    **General Tab:**
-   - [ ] Minimum Deployments: iOS 18.0 / macOS 15.0
+   - [ ] Minimum Deployment: macOS 15.0
    - [ ] Bundle Identifier: Your reverse domain (e.g., com.yourcompany.intunemanager)
 
    **Signing & Capabilities:**
@@ -44,7 +44,7 @@ All files have been successfully moved from `/Users/rob/repos/IntuneManager` to 
    - [ ] Swift Language Version: Swift 6
 
 5. **[ ] Test Build**
-   - Select iOS Simulator
+   - Select My Mac as the destination
    - Press ⌘B to build
    - Should build without errors
 

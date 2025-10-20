@@ -72,9 +72,6 @@ struct AuditLogDetailView: View {
                 .padding(.vertical)
             }
             .navigationTitle("Audit Log Details")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Button("Done") {

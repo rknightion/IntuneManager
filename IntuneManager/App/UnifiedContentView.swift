@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Unified content view that provides consistent navigation across iOS and macOS
+/// Unified content view that provides consistent navigation across macOS
 struct UnifiedContentView: View {
     @EnvironmentObject var authManager: AuthManagerV2
     @EnvironmentObject var appState: AppState
@@ -56,38 +56,7 @@ struct UnifiedContentView: View {
             showingErrorAlert = true
         }
     }
-    @ViewBuilder
     private var authenticatedView: some View {
-        #if os(iOS)
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            // iPad uses split view like macOS
-            splitViewLayout
-                .alert("Permission Required", isPresented: $appState.showingPermissionAlert) {
-                    Button("OK", role: .cancel) {}
-                    Button("View Settings") {
-                        appState.selectedTab = .settings
-                    }
-                } message: {
-                    if let details = appState.permissionErrorDetails {
-                        Text(details.formattedDescription)
-                    }
-                }
-        } else {
-            // iPhone uses tab bar
-            tabBarLayout
-                .alert("Permission Required", isPresented: $appState.showingPermissionAlert) {
-                    Button("OK", role: .cancel) {}
-                    Button("View Settings") {
-                        appState.selectedTab = .settings
-                    }
-                } message: {
-                    if let details = appState.permissionErrorDetails {
-                        Text(details.formattedDescription)
-                    }
-                }
-        }
-        #else
-        // macOS uses split view
         splitViewLayout
             .alert("Permission Required", isPresented: $appState.showingPermissionAlert) {
                 Button("OK", role: .cancel) {}
@@ -99,7 +68,6 @@ struct UnifiedContentView: View {
                     Text(details.formattedDescription)
                 }
             }
-        #endif
     }
 
     private var splitViewLayout: some View {
@@ -115,23 +83,6 @@ struct UnifiedContentView: View {
             .platformGlassBackground()
         }
         .navigationSplitViewStyle(.balanced)
-    }
-
-    private var tabBarLayout: some View {
-        TabView(selection: $appState.selectedTab) {
-            ForEach(AppState.Tab.allCases, id: \.self) { tab in
-                NavigationStack {
-                    destinationView(for: tab)
-                        .navigationTitle(tab.rawValue)
-                        .toolbarTitleDisplayMode(.automatic)
-                }
-                .platformGlassBackground()
-                .tabItem {
-                    Label(tab.rawValue, systemImage: tab.systemImage)
-                }
-                .tag(tab)
-            }
-        }
     }
 
     @ViewBuilder
@@ -175,13 +126,11 @@ struct UnifiedSidebarView: View {
         sidebarContent
         .navigationTitle("IntuneManager")
         .toolbar {
-            #if os(macOS)
             ToolbarItem(placement: .navigation) {
                 Button(action: toggleSidebar) {
                     Image(systemName: "sidebar.leading")
                 }
             }
-            #endif
         }
         .platformGlassBackground()
         .sheet(isPresented: $showingSettings) {
@@ -194,27 +143,16 @@ struct UnifiedSidebarView: View {
         }
     }
 
-    @ViewBuilder
     private var sidebarContent: some View {
-        #if os(macOS)
         List(selection: $selection) {
-            navigationSectionMac
+            navigationSection
             accountSection
             actionsSection
         }
         .listStyle(SidebarListStyle())
-        #else
-        List {
-            navigationSectionIOS
-            accountSection
-            actionsSection
-        }
-        .listStyle(.insetGrouped)
-        #endif
     }
 
-    @ViewBuilder
-    private var navigationSectionMac: some View {
+    private var navigationSection: some View {
         Section("Navigation") {
             ForEach(AppState.Tab.allCases.filter { $0 != .settings }, id: \.self) { tab in
                 NavigationLink(value: tab) {
@@ -224,28 +162,6 @@ struct UnifiedSidebarView: View {
         }
     }
 
-    @ViewBuilder
-    private var navigationSectionIOS: some View {
-        Section("Navigation") {
-            ForEach(AppState.Tab.allCases.filter { $0 != .settings }, id: \.self) { tab in
-                Button {
-                    selection = tab
-                } label: {
-                    HStack {
-                        Label(tab.rawValue, systemImage: tab.systemImage)
-                        Spacer()
-                    }
-                    .contentShape(Rectangle())
-                    .padding(.vertical, 4)
-                    .foregroundColor(selection == tab ? .accentColor : .primary)
-                }
-                .buttonStyle(.plain)
-                .listRowBackground(selection == tab ? Color.accentColor.opacity(0.15) : Color.clear)
-            }
-        }
-    }
-
-    @ViewBuilder
     private var accountSection: some View {
         Section("Account") {
             if let user = authManager.currentUser {
@@ -288,11 +204,6 @@ struct UnifiedSidebarView: View {
 
             Button(action: {
                 selection = .settings
-                // On iOS, we need to dismiss the sheet if it's shown
-                #if os(iOS)
-                showingSettings = false
-                showingConfiguration = false
-                #endif
             }) {
                 Label("Settings", systemImage: "gearshape")
             }
@@ -355,11 +266,9 @@ struct UnifiedSidebarView: View {
         Logger.shared.info("Cache cleared successfully", category: .data)
     }
 
-    #if os(macOS)
     private func toggleSidebar() {
         PlatformHelper.toggleSidebar()
     }
-    #endif
 }
 
 /// Unified login view that works across platforms
@@ -390,9 +299,6 @@ struct UnifiedLoginView: View {
         .background(liquidGlassBackground)
         .sheet(isPresented: $showConfiguration) {
             ConfigurationView()
-                #if os(iOS)
-                .presentationDetents([.large])
-                #endif
         }
         .alert("Sign In Error", isPresented: $showError) {
             Button("OK") { }
@@ -403,7 +309,7 @@ struct UnifiedLoginView: View {
 
     private var logoSection: some View {
         VStack(spacing: 16) {
-            Image(systemName: "laptopcomputer.and.iphone")
+            Image(systemName: "laptopcomputer")
                 .font(.system(size: 72))
                 .foregroundStyle(
                     LinearGradient(
@@ -486,7 +392,7 @@ struct UnifiedLoginView: View {
             )
             .ignoresSafeArea()
 
-            if #available(iOS 18, macOS 15, *) {
+            if #available(macOS 15, *) {
                 Rectangle()
                     .fill(.ultraThinMaterial)
                     .blur(radius: 60)
@@ -512,13 +418,7 @@ struct UnifiedLoginView: View {
                     try await authManager.initializeMSAL()
                 }
 
-                #if os(iOS)
-                if let viewController = await PlatformHelper.getRootViewController() {
-                    try await authManager.signIn(from: viewController)
-                }
-                #else
                 try await authManager.signIn()
-                #endif
                 PlatformHaptics.trigger(.success)
             } catch AuthError.msalNotInitialized {
                 await MainActor.run {
@@ -560,19 +460,11 @@ struct UnifiedLoginView: View {
 extension View {
     /// Applies platform-specific navigation styling
     func platformNavigation() -> some View {
-        #if os(iOS)
-        self.navigationBarTitleDisplayMode(.large)
-        #else
         self
-        #endif
     }
 
     /// Applies platform-specific list styling
     func platformList() -> some View {
-        #if os(iOS)
-        self.listStyle(.insetGrouped)
-        #else
         self.listStyle(.sidebar)
-        #endif
     }
 }

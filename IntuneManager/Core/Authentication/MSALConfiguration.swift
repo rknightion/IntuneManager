@@ -19,11 +19,7 @@ struct MSALConfiguration: Sendable {
 
         self.bundleId = Bundle.main.bundleIdentifier ?? "com.intunemanager"
 
-        #if os(iOS)
         self.redirectUri = "msauth.\(bundleId)://auth"
-        #else
-        self.redirectUri = "msauth.\(bundleId)://auth"
-        #endif
 
         // Initialize authority URL
         guard let url = URL(string: "https://login.microsoftonline.com/\(tenantId)") else {

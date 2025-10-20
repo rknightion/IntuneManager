@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
@@ -133,9 +134,6 @@ struct AboutView: View {
                 }
             }
             .navigationTitle("About")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Button("Done") {
@@ -148,21 +146,13 @@ struct AboutView: View {
 
     private func openPrivacyPolicy() {
         if let url = URL(string: "https://www.example.com/privacy") {
-            #if os(iOS)
-            UIApplication.shared.open(url)
-            #else
             NSWorkspace.shared.open(url)
-            #endif
         }
     }
 
     private func openTermsOfUse() {
         if let url = URL(string: "https://www.example.com/terms") {
-            #if os(iOS)
-            UIApplication.shared.open(url)
-            #else
             NSWorkspace.shared.open(url)
-            #endif
         }
     }
 }

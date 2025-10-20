@@ -1,9 +1,5 @@
 import SwiftUI
-#if os(macOS)
 import AppKit
-#else
-import UIKit
-#endif
 
 struct GroupSelectionView: View {
     @Binding var selectedGroups: Set<DeviceGroup>
@@ -17,10 +13,8 @@ struct GroupSelectionView: View {
     @State private var selectedGroupForDetail: DeviceGroup?
     @State private var detailViewInitialTab = 0
 
-    #if os(macOS)
     @State private var sortOrder = [KeyPathComparator(\DeviceGroup.displayName)]
     @State private var tableSelection = Set<DeviceGroup.ID>()
-    #endif
 
     // Compute supported platforms from selected apps
     private var supportedPlatforms: Set<Application.DevicePlatform> {
@@ -60,13 +54,8 @@ struct GroupSelectionView: View {
             groups = groups.filter { $0.securityEnabled }
         }
 
-        #if os(macOS)
         // Apply table sort order on macOS
         return groups.sorted(using: sortOrder)
-        #else
-        // Default alphabetical sort for iOS
-        return groups.sorted { $0.displayName < $1.displayName }
-        #endif
     }
 
     // Helper function to get icon for group type
@@ -119,7 +108,6 @@ struct GroupSelectionView: View {
 
     // MARK: - Platform-Specific Views
 
-    #if os(macOS)
     private var groupTableView: some View {
         Table(filteredGroups, selection: $tableSelection) {
             TableColumn("Name") { group in
@@ -257,35 +245,6 @@ struct GroupSelectionView: View {
             tableSelection = Set(selectedGroups.map { $0.id })
         }
     }
-    #endif
-
-    private var groupScrollView: some View {
-        ScrollView {
-            LazyVStack(spacing: 8) {
-                ForEach(filteredGroups) { group in
-                    GroupRowView(
-                        group: group,
-                        isSelected: selectedGroups.contains(group),
-                        onToggle: {
-                            if selectedGroups.contains(group) {
-                                selectedGroups.remove(group)
-                            } else {
-                                selectedGroups.insert(group)
-                            }
-                        },
-                        assignmentInfo: getAssignmentInfo(group),
-                        showOwnerInfo: showOwnerInfo,
-                        onShowDetail: { group, tab in
-                            selectedGroupForDetail = group
-                            detailViewInitialTab = tab
-                        }
-                    )
-                }
-            }
-            .padding(.horizontal)
-        }
-    }
-
     // MARK: - Body
 
     var body: some View {
@@ -348,12 +307,7 @@ struct GroupSelectionView: View {
             }
             .padding()
 
-            // Group List - Platform-specific
-            #if os(macOS)
             groupTableView
-            #else
-            groupScrollView
-            #endif
         }
         .task {
             if groupService.groups.isEmpty {
@@ -371,9 +325,7 @@ struct GroupSelectionView: View {
         }
         .sheet(item: $selectedGroupForDetail) { group in
             GroupDetailView(group: group, initialTab: detailViewInitialTab)
-                #if os(macOS)
                 .frame(minWidth: 600, minHeight: 500)
-                #endif
         }
     }
 }
@@ -527,12 +479,8 @@ struct GroupRowView: View {
 
             // Copy Group ID
             Button {
-                #if os(macOS)
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(group.id, forType: .string)
-                #else
-                UIPasteboard.general.string = group.id
-                #endif
             } label: {
                 Label("Copy Group ID", systemImage: "doc.on.doc")
             }

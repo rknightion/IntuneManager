@@ -29,9 +29,6 @@ struct ConfigurationDetailView: View {
             .padding()
         }
         .navigationTitle(profile.displayName)
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.large)
-        #endif
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {

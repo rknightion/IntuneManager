@@ -5,7 +5,7 @@ import SwiftUI
 // Flexible assignment request struct for Graph API
 struct FlexibleAppAssignment: Encodable {
     let odataType: String = "#microsoft.graph.mobileAppAssignment"
-    let id: String
+    let id: String?
     let intent: String
     let target: Target
     let settings: Encodable?
@@ -30,6 +30,12 @@ struct FlexibleAppAssignment: Encodable {
         try container.encode(target, forKey: .target)
         if let settings = settings {
             try settings.encode(to: container.superEncoder(forKey: .settings))
+        }
+        if let source {
+            try container.encode(source, forKey: .source)
+        }
+        if let sourceId {
+            try container.encode(sourceId, forKey: .sourceId)
         }
         // Don't encode source and sourceId at all if they're nil
         // Graph API doesn't expect these fields for the /assign endpoint
@@ -399,8 +405,7 @@ final class AssignmentService: ObservableObject {
 
         // Execute batch request - the API client now handles rate limiting internally
         // The /assign endpoint returns 204 No Content, so we use EmptyResponse
-        struct AssignActionResponse: Decodable, Sendable {}
-        let responses: [BatchResponse<AssignActionResponse>] = try await apiClient.batchModels(requests)
+        let responses: [BatchResponse<AppAssignment>] = try await apiClient.batchModels(requests)
 
         // Log rate limit status after batch
         await apiClient.logRateLimitStatus()
@@ -413,9 +418,12 @@ final class AssignmentService: ObservableObject {
             let assignment = assignments[index]
 
             if response.status >= 200 && response.status < 300 {
-                // Success - includes 204 No Content which is expected for /assign endpoint
+                // Success - Graph returns 201 Created with the new assignment payload
                 assignment.status = .completed
                 assignment.completedDate = Date()
+                if let createdAssignment = response.body {
+                    assignment.id = createdAssignment.id
+                }
                 successful.append(assignment)
                 updateAppProgress(appId: assignment.applicationId, success: true)
                 Logger.shared.info("Assignment successful: \(assignment.applicationName) -> \(assignment.groupName)")
@@ -558,31 +566,24 @@ final class AssignmentService: ObservableObject {
         let filterType = filterId != nil ? assignment.filter?.filterType?.rawValue : nil
 
         let flexibleAssignment = FlexibleAppAssignment(
-            id: UUID().uuidString,
+            id: nil,
             intent: assignment.intent.rawValue,
             target: FlexibleAppAssignment.Target(
-                odataType: targetType.rawValue,  // targetType.rawValue already includes the full type string
+                odataType: targetType.rawValue,
                 groupId: targetType.requiresGroupId ? assignment.groupId : nil,
                 deviceAndAppManagementAssignmentFilterId: filterId,
                 deviceAndAppManagementAssignmentFilterType: filterType
             ),
             settings: settingsValue,
-            source: nil,  // Remove source field - might not be valid for /assign endpoint
-            sourceId: nil  // Remove sourceId field - might not be valid for /assign endpoint
+            source: nil,
+            sourceId: nil
         )
-
-        // Wrap the assignment in the required format for the /assign action endpoint
-        struct AssignRequest: Encodable {
-            let mobileAppAssignments: [FlexibleAppAssignment]
-        }
-
-        let requestBody = AssignRequest(mobileAppAssignments: [flexibleAssignment])
 
         // Debug logging - capture and log the JSON being sent
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let jsonData = try encoder.encode(requestBody)
+            let jsonData = try encoder.encode(flexibleAssignment)
             if let jsonString = String(data: jsonData, encoding: .utf8) {
                 Logger.shared.debug("Assignment JSON for \(assignment.applicationName) -> \(assignment.groupName):")
                 Logger.shared.debug("\(jsonString)")
@@ -593,8 +594,8 @@ final class AssignmentService: ObservableObject {
 
         return BatchRequest(
             method: "POST",
-            url: "/deviceAppManagement/mobileApps/\(assignment.applicationId)/assign",
-            body: requestBody,
+            url: "/deviceAppManagement/mobileApps/\(assignment.applicationId)/assignments",
+            body: flexibleAssignment,
             headers: ["Content-Type": "application/json"]
         )
     }

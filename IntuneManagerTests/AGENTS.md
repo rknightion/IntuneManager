@@ -15,5 +15,5 @@
 
 ## Running Tests
 - Default command: `xcodebuild test -scheme IntuneManager -destination 'platform=macOS,arch=arm64'` for shared logic.
-- Add an iOS simulator destination when touching iOS-only code paths.
+- Tests run against the macOS target; no iOS destinations are required.
 - Record command output and status in your summary per the root guide.

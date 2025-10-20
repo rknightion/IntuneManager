@@ -17,9 +17,6 @@ struct ProfileExportView: View {
                 exportSection
             }
             .navigationTitle("Export Profiles")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {

@@ -1,6 +1,6 @@
 # Architecture
 
-IntuneManager is a shared SwiftUI codebase that targets macOS, iPadOS, and iOS. The app layers authentication, local persistence, and Microsoft Graph integrations to deliver a responsive experience that mirrors the Intune admin portal.
+IntuneManager is a SwiftUI codebase targeting macOS. The app layers authentication, local persistence, and Microsoft Graph integrations to deliver a responsive experience that mirrors the Intune admin portal.
 
 ## High-level components
 
@@ -50,11 +50,11 @@ graph TD
 - Network errors bubble through `Logger.shared` and surface via status banners.
 - Failed assignment batches retry with exponential backoff up to three attempts.
 
-## Cross-platform considerations
+## macOS UI considerations
 
 - Shared SwiftUI layout resides in unified views (`UnifiedContentView`, `UnifiedSidebarView`).
-- Platform-specific UI elements (keyboard shortcuts, navigation styles) live inside conditional compilation blocks.
-- Feature views adapt using size classes and `NavigationSplitView` on larger devices.
+- AppKit integration (keyboard shortcuts, navigation styles, window commands) flows through helper abstractions in `PlatformCompatibility`.
+- Feature views rely on `NavigationSplitView`, tables, and Command menu shortcuts to match macOS expectations.
 
 ## Extensibility points
 
